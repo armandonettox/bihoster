@@ -1,0 +1,52 @@
+services:
+  backend:
+    image: ghcr.io/armandonettox/bihoster-backend:${APP_VERSION:-latest}
+    # Nao exposta ao host: o frontend fala com o backend pela rede interna do compose,
+    # via proxy reverso no Nginx do proprio frontend (VITE_API_URL=/api, ver frontend/nginx.conf).
+    # So o frontend (porta 5173) fica publicado.
+    environment:
+      # Opcional -- se nao definir JWT_SECRET/ENCRYPTION_KEY num .env, o backend gera os dois
+      # sozinho no primeiro boot e persiste em /app/data (ver core/bootstrap_secrets.py), pra
+      # `docker compose up -d` funcionar sem configuracao previa. Defina aqui (ou num .env) so
+      # se quiser controlar o valor voce mesmo.
+      JWT_SECRET: ${JWT_SECRET:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      # Requisicoes do navegador agora sao same-origin (via proxy do frontend), mas o valor
+      # fica de fallback pra quem acessar a API do backend direto (ex: Swagger em localhost).
+      CORS_ORIGINS: http://localhost:5173
+      # Desligado por padrao -- ligar exige entender o que os dois itens abaixo (socket +
+      # bind mount) dao de acesso. Ver aba Configuracoes > Atualizacoes e o README.
+      ENABLE_AUTO_UPDATE: ${ENABLE_AUTO_UPDATE:-false}
+      DEPLOY_DIR: /deploy
+      # Desligado por padrao -- so ativar atras de reverse proxy proprio (ver README, secao
+      # "Forcar HTTPS atras de proxy"). Sem isso, "Forcar HTTPS" em Configuracoes > Geral entra
+      # em loop de redirect quando o TLS termina num proxy na frente do backend.
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+    volumes:
+      - backend_data:/app/data
+      - backend_uploads:/app/static/uploads
+      # Os dois volumes abaixo so importam se ENABLE_AUTO_UPDATE=true. Sem eles o backend nao
+      # consegue rodar `docker compose pull/up` sozinho (aba Configuracoes > Atualizacoes) --
+      # com eles, o container ganha acesso ao Docker do host, que e root-equivalente. So ative
+      # se confiar no host e entender esse risco (ver README, secao "Atualizacao automatica").
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/deploy:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    image: ghcr.io/armandonettox/bihoster-frontend:${APP_VERSION:-latest}
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  backend_uploads:

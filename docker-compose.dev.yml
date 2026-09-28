@@ -1,0 +1,42 @@
+## Compose de desenvolvimento -- builda as imagens a partir do codigo local em vez de puxar
+## do GHCR (docker-compose.yml, usado em producao/self-host). Sem os itens ligados a
+## atualizacao automatica (socket do Docker, bind mount do projeto) -- nao fazem sentido aqui,
+## ja que nao ha versao/imagem publicada envolvida rodando de um build local.
+##   docker compose -f docker-compose.dev.yml up -d --build
+services:
+  backend:
+    build:
+      context: ./backend
+      args:
+        APP_VERSION: dev
+    # Exposta so em dev, pra debug direto (curl, Swagger em /docs) -- o frontend fala com o
+    # backend pelo proxy do proprio Nginx dele (VITE_API_URL=/api), igual em producao.
+    ports:
+      - "8000:8000"
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-}
+      CORS_ORIGINS: http://localhost:5173
+    volumes:
+      - backend_data:/app/data
+      - backend_uploads:/app/static/uploads
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend_data:
+  backend_uploads:

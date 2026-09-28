@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+backend/bihoster.db
+backend/static/uploads/
+# Secrets gerados automaticamente no primeiro boot (JWT_SECRET/ENCRYPTION_KEY) -- ver
+# core/bootstrap_secrets.py. Nunca commitar.
+backend/data/
+.env
+.env.local
+
+# Customizacao local de deploy (portas, dominio, TRUST_PROXY_HEADERS, etc) -- o Docker Compose
+# ja carrega esse arquivo automaticamente junto do docker-compose.yml, sem precisar de -f.
+docker-compose.override.yml
+
+node_modules/
+frontend/dist/
+
+# Instrucoes locais para assistentes de IA -- nao fazem parte do projeto em si, nao devem
+# aparecer no repositorio publico.
+CLAUDE.md
+AGENTS.md

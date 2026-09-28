@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*.*.*"]
+  pull_request:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt
+      - run: python -c "import app.main"
+        env:
+          JWT_SECRET: ci-only-secret-not-used-in-prod-000000000000
+          ENCRYPTION_KEY: ci-only-key-not-used-in-prod-00000000000000
+      - run: pytest -v
+        env:
+          JWT_SECRET: ci-only-secret-not-used-in-prod-000000000000
+          ENCRYPTION_KEY: ci-only-key-not-used-in-prod-00000000000000
+      # continue-on-error: CVE conhecida sem correcao upstream (ecdsa/python-jose, ver
+      # comentario em requirements.txt) nao pode quebrar o build -- isso so avisa no log.
+      - run: pip install pip-audit -q && pip-audit -r requirements.txt
+        continue-on-error: true
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run build
+      - run: npm audit --omit=dev
+        continue-on-error: true
+
+  docker-build:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images (sem subir containers)
+        run: docker compose -f docker-compose.dev.yml build
+
+  # So publica no GHCR quando uma tag de versao (v0.1.0, v1.2.3, etc) e empurrada -- push
+  # normal em main so builda pra validar (job acima), nao gera imagem publicada.
+  docker-publish:
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extrai a versao da tag
+        id: version
+        run: echo "value=${GITHUB_REF#refs/tags/v}" >> "$GITHUB_OUTPUT"
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/setup-buildx-action@v3
+      - name: Build e push do backend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./backend
+          push: true
+          build-args: |
+            APP_VERSION=${{ steps.version.outputs.value }}
+          tags: |
+            ghcr.io/${{ github.repository }}-backend:${{ steps.version.outputs.value }}
+            ghcr.io/${{ github.repository }}-backend:latest
+      - name: Build e push do frontend
+        uses: docker/build-push-action@v6
+        with:
+          context: ./frontend
+          push: true
+          build-args: |
+            VITE_API_URL=/api
+          tags: |
+            ghcr.io/${{ github.repository }}-frontend:${{ steps.version.outputs.value }}
+            ghcr.io/${{ github.repository }}-frontend:latest
