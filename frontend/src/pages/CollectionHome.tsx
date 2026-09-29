@@ -83,6 +83,16 @@ export default function CollectionHome() {
     setReports(data);
   }, [workspaceId]);
 
+  // Recarrega a lista apos criar/editar/excluir; se falhar, avisa em vez de deixar a promise
+  // sem tratamento (rejeicao nao capturada) com a lista velha na tela.
+  const refreshReports = useCallback(async () => {
+    try {
+      await loadReports();
+    } catch {
+      showToast("Nao foi possivel atualizar a lista de relatorios.", "error");
+    }
+  }, [loadReports, showToast]);
+
   useEffect(() => {
     if (workspaceId === undefined) return;
     homeApi.recordCollectionView(workspaceId).catch(() => {});
@@ -124,7 +134,7 @@ export default function CollectionHome() {
       next.delete(reportId);
       return next;
     });
-    await loadReports();
+    await refreshReports();
     showToast("Relatorio excluido.");
   }
 
@@ -136,8 +146,14 @@ export default function CollectionHome() {
     const seconds = Number.isFinite(parsed) ? Math.min(3600, Math.max(3, Math.round(parsed))) : currentWorkspace.tv_interval_seconds;
     setTvIntervalDraft(String(seconds));
     if (seconds === currentWorkspace.tv_interval_seconds) return;
-    await workspacesApi.updateWorkspace(currentWorkspace.id, { tv_interval_seconds: seconds });
-    await reloadWorkspaces();
+    try {
+      await workspacesApi.updateWorkspace(currentWorkspace.id, { tv_interval_seconds: seconds });
+      await reloadWorkspaces();
+    } catch (err: any) {
+      // Volta o campo pro valor que realmente esta salvo, em vez de mostrar um valor que nao foi gravado
+      setTvIntervalDraft(String(currentWorkspace.tv_interval_seconds));
+      showToast(extractErrorMessage(err) || "Nao foi possivel salvar o intervalo da TV.", "error");
+    }
   }
 
   if (!currentWorkspace) return null;
@@ -456,7 +472,7 @@ export default function CollectionHome() {
       {canWrite && creatingReport && (
         <NewReportForm
           onCreated={() => {
-            loadReports();
+            refreshReports();
             showToast("Relatorio adicionado.");
           }}
           onClose={() => setCreatingReport(false)}
@@ -468,7 +484,7 @@ export default function CollectionHome() {
           key={editingReport.id}
           editingReport={editingReport}
           onCreated={() => {
-            loadReports();
+            refreshReports();
             showToast("Relatorio atualizado.");
           }}
           onClose={() => setEditingReport(null)}

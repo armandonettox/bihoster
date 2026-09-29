@@ -37,17 +37,45 @@ function CollectionCard({ workspace, onChanged }: { workspace: Workspace; onChan
   }
 
   async function handleExpand() {
-    if (!expanded) await loadAccess();
+    if (!expanded) {
+      try {
+        await loadAccess();
+      } catch (err: any) {
+        showToast(extractErrorMessage(err) || "Nao foi possivel carregar o acesso da colecao.", "error");
+        return;
+      }
+    }
     setExpanded(!expanded);
   }
 
   async function handleAccessChange(groupId: number, value: string) {
-    if (value === "none") {
-      await workspacesApi.removeWorkspaceAccess(workspace.id, groupId);
-    } else {
-      await workspacesApi.setWorkspaceAccess(workspace.id, groupId, value as UserRole);
+    try {
+      if (value === "none") {
+        await workspacesApi.removeWorkspaceAccess(workspace.id, groupId);
+      } else {
+        await workspacesApi.setWorkspaceAccess(workspace.id, groupId, value as UserRole);
+      }
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Nao foi possivel alterar o acesso.", "error");
     }
-    await loadAccess();
+    // Recarrega sempre, inclusive apos erro: o select mostra o valor real do servidor, nao o
+    // que o usuario tentou escolher e falhou.
+    try {
+      await loadAccess();
+    } catch {
+      // Mantem a lista atual; o toast de erro acima (se houve) ja avisou o usuario
+    }
+  }
+
+  // Abre o modal sempre com os valores atuais da colecao -- sem isso, editar, cancelar e
+  // reabrir mostrava o texto abandonado (ou valores velhos se a colecao mudou em outro lugar).
+  function openEditing() {
+    setName(workspace.name);
+    setDescription(workspace.description || "");
+    setIcon(workspace.icon);
+    setColor(workspace.color);
+    setSaveError(null);
+    setEditing(true);
   }
 
   async function handleSave() {
@@ -101,7 +129,7 @@ function CollectionCard({ workspace, onChanged }: { workspace: Workspace; onChan
                 <button
                   className="kebab-menu-item"
                   onClick={() => {
-                    setEditing(true);
+                    openEditing();
                     close();
                   }}
                 >

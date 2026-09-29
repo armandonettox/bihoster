@@ -330,8 +330,11 @@ export default function HomeDashboard() {
           if (g.is_default) defaults[g.id] = "viewer";
         }
         setNewAccess(defaults);
+      }).catch(() => {
+        showToast("Nao foi possivel carregar os grupos para definir o acesso.", "error");
       });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [creating, groups.length]);
 
   function openCollection(entry: { id: number }) {
