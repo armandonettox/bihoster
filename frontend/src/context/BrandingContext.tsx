@@ -11,7 +11,7 @@ interface BrandingContextValue {
 const BrandingContext = createContext<BrandingContextValue | undefined>(undefined);
 
 function applyFavicon(faviconUrl: string | null) {
-  const href = faviconUrl ? assetUrl(faviconUrl) : "/favicon.svg";
+  const href = faviconUrl ? assetUrl(faviconUrl) : "/favicon.ico";
   const existingLinks = document.querySelectorAll<HTMLLinkElement>("link[rel~='icon']");
   existingLinks.forEach((link) => link.remove());
 

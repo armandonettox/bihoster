@@ -4,6 +4,7 @@ import { register } from "../api/auth";
 import { useBranding } from "../context/BrandingContext";
 import { assetUrl, extractErrorMessage } from "../api/client";
 import AuthLayout from "../components/AuthLayout";
+import DefaultBrandLogo from "../components/DefaultBrandLogo";
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -34,7 +35,7 @@ export default function Register() {
       {settings?.logo_url ? (
         <img src={assetUrl(settings.logo_url)} alt="Logo" className="auth-logo" />
       ) : (
-        <div className="auth-badge">PB</div>
+        <DefaultBrandLogo className="auth-logo" />
       )}
       <h1 className="auth-title">Criar conta</h1>
       <p className="auth-subtitle">Comece a hospedar seus relatorios</p>

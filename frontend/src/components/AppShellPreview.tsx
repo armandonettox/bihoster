@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import DefaultBrandLogo from "./DefaultBrandLogo";
 
 const STAGE_WIDTH = 720;
 const STAGE_HEIGHT = 360;
@@ -44,7 +45,7 @@ export default function AppShellPreview({
                   {logoUrl ? (
                     <img src={logoUrl} alt="" className="topbar-logo" />
                   ) : (
-                    <div className="topbar-logo-fallback">{companyName.slice(0, 2).toUpperCase()}</div>
+                    <DefaultBrandLogo variant="icon" className="topbar-logo" />
                   )}
                   <span className="topbar-brand-name">{companyName}</span>
                 </div>

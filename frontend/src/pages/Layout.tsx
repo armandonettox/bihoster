@@ -7,6 +7,7 @@ import type { Report } from "../api/reports";
 import CollectionList from "../components/CollectionList";
 import SearchBar from "../components/SearchBar";
 import AccountMenu from "../components/AccountMenu";
+import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import { assetUrl } from "../api/client";
 import { safeStorage } from "../utils/safeStorage";
 
@@ -66,7 +67,7 @@ export default function Layout() {
             {settings?.logo_url ? (
               <img src={assetUrl(settings.logo_url)} alt="Logo" className="topbar-logo" />
             ) : (
-              <div className="topbar-logo-fallback">PB</div>
+              <DefaultBrandLogo variant="icon" className="topbar-logo" />
             )}
             <span className="topbar-brand-name">{settings?.company_name || "BIHoster"}</span>
           </Link>

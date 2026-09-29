@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import DefaultBrandLogo from "./DefaultBrandLogo";
 
 interface Props {
   children: ReactNode;
@@ -38,6 +39,9 @@ export default class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <div className="error-page">
+          {/* Sempre a logo padrao: este componente roda quando algo ja quebrou, entao nao
+              depende do contexto de marca (que poderia ser justamente a causa do erro). */}
+          <DefaultBrandLogo className="error-page-logo" />
           <div className="error-page-code">Ops</div>
           <h1 className="error-page-title">Algo deu errado</h1>
           <p className="error-page-desc">

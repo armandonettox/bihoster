@@ -1,4 +1,9 @@
-# BIHoster
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/brand/logo-horizontal-dark.png">
+    <img src="docs/brand/logo-horizontal.png" alt="BIHoster" width="360">
+  </picture>
+</h1>
 
 Portal self-hosted para hospedar e gerenciar relatórios do Power BI, com autenticação de
 usuários, controle de acesso por grupo e embedding via "app owns the data" (Service Principal

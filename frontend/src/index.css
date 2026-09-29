@@ -602,6 +602,27 @@ table.table tr:last-child td {
   padding: 24px;
 }
 
+.error-page-logo {
+  height: 48px;
+  width: auto;
+  max-width: 240px;
+  object-fit: contain;
+  margin-bottom: 24px;
+}
+
+/* Logo padrao: alterna entre a versao clara e a escura conforme o tema */
+.brand-logo-dark {
+  display: none;
+}
+
+:root[data-theme="dark"] .brand-logo-light {
+  display: none;
+}
+
+:root[data-theme="dark"] .brand-logo-dark {
+  display: inline-block;
+}
+
 .error-page-code {
   font-size: 56px;
   font-weight: 700;

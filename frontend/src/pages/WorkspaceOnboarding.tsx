@@ -2,9 +2,12 @@ import { useState, type FormEvent } from "react";
 import * as workspacesApi from "../api/workspaces";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace } from "../context/WorkspaceContext";
-import { extractErrorMessage } from "../api/client";
+import { assetUrl, extractErrorMessage } from "../api/client";
+import { useBranding } from "../context/BrandingContext";
+import DefaultBrandLogo from "../components/DefaultBrandLogo";
 
 export default function WorkspaceOnboarding() {
+  const { settings } = useBranding();
   const { user, logout } = useAuth();
   const { reload } = useWorkspace();
   const [name, setName] = useState("");
@@ -30,7 +33,11 @@ export default function WorkspaceOnboarding() {
   return (
     <div className="auth-screen">
       <div className="auth-card card card-elevated" style={{ width: 400 }}>
-        <div className="auth-badge">PB</div>
+        {settings?.logo_url ? (
+          <img src={assetUrl(settings.logo_url)} alt="Logo" className="auth-logo" />
+        ) : (
+          <DefaultBrandLogo className="auth-logo" />
+        )}
         <h1 className="auth-title">Bem-vindo, {user?.name}</h1>
 
         {canCreateCollection ? (

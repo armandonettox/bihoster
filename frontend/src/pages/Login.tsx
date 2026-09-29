@@ -4,6 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useBranding } from "../context/BrandingContext";
 import { assetUrl } from "../api/client";
 import AuthLayout from "../components/AuthLayout";
+import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import GoogleLoginButton from "../components/GoogleLoginButton";
 import { extractErrorMessage } from "../api/client";
 
@@ -55,7 +56,7 @@ export default function Login() {
       {settings?.logo_url ? (
         <img src={assetUrl(settings.logo_url)} alt="Logo" className="auth-logo" />
       ) : (
-        <div className="auth-badge">PB</div>
+        <DefaultBrandLogo className="auth-logo" />
       )}
       <h1 className="auth-title">Entrar no {settings?.company_name || "BIHoster"}</h1>
       <p className="auth-subtitle">Acesse seus relatorios e workspaces</p>

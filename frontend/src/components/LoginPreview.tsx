@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
 import type { LoginLayout } from "../api/settings";
+import DefaultBrandLogo from "./DefaultBrandLogo";
 
 const STAGE_WIDTH = 720;
 const STAGE_HEIGHT = 440;
@@ -30,7 +31,7 @@ export default function LoginPreview({
       {logoUrl ? (
         <img src={logoUrl} alt="Logo" className="auth-logo" />
       ) : (
-        <div className="auth-badge">{companyName.slice(0, 2).toUpperCase()}</div>
+        <DefaultBrandLogo className="auth-logo" />
       )}
       <h1 className="auth-title">Entrar no {companyName}</h1>
       <p className="auth-subtitle">Acesse seus relatorios e workspaces</p>
