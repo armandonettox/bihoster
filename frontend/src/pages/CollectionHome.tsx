@@ -12,6 +12,8 @@ import FullscreenReportView from "../components/FullscreenReportView";
 import EditCollectionModal from "../components/EditCollectionModal";
 import KebabMenu from "../components/KebabMenu";
 import ReorderButtons from "../components/ReorderButtons";
+import ListFilter from "../components/ListFilter";
+import { filterByName } from "../utils/filterByName";
 import { SkeletonList } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -48,6 +50,7 @@ export default function CollectionHome() {
   );
   const [tvIntervalDraft, setTvIntervalDraft] = useState("15");
   const [movingReportId, setMovingReportId] = useState<number | null>(null);
+  const [filter, setFilter] = useState("");
   const { favoriteIds, toggleFavorite } = useFavorites();
 
   useEffect(() => {
@@ -73,6 +76,11 @@ export default function CollectionHome() {
   // cria um objeto novo a cada chamada (ex: ao mudar o intervalo da TV ou editar a colecao), e
   // depender do objeto resetava a pagina inteira e registrava a visita em "Recentes" de novo.
   const workspaceId = currentWorkspace?.id;
+
+  // O filtro e da colecao aberta: ao trocar de colecao, comeca limpo
+  useEffect(() => {
+    setFilter("");
+  }, [workspaceId]);
 
   const loadRequestIdRef = useRef(0);
   const loadReports = useCallback(async () => {
@@ -183,6 +191,15 @@ export default function CollectionHome() {
   const apresentacaoReports = reports.filter((r) => r.display_type === "apresentacao");
   const tvReports = reports.filter((r) => r.display_type === "tv");
 
+  // O filtro so vale pro que aparece na pagina. A exibicao em tela cheia (TV e Apresentacao) usa
+  // as listas completas acima: filtrar a pagina nao pode mudar o que passa na TV.
+  const filtering = filter.trim() !== "";
+  const shownRelatorio = filterByName(relatorioReports, filter, (r) => r.name);
+  const shownPainel = filterByName(painelReports, filter, (r) => r.name);
+  const shownApresentacao = filterByName(apresentacaoReports, filter, (r) => r.name);
+  const shownTv = filterByName(tvReports, filter, (r) => r.name);
+  const shownTotal = shownRelatorio.length + shownPainel.length + shownApresentacao.length + shownTv.length;
+
   if (fullscreenSection) {
     return (
       <FullscreenReportView
@@ -284,7 +301,9 @@ export default function CollectionHome() {
   // A ordem so importa (e so pode ser mudada) no Modo TV e na Apresentacao, onde ela define a
   // sequencia de exibicao, e so por quem pode editar.
   function reorderControls(report: Report, sectionReports: Report[]) {
-    if (!canWrite || sectionReports.length < 2) return null;
+    // Com filtro a secao mostrada e so uma parte: "subir" pareceria pular itens escondidos, porque
+    // o servidor troca com o vizinho da secao completa. Limpe o filtro pra reordenar.
+    if (!canWrite || filter.trim() !== "" || sectionReports.length < 2) return null;
     if (report.display_type !== "tv" && report.display_type !== "apresentacao") return null;
     const index = sectionReports.findIndex((r) => r.id === report.id);
     return (
@@ -455,11 +474,17 @@ export default function CollectionHome() {
         </>
       ) : (
         <>
-          {reportSection("relatorio", relatorioReports)}
-          {reportSection("painel", painelReports)}
+          <div style={{ marginTop: 20 }}>
+            <ListFilter value={filter} onChange={setFilter} total={reports.length} resultCount={shownTotal} />
+          </div>
+          {filtering && shownTotal === 0 && (
+            <p style={{ color: "var(--color-text-muted)" }}>Nenhum relatorio encontrado para "{filter.trim()}".</p>
+          )}
+          {reportSection("relatorio", shownRelatorio)}
+          {reportSection("painel", shownPainel)}
           {reportSection(
             "apresentacao",
-            apresentacaoReports,
+            shownApresentacao,
             <button className="btn btn-secondary btn-sm" onClick={() => setFullscreenSection("apresentacao")}>
               <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: "middle", marginRight: 4 }}>
                 play_arrow
@@ -468,7 +493,7 @@ export default function CollectionHome() {
             </button>
           )}
 
-          {tvReports.length > 0 && (
+          {shownTv.length > 0 && (
             <>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 32, marginBottom: 12 }}>
                 <h3 style={{ margin: 0 }}>{SECTION_TITLES.tv}</h3>
@@ -504,7 +529,7 @@ export default function CollectionHome() {
                   </button>
                 </div>
               </div>
-              {iconGrid(tvReports)}
+              {iconGrid(shownTv)}
             </>
           )}
         </>

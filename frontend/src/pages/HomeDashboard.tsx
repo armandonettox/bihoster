@@ -19,6 +19,8 @@ import { SkeletonList } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import { useFavorites } from "../context/FavoritesContext";
 import { useUrlTab } from "../hooks/useUrlTab";
+import ListFilter from "../components/ListFilter";
+import { filterByName } from "../utils/filterByName";
 import { safeStorage } from "../utils/safeStorage";
 import { extractErrorMessage } from "../api/client";
 
@@ -280,6 +282,7 @@ export default function HomeDashboard() {
   const { favorites } = useFavorites();
   const [loading, setLoading] = useState(true);
 
+  const [collectionFilter, setCollectionFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
   const [newDescription, setNewDescription] = useState("");
@@ -290,6 +293,7 @@ export default function HomeDashboard() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
+  const visibleWorkspaces = filterByName(workspaces, collectionFilter, (w) => w.name);
   const { showToast } = useToast();
 
   function changeViewMode(mode: ViewMode) {
@@ -490,25 +494,38 @@ export default function HomeDashboard() {
 
               {workspaces.length === 0 ? (
                 <p style={{ color: "var(--color-text-muted)" }}>Nenhuma colecao disponivel.</p>
+              ) : visibleWorkspaces.length === 0 ? (
+                <>
+                  <ListFilter value={collectionFilter} onChange={setCollectionFilter} total={workspaces.length} resultCount={0} />
+                  <p style={{ color: "var(--color-text-muted)" }}>Nenhuma colecao encontrada para "{collectionFilter.trim()}".</p>
+                </>
               ) : (
-                <div
-                  key={viewMode}
-                  className={`view-mode-fade ${viewMode === "icon" ? "settings-grid" : ""}`}
-                  style={viewMode === "list" ? { display: "flex", flexDirection: "column", gap: 8 } : undefined}
-                >
-                  {workspaces.map((w) => (
-                    <CollectionCard
-                      key={w.id}
-                      workspace={w}
-                      viewMode={viewMode}
-                      onOpen={() => {
-                        selectWorkspace(w.id);
-                        navigate("/collection");
-                      }}
-                      onChanged={() => reloadAndSelect(currentWorkspace?.id ?? w.id)}
-                    />
-                  ))}
-                </div>
+                <>
+                  <ListFilter
+                    value={collectionFilter}
+                    onChange={setCollectionFilter}
+                    total={workspaces.length}
+                    resultCount={visibleWorkspaces.length}
+                  />
+                  <div
+                    key={viewMode}
+                    className={`view-mode-fade ${viewMode === "icon" ? "settings-grid" : ""}`}
+                    style={viewMode === "list" ? { display: "flex", flexDirection: "column", gap: 8 } : undefined}
+                  >
+                    {visibleWorkspaces.map((w) => (
+                      <CollectionCard
+                        key={w.id}
+                        workspace={w}
+                        viewMode={viewMode}
+                        onOpen={() => {
+                          selectWorkspace(w.id);
+                          navigate("/collection");
+                        }}
+                        onChanged={() => reloadAndSelect(currentWorkspace?.id ?? w.id)}
+                      />
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
