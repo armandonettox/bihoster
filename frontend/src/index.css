@@ -1611,6 +1611,32 @@ table.table tr:last-child td {
   flex-shrink: 0;
 }
 
+/* Barra fina que enche ate a proxima troca de relatorio (Modo TV). O temporizador de verdade e o
+   do hook useSlideshow; a barra so o acompanha. --duration e --from vem do componente. */
+.slideshow-progress {
+  height: 3px;
+  flex-shrink: 0;
+  background-color: var(--color-border);
+  overflow: hidden;
+}
+
+.slideshow-progress-bar {
+  height: 100%;
+  background-color: var(--color-accent);
+  transform-origin: left center;
+  transform: scaleX(var(--from, 0));
+  animation: slideshow-fill var(--duration, 15000ms) linear forwards;
+}
+
+@keyframes slideshow-fill {
+  from {
+    transform: scaleX(var(--from, 0));
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
 .fullscreen-view-body {
   flex: 1;
   min-height: 0;

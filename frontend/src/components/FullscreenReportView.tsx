@@ -1,6 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import type { Report } from "../api/reports";
+import { useSlideshow } from "../hooks/useSlideshow";
+import { useSlideshowKeys } from "../hooks/useSlideshowKeys";
 import ReportEmbed from "./ReportEmbed";
+import SlideshowControls from "./SlideshowControls";
+import SlideshowProgress from "./SlideshowProgress";
 
 export default function FullscreenReportView({
   mode,
@@ -16,37 +20,25 @@ export default function FullscreenReportView({
   tvIntervalSeconds?: number;
   onExit: () => void;
 }) {
-  const [index, setIndex] = useState(0);
+  const isTv = mode === "tv";
+  // TV troca sozinha (com pausa); Apresentacao so navega pelas setas e pelos botoes
+  const slideshow = useSlideshow({ count: reports.length, intervalMs: tvIntervalSeconds * 1000, autoAdvance: isTv });
+  const { index } = slideshow;
 
-  function goNext() {
-    setIndex((i) => (i + 1) % reports.length);
-  }
-
-  function goPrev() {
-    setIndex((i) => (i - 1 + reports.length) % reports.length);
-  }
-
-  useEffect(() => {
-    if (mode !== "tv" || reports.length < 2) return;
-    const timer = setInterval(goNext, tvIntervalSeconds * 1000);
-    return () => clearInterval(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, reports.length, tvIntervalSeconds]);
+  useSlideshowKeys({
+    onNext: slideshow.next,
+    onPrev: slideshow.prev,
+    onTogglePause: isTv ? slideshow.togglePause : undefined,
+  });
 
   useEffect(() => {
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        onExit();
-      } else if (mode === "apresentacao" && event.key === "ArrowRight") {
-        goNext();
-      } else if (mode === "apresentacao" && event.key === "ArrowLeft") {
-        goPrev();
-      }
+      if (event.key === "Escape") onExit();
     }
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mode, reports.length]);
+  }, []);
 
   if (reports.length === 0) {
     return (
@@ -69,24 +61,20 @@ export default function FullscreenReportView({
           <span style={{ color: "var(--color-text-muted)", marginLeft: 10 }}>{current.name}</span>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          {mode === "apresentacao" && reports.length > 1 && (
-            <>
-              <button className="btn btn-ghost btn-sm" onClick={goPrev} aria-label="Relatorio anterior">
-                ← Anterior
-              </button>
-              <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
-                {index + 1} / {reports.length}
-              </span>
-              <button className="btn btn-ghost btn-sm" onClick={goNext} aria-label="Proximo relatorio">
-                Proximo →
-              </button>
-            </>
-          )}
+          <SlideshowControls
+            index={index}
+            count={reports.length}
+            paused={slideshow.paused}
+            onPrev={slideshow.prev}
+            onNext={slideshow.next}
+            onTogglePause={isTv ? slideshow.togglePause : undefined}
+          />
           <button className="btn btn-ghost btn-sm" onClick={onExit}>
             Sair (Esc)
           </button>
         </div>
       </div>
+      {isTv && reports.length > 1 && <SlideshowProgress countdown={slideshow.countdown} paused={slideshow.paused} />}
       <div className="fullscreen-view-body">
         <ReportEmbed key={current.id} reportId={current.id} height="100%" />
       </div>

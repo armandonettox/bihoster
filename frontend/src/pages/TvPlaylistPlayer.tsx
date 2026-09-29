@@ -4,6 +4,10 @@ import * as workspacesApi from "../api/workspaces";
 import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
 import ReportEmbed from "../components/ReportEmbed";
+import SlideshowControls from "../components/SlideshowControls";
+import SlideshowProgress from "../components/SlideshowProgress";
+import { useSlideshow } from "../hooks/useSlideshow";
+import { useSlideshowKeys } from "../hooks/useSlideshowKeys";
 import { extractErrorMessage } from "../api/client";
 
 const PLAYLIST_REFRESH_MS = 3 * 60 * 1000;
@@ -29,7 +33,6 @@ export default function TvPlaylistPlayer() {
   const [queue, setQueue] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [index, setIndex] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -71,18 +74,10 @@ export default function TvPlaylistPlayer() {
     };
   }, [id]);
 
-  // Se a lista encolheu e o indice atual saiu do intervalo, volta pro inicio
-  useEffect(() => {
-    setIndex((i) => (queue.length > 0 && i >= queue.length ? 0 : i));
-  }, [queue.length]);
-
-  useEffect(() => {
-    if (queue.length < 2) return;
-    const timer = setInterval(() => {
-      setIndex((i) => (i + 1) % queue.length);
-    }, intervalSeconds * 1000);
-    return () => clearInterval(timer);
-  }, [queue.length, intervalSeconds]);
+  // Rotacao, pausa e navegacao manual: setas navegam e Espaco pausa/retoma
+  const slideshow = useSlideshow({ count: queue.length, intervalMs: intervalSeconds * 1000, autoAdvance: true });
+  const { index } = slideshow;
+  useSlideshowKeys({ onNext: slideshow.next, onPrev: slideshow.prev, onTogglePause: slideshow.togglePause });
 
   if (loading) {
     return (
@@ -119,10 +114,16 @@ export default function TvPlaylistPlayer() {
           <span style={{ fontWeight: 700 }}>{collectionName}</span>
           <span style={{ color: "var(--color-text-muted)", marginLeft: 10 }}>{current.name}</span>
         </div>
-        <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
-          {index + 1} / {queue.length}
-        </span>
+        <SlideshowControls
+          index={index}
+          count={queue.length}
+          paused={slideshow.paused}
+          onPrev={slideshow.prev}
+          onNext={slideshow.next}
+          onTogglePause={slideshow.togglePause}
+        />
       </div>
+      {queue.length > 1 && <SlideshowProgress countdown={slideshow.countdown} paused={slideshow.paused} />}
       <div className="fullscreen-view-body">
         <ReportEmbed key={current.id} reportId={current.id} workspaceId={id} height="100%" />
       </div>
