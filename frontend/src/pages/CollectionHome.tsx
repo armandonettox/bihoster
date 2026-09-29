@@ -11,6 +11,7 @@ import ReportThumbnail from "../components/ReportThumbnail";
 import FullscreenReportView from "../components/FullscreenReportView";
 import EditCollectionModal from "../components/EditCollectionModal";
 import KebabMenu from "../components/KebabMenu";
+import ReorderButtons from "../components/ReorderButtons";
 import { SkeletonList } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -46,6 +47,7 @@ export default function CollectionHome() {
     () => (safeStorage.getItem(VIEW_MODE_KEY) as ViewMode) || "list"
   );
   const [tvIntervalDraft, setTvIntervalDraft] = useState("15");
+  const [movingReportId, setMovingReportId] = useState<number | null>(null);
   const { favoriteIds, toggleFavorite } = useFavorites();
 
   useEffect(() => {
@@ -159,6 +161,21 @@ export default function CollectionHome() {
     }
   }
 
+  // Sobe/desce um relatorio dentro da secao. O servidor devolve a lista ja reordenada, entao a
+  // tela usa essa resposta em vez de adivinhar a nova ordem; enquanto isso os botoes ficam
+  // bloqueados pra um clique duplo nao mandar dois movimentos seguidos.
+  async function handleMoveReport(report: Report, direction: "up" | "down") {
+    if (!currentWorkspace || movingReportId !== null) return;
+    setMovingReportId(report.id);
+    try {
+      setReports(await reportsApi.moveReport(currentWorkspace.id, report.id, direction));
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Nao foi possivel mudar a ordem do relatorio.", "error");
+    } finally {
+      setMovingReportId(null);
+    }
+  }
+
   if (!currentWorkspace) return null;
 
   const relatorioReports = reports.filter((r) => r.display_type === "relatorio");
@@ -251,13 +268,33 @@ export default function CollectionHome() {
             <div className="report-icon-card-body">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <span style={{ fontWeight: 600, fontSize: 14 }}>{report.name}</span>
-                <div onClick={(e) => e.stopPropagation()}>{reportActionsMenu(report)}</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 2 }} onClick={(e) => e.stopPropagation()}>
+                  {reorderControls(report, sectionReports)}
+                  {reportActionsMenu(report)}
+                </div>
               </div>
               <ReportRefreshInfo workspaceId={currentWorkspace!.id} reportId={report.id} />
             </div>
           </div>
         ))}
       </div>
+    );
+  }
+
+  // A ordem so importa (e so pode ser mudada) no Modo TV e na Apresentacao, onde ela define a
+  // sequencia de exibicao, e so por quem pode editar.
+  function reorderControls(report: Report, sectionReports: Report[]) {
+    if (!canWrite || sectionReports.length < 2) return null;
+    if (report.display_type !== "tv" && report.display_type !== "apresentacao") return null;
+    const index = sectionReports.findIndex((r) => r.id === report.id);
+    return (
+      <ReorderButtons
+        name={report.name}
+        canMoveUp={index > 0}
+        canMoveDown={index >= 0 && index < sectionReports.length - 1}
+        busy={movingReportId !== null}
+        onMove={(direction) => handleMoveReport(report, direction)}
+      />
     );
   }
 
@@ -341,6 +378,7 @@ export default function CollectionHome() {
                         </span>
                       </button>
                     )}
+                    {reorderControls(report, sectionReports)}
                     {reportActionsMenu(report)}
                   </div>
                 </div>

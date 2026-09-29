@@ -66,3 +66,13 @@ export async function getRefreshInfo(workspaceId: number, reportId: number): Pro
   const { data } = await api.get(`/workspaces/${workspaceId}/powerbi/reports/${reportId}/refresh-info`);
   return data;
 }
+
+/** Sobe ou desce um relatorio dentro da propria secao. Devolve a lista da colecao ja reordenada. */
+export async function moveReport(
+  workspaceId: number,
+  reportId: number,
+  direction: "up" | "down",
+): Promise<Report[]> {
+  const { data } = await api.post(`/workspaces/${workspaceId}/reports/${reportId}/move`, { direction });
+  return data;
+}
