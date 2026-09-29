@@ -46,12 +46,21 @@ export default function ReportEmbed({
           embedUrl: config.embed_url,
           accessToken: config.access_token,
           tokenType: pbi.models.TokenType.Embed,
+          // Uma aba especifica escolhida na hora de adicionar -- pageName vem do Power BI
+          // (nome tecnico, nao o titulo exibido), embeda direto naquela pagina.
+          pageName: config.page_name || undefined,
           settings: {
-            panes: { filters: { visible: false } },
+            panes: {
+              filters: { visible: false },
+              // Com aba especifica, nunca mostra a navegacao entre paginas -- so faria sentido
+              // pro relatorio inteiro, onde a pessoa pode querer trocar de aba.
+              pageNavigation: { visible: !config.page_name },
+            },
           },
         }) as pbi.Report;
 
         embeddedReport.on("loaded", async () => {
+          if (config.page_name) return;
           try {
             const pages = await embeddedReport.getPages();
             if (pages.length <= 1) {

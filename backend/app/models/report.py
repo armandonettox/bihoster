@@ -16,6 +16,9 @@ class Report(Base):
     pbi_workspace_id = Column(String, nullable=False)
     pbi_report_id = Column(String, nullable=False)
     pbi_dataset_id = Column(String, nullable=True)
+    # Nome tecnico (nao o titulo exibido) de uma pagina/aba especifica do relatorio -- None
+    # embeda o relatorio inteiro, com navegacao entre todas as abas publicadas.
+    pbi_page_name = Column(String, nullable=True)
     # Secao da colecao onde o relatorio aparece: relatorio, painel, apresentacao ou tv
     display_type = Column(String, default="relatorio", nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())

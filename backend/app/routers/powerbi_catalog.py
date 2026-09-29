@@ -17,6 +17,7 @@ router = APIRouter(prefix="/powerbi", tags=["powerbi"])
 _CATALOG_CACHE_TTL = timedelta(minutes=5)
 _workspaces_cache: dict[int, tuple[datetime, list]] = {}
 _reports_cache: dict[tuple[int, str], tuple[datetime, list]] = {}
+_pages_cache: dict[tuple[int, str, str], tuple[datetime, list]] = {}
 
 
 def _get_connection_or_404(db: Session, connection_id: int) -> PowerBIConnection:
@@ -59,4 +60,27 @@ def list_powerbi_reports(
         for r in reports
     ]
     _reports_cache[cache_key] = (datetime.now(timezone.utc) + _CATALOG_CACHE_TTL, result)
+    return result
+
+
+@router.get("/connections/{connection_id}/workspaces/{pbi_workspace_id}/reports/{pbi_report_id}/pages")
+def list_powerbi_pages(
+    connection_id: int,
+    pbi_workspace_id: str,
+    pbi_report_id: str,
+    db: Session = Depends(get_db),
+    _=Depends(require_any_editor),
+):
+    """Paginas (abas) publicadas dentro de um relatorio -- usado no formulario pra deixar
+    escolher so uma aba especifica em vez do relatorio inteiro."""
+    powerbi.prune_expired(_pages_cache)
+    cache_key = (connection_id, pbi_workspace_id, pbi_report_id)
+    cached = _pages_cache.get(cache_key)
+    if cached:
+        return cached[1]
+
+    connection = _get_connection_or_404(db, connection_id)
+    pages = powerbi.list_pages(connection, pbi_workspace_id, pbi_report_id)
+    result = [{"name": p["name"], "display_name": p.get("displayName") or p["name"]} for p in pages]
+    _pages_cache[cache_key] = (datetime.now(timezone.utc) + _CATALOG_CACHE_TTL, result)
     return result

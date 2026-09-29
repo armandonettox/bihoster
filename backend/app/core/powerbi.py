@@ -104,6 +104,16 @@ def get_report_details(connection: PowerBIConnection, workspace_id: str, report_
     return response.json()
 
 
+def list_pages(connection: PowerBIConnection, workspace_id: str, report_id: str) -> list[dict]:
+    """Lista as paginas (abas) publicadas dentro de um relatorio -- usado pra deixar escolher
+    so uma aba especifica em vez do relatorio inteiro ao adicionar numa colecao."""
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/pages"
+    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao listar paginas do relatorio no Power BI: {_error_detail(response)}")
+    return response.json().get("value", [])
+
+
 def dataset_requires_effective_identity(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> bool:
     """So dataset com RLS configurado aceita (e exige) identidade efetiva no GenerateToken --
     mandar identidade para um dataset sem RLS faz a API rejeitar a chamada."""

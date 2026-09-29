@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, type ReactNode } from "react";
 import * as reportsApi from "../api/reports";
 import * as workspacesApi from "../api/workspaces";
 import * as homeApi from "../api/home";
@@ -280,6 +280,69 @@ export default function CollectionHome() {
     );
   }
 
+  // Estilo unico compartilhado por relatorio/painel/apresentacao: card expansivel com botao
+  // de tela cheia, igual ao painel (a excecao e o Modo TV, que tem fluxo proprio de playlist).
+  function reportSection(type: DisplayType, sectionReports: Report[], extraHeaderAction?: ReactNode) {
+    if (sectionReports.length === 0) return null;
+    return (
+      <div key={type}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 32, marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>{SECTION_TITLES[type]}</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {extraHeaderAction}
+            {viewModeToggle()}
+          </div>
+        </div>
+        {viewMode === "icon" ? (
+          <div key="icon" className="view-mode-fade">
+            {iconGrid(sectionReports)}
+          </div>
+        ) : (
+          <div key="list" className="view-mode-fade" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
+            {sectionReports.map((report) => (
+              <div key={report.id} className="card" style={{ padding: 14 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <button className="settings-group-toggle" onClick={() => toggleActiveReport(report.id)}>
+                    <span>{activeReportId === report.id ? "▾" : "▸"}</span> {report.name}
+                  </button>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    {activeReportId === report.id && (
+                      <button
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setFullscreenReportId(report.id)}
+                        title="Tela cheia"
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
+                          fullscreen
+                        </span>
+                      </button>
+                    )}
+                    {reportActionsMenu(report)}
+                  </div>
+                </div>
+                {mountedReportIds.has(report.id) && (
+                  <div
+                    style={{
+                      display: activeReportId === report.id ? "block" : "none",
+                      marginTop: 14,
+                      paddingTop: 14,
+                      borderTop: "1px solid var(--color-border)",
+                    }}
+                  >
+                    <div style={{ marginBottom: 8 }}>
+                      <ReportRefreshInfo workspaceId={currentWorkspace!.id} reportId={report.id} />
+                    </div>
+                    <ReportEmbed reportId={report.id} height={360} />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
@@ -330,116 +393,17 @@ export default function CollectionHome() {
         </>
       ) : (
         <>
-          {relatorioReports.length > 0 && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 32, marginBottom: 12 }}>
-                <h3 style={{ margin: 0 }}>{SECTION_TITLES.relatorio}</h3>
-                {viewModeToggle()}
-              </div>
-              {viewMode === "icon" ? (
-                <div key="icon" className="view-mode-fade">
-                  {iconGrid(relatorioReports)}
-                </div>
-              ) : (
-                <div key="list" className="view-mode-fade" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {relatorioReports.map((report) => (
-                    <div key={report.id} className="card" style={{ padding: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <button className="settings-group-toggle" onClick={() => toggleActiveReport(report.id)}>
-                          <span>{activeReportId === report.id ? "▾" : "▸"}</span> {report.name}
-                        </button>
-                        {reportActionsMenu(report)}
-                      </div>
-                      {mountedReportIds.has(report.id) && (
-                        <div
-                          style={{
-                            display: activeReportId === report.id ? "block" : "none",
-                            marginTop: 14,
-                            paddingTop: 14,
-                            borderTop: "1px solid var(--color-border)",
-                          }}
-                        >
-                          <div style={{ marginBottom: 8 }}>
-                            <ReportRefreshInfo workspaceId={currentWorkspace.id} reportId={report.id} />
-                          </div>
-                          <ReportEmbed reportId={report.id} />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {painelReports.length > 0 && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 32, marginBottom: 12 }}>
-                <h3 style={{ margin: 0 }}>{SECTION_TITLES.painel}</h3>
-                {viewModeToggle()}
-              </div>
-              {viewMode === "icon" ? (
-                <div key="icon" className="view-mode-fade">
-                  {iconGrid(painelReports)}
-                </div>
-              ) : (
-                <div key="list" className="view-mode-fade" style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>
-                  {painelReports.map((report) => (
-                    <div key={report.id} className="card" style={{ padding: 14 }}>
-                      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                        <button className="settings-group-toggle" onClick={() => toggleActiveReport(report.id)}>
-                          <span>{activeReportId === report.id ? "▾" : "▸"}</span> {report.name}
-                        </button>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                          {activeReportId === report.id && (
-                            <button
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => setFullscreenReportId(report.id)}
-                              title="Tela cheia"
-                            >
-                              <span className="material-symbols-outlined" style={{ fontSize: 18 }}>
-                                fullscreen
-                              </span>
-                            </button>
-                          )}
-                          {reportActionsMenu(report)}
-                        </div>
-                      </div>
-                      {mountedReportIds.has(report.id) && (
-                        <div
-                          style={{
-                            display: activeReportId === report.id ? "block" : "none",
-                            marginTop: 14,
-                            paddingTop: 14,
-                            borderTop: "1px solid var(--color-border)",
-                          }}
-                        >
-                          <div style={{ marginBottom: 8 }}>
-                            <ReportRefreshInfo workspaceId={currentWorkspace.id} reportId={report.id} />
-                          </div>
-                          <ReportEmbed reportId={report.id} height={360} />
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-
-          {apresentacaoReports.length > 0 && (
-            <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 32, marginBottom: 12 }}>
-                <h3 style={{ margin: 0 }}>{SECTION_TITLES.apresentacao}</h3>
-                <button className="btn btn-secondary btn-sm" onClick={() => setFullscreenSection("apresentacao")}>
-                  <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: "middle", marginRight: 4 }}>
-                    play_arrow
-                  </span>
-                  Abrir apresentacao
-                </button>
-              </div>
-              {iconGrid(apresentacaoReports)}
-            </>
+          {reportSection("relatorio", relatorioReports)}
+          {reportSection("painel", painelReports)}
+          {reportSection(
+            "apresentacao",
+            apresentacaoReports,
+            <button className="btn btn-secondary btn-sm" onClick={() => setFullscreenSection("apresentacao")}>
+              <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: "middle", marginRight: 4 }}>
+                play_arrow
+              </span>
+              Abrir apresentacao
+            </button>
           )}
 
           {tvReports.length > 0 && (

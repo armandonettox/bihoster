@@ -86,6 +86,7 @@ def get_embed_config(
         report_id=report.pbi_report_id,
         embed_url=details["embedUrl"],
         access_token=token_response["token"],
+        page_name=report.pbi_page_name,
     )
     _embed_cache[cache_key] = (datetime.now(timezone.utc) + _EMBED_CACHE_TTL, config)
     return config

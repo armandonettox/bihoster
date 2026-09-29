@@ -5,6 +5,7 @@ class EmbedConfig(BaseModel):
     report_id: str
     embed_url: str
     access_token: str
+    page_name: str | None = None
 
 
 class RefreshHistoryItem(BaseModel):

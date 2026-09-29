@@ -10,6 +10,7 @@ export interface Report {
   pbi_workspace_id: string;
   pbi_report_id: string;
   pbi_dataset_id: string | null;
+  pbi_page_name: string | null;
   display_type: DisplayType;
 }
 
@@ -19,6 +20,7 @@ export interface ReportInput {
   pbi_workspace_id: string;
   pbi_report_id: string;
   pbi_dataset_id?: string | null;
+  pbi_page_name?: string | null;
   display_type?: DisplayType;
 }
 
@@ -45,6 +47,7 @@ export interface EmbedConfig {
   report_id: string;
   embed_url: string;
   access_token: string;
+  page_name: string | null;
 }
 
 export async function getEmbedConfig(workspaceId: number, reportId: number): Promise<EmbedConfig> {

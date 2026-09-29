@@ -2,7 +2,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import * as reportsApi from "../api/reports";
 import type { DisplayType, Report } from "../api/reports";
 import * as powerbiApi from "../api/powerbi";
-import type { PowerBIWorkspace, PowerBIReportSummary } from "../api/powerbi";
+import type { PowerBIWorkspace, PowerBIReportSummary, PowerBIPage } from "../api/powerbi";
 import * as powerbiConnectionsApi from "../api/powerbiConnections";
 import type { PowerBIConnection } from "../api/powerbiConnections";
 import { useWorkspace } from "../context/WorkspaceContext";
@@ -34,10 +34,13 @@ export default function NewReportForm({
   const [pbiReports, setPbiReports] = useState<PowerBIReportSummary[]>([]);
   const [pbiReportId, setPbiReportId] = useState(editingReport?.pbi_report_id || "");
   const [datasetId, setDatasetId] = useState(editingReport?.pbi_dataset_id || "");
+  const [pages, setPages] = useState<PowerBIPage[]>([]);
+  const [pageName, setPageName] = useState(editingReport?.pbi_page_name || "");
   const [displayType, setDisplayType] = useState<DisplayType>(editingReport?.display_type || "relatorio");
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingReports, setLoadingReports] = useState(false);
+  const [loadingPages, setLoadingPages] = useState(false);
   const [catalogError, setCatalogError] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -103,8 +106,32 @@ export default function NewReportForm({
     };
   }, [connectionId, pbiWorkspaceId]);
 
+  useEffect(() => {
+    if (!connectionId || !pbiWorkspaceId || !pbiReportId) {
+      setPages([]);
+      return;
+    }
+    let cancelled = false;
+    setLoadingPages(true);
+    powerbiApi
+      .listPowerBIPages(connectionId, pbiWorkspaceId, pbiReportId)
+      .then((data) => {
+        if (!cancelled) setPages(data);
+      })
+      .catch((err) => {
+        if (!cancelled) setCatalogError(extractErrorMessage(err) || "Nao foi possivel listar as abas do relatorio.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingPages(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [connectionId, pbiWorkspaceId, pbiReportId]);
+
   function handleSelectReport(reportId: string) {
     setPbiReportId(reportId);
+    setPageName("");
     const report = pbiReports.find((r) => r.id === reportId);
     setDatasetId(report?.dataset_id || "");
     if (!name) setName(report?.name || "");
@@ -122,6 +149,7 @@ export default function NewReportForm({
         pbi_workspace_id: pbiWorkspaceId,
         pbi_report_id: pbiReportId,
         pbi_dataset_id: datasetId || null,
+        pbi_page_name: pageName || null,
         display_type: displayType,
       };
       if (editingReport) {
@@ -218,6 +246,28 @@ export default function NewReportForm({
                 {!loadingReports && pbiReports.length === 0 && (
                   <span style={{ fontWeight: 400, fontSize: 12 }}>Nenhum relatorio publicado nesse workspace.</span>
                 )}
+              </label>
+            )}
+
+            {pbiReportId && (
+              <label className="field">
+                Aba a exibir
+                <select
+                  className="input"
+                  value={pageName}
+                  onChange={(e) => setPageName(e.target.value)}
+                  disabled={loadingPages}
+                >
+                  <option value="">{loadingPages ? "Carregando..." : "Relatorio inteiro (todas as abas)"}</option>
+                  {pages.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.display_name}
+                    </option>
+                  ))}
+                </select>
+                <span style={{ fontWeight: 400, fontSize: 12 }}>
+                  Escolha uma aba pra adicionar so ela na colecao, sem navegacao entre as demais.
+                </span>
               </label>
             )}
           </>

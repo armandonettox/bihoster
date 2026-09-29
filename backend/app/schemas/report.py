@@ -11,6 +11,7 @@ class ReportCreate(BaseModel):
     pbi_workspace_id: str = Field(max_length=100)
     pbi_report_id: str = Field(max_length=100)
     pbi_dataset_id: Optional[str] = Field(default=None, max_length=100)
+    pbi_page_name: Optional[str] = Field(default=None, max_length=100)
     display_type: DisplayType = "relatorio"
 
 
@@ -20,6 +21,7 @@ class ReportUpdate(BaseModel):
     pbi_workspace_id: Optional[str] = Field(default=None, max_length=100)
     pbi_report_id: Optional[str] = Field(default=None, max_length=100)
     pbi_dataset_id: Optional[str] = Field(default=None, max_length=100)
+    pbi_page_name: Optional[str] = Field(default=None, max_length=100)
     display_type: Optional[DisplayType] = None
 
 
@@ -31,6 +33,7 @@ class ReportOut(BaseModel):
     pbi_workspace_id: str
     pbi_report_id: str
     pbi_dataset_id: Optional[str]
+    pbi_page_name: Optional[str]
     display_type: DisplayType
 
     class Config:
