@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as homeApi from "../api/home";
-import * as favoritesApi from "../api/favorites";
 import * as workspacesApi from "../api/workspaces";
 import * as groupsApi from "../api/groups";
 import type { HomeCollectionEntry } from "../api/home";
@@ -18,6 +17,7 @@ import Modal from "../components/Modal";
 import EditCollectionModal from "../components/EditCollectionModal";
 import { SkeletonList } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
+import { useFavorites } from "../context/FavoritesContext";
 import { useUrlTab } from "../hooks/useUrlTab";
 import { safeStorage } from "../utils/safeStorage";
 import { extractErrorMessage } from "../api/client";
@@ -276,7 +276,8 @@ export default function HomeDashboard() {
 
   const [recommended, setRecommended] = useState<HomeCollectionEntry[]>([]);
   const [recent, setRecent] = useState<HomeCollectionEntry[]>([]);
-  const [favorites, setFavorites] = useState<Report[]>([]);
+  // Lista compartilhada com a barra lateral: favoritar/desfavoritar em qualquer lugar atualiza aqui
+  const { favorites } = useFavorites();
   const [loading, setLoading] = useState(true);
 
   const [creating, setCreating] = useState(false);
@@ -298,12 +299,11 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([homeApi.listRecommendedCollections(), homeApi.listRecentCollections(), favoritesApi.listFavorites()])
-      .then(([rec, recentList, favs]) => {
+    Promise.all([homeApi.listRecommendedCollections(), homeApi.listRecentCollections()])
+      .then(([rec, recentList]) => {
         if (cancelled) return;
         setRecommended(rec);
         setRecent(recentList);
-        setFavorites(favs);
       })
       .catch(() => {
         if (!cancelled) showToast("Nao foi possivel carregar os dados da pagina inicial.", "error");

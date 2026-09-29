@@ -134,8 +134,11 @@ export default function CollectionHome() {
       next.delete(reportId);
       return next;
     });
-    await refreshReports();
+    // O servidor ja confirmou: tira da lista na hora, sem esperar uma segunda ida a rede, e
+    // recarrega em segundo plano so pra alinhar com o servidor.
+    setReports((current) => current.filter((r) => r.id !== reportId));
     showToast("Relatorio excluido.");
+    refreshReports();
   }
 
   async function handleTvIntervalCommit(rawValue: string) {
@@ -268,7 +271,7 @@ export default function CollectionHome() {
               className="kebab-menu-item"
               onClick={() => {
                 close();
-                toggleFavorite(report.id);
+                toggleFavorite(report.id, report);
               }}
             >
               {isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
