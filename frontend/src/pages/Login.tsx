@@ -1,5 +1,6 @@
 import { useCallback, useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { safeNextPath } from "../utils/redirect";
 import { useAuth } from "../context/AuthContext";
 import { useBranding } from "../context/BrandingContext";
 import { assetUrl } from "../api/client";
@@ -14,9 +15,12 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const { login, loginWithGoogle } = useAuth();
+  const { user, loading: authLoading, login, loginWithGoogle } = useAuth();
   const { settings } = useBranding();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  // Pagina que o usuario tentava abrir antes de cair no login (ver ProtectedRoute)
+  const nextPath = safeNextPath(searchParams.get("next"));
   const googleEnabled = Boolean(settings?.google_oauth_enabled && settings.google_client_id);
 
   const handleGoogleCredential = useCallback(
@@ -24,13 +28,18 @@ export default function Login() {
       setError(null);
       try {
         await loginWithGoogle(idToken);
-        navigate("/");
+        navigate(nextPath);
       } catch (err: any) {
         setError(extractErrorMessage(err) || "Nao foi possivel entrar com o Google.");
       }
     },
-    [loginWithGoogle, navigate]
+    [loginWithGoogle, navigate, nextPath]
   );
+
+  // Quem ja esta logado nao precisa ver a tela de login
+  if (!authLoading && user) {
+    return <Navigate to={nextPath} replace />;
+  }
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
@@ -38,7 +47,7 @@ export default function Login() {
     setLoading(true);
     try {
       await login(email, password);
-      navigate("/");
+      navigate(nextPath);
     } catch (err: any) {
       const status = err?.response?.status;
       if (status === 423) {

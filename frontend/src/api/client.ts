@@ -1,5 +1,6 @@
 import axios from "axios";
 import { safeStorage } from "../utils/safeStorage";
+import { loginUrlFor } from "../utils/redirect";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -40,7 +41,7 @@ api.interceptors.response.use(
       // mostrar o erro (TvPlaylistPlayer ja trata isso), visivel pra quem passar na frente.
       const isTvKiosk = window.location.pathname.startsWith("/tv/");
       if (!isTvKiosk && window.location.pathname !== "/login") {
-        window.location.href = "/login";
+        window.location.href = loginUrlFor(window.location.pathname + window.location.search);
       }
     }
     return Promise.reject(error);
