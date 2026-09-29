@@ -17,6 +17,7 @@ def _to_out(entry: AuditLog, user_name: str | None, workspace_name: str | None) 
         id=entry.id,
         user_id=entry.user_id,
         user_name=user_name,
+        user_email=entry.user_email,
         workspace_id=entry.workspace_id,
         workspace_name=workspace_name,
         action=entry.action,

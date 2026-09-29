@@ -4,6 +4,8 @@ export interface AuditLogEntry {
   id: number;
   user_id: number | null;
   user_name: string | null;
+  /** Email de quem agiu; continua preenchido mesmo depois de o usuario ser apagado */
+  user_email: string | null;
   workspace_id: number | null;
   workspace_name: string | null;
   action: string;

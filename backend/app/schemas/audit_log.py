@@ -9,6 +9,7 @@ class AuditLogOut(BaseModel):
     id: int
     user_id: Optional[int]
     user_name: Optional[str] = None
+    user_email: Optional[str] = None
     workspace_id: Optional[int]
     workspace_name: Optional[str] = None
     action: str

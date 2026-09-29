@@ -123,6 +123,11 @@ def delete_user(
     db.query(GroupInvite).filter(GroupInvite.invited_by_id == user_id).update(
         {"invited_by_id": None}, synchronize_session=False
     )
+    # Guarda o email nas linhas de auditoria do usuario (as antigas nao tem) antes de perder o
+    # vinculo, pra a autoria continuar visivel na tela de auditoria.
+    db.query(AuditLog).filter(AuditLog.user_id == user_id, AuditLog.user_email.is_(None)).update(
+        {"user_email": email}, synchronize_session=False
+    )
     db.query(AuditLog).filter(AuditLog.user_id == user_id).update({"user_id": None}, synchronize_session=False)
     db.delete(user)
 

@@ -44,7 +44,7 @@ export default function AuditTab() {
   const filtered = logs.filter((log) => {
     if (!filter) return true;
     const actionLabel = ACTION_LABELS[log.action] || log.action;
-    const haystack = `${log.user_name || ""} ${actionLabel} ${log.entity} ${log.workspace_name || ""} ${log.details || ""}`.toLowerCase();
+    const haystack = `${log.user_name || ""} ${log.user_email || ""} ${actionLabel} ${log.entity} ${log.workspace_name || ""} ${log.details || ""}`.toLowerCase();
     return haystack.includes(filter.toLowerCase());
   });
 
@@ -87,7 +87,14 @@ export default function AuditTab() {
                   <td style={{ whiteSpace: "nowrap", color: "var(--color-text-muted)", fontSize: 13 }}>
                     {formatDateTime(log.created_at, settings?.timezone)}
                   </td>
-                  <td>{log.user_name || "Sistema"}</td>
+                  <td>
+                    {log.user_name ||
+                      (log.user_email ? (
+                        <span title="Usuario removido">{log.user_email}</span>
+                      ) : (
+                        "Sistema"
+                      ))}
+                  </td>
                   <td>
                     <span className="badge">{ACTION_LABELS[log.action] || log.action}</span>
                     <span style={{ marginLeft: 6, fontSize: 12, color: "var(--color-text-muted)" }}>{log.entity}</span>

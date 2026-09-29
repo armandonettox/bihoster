@@ -10,6 +10,9 @@ class AuditLog(Base):
     id = Column(Integer, primary_key=True, index=True)
     workspace_id = Column(Integer, ForeignKey("workspaces.id"), nullable=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    # Copia do email de quem agiu: quando o usuario e apagado o user_id vira nulo e, sem isso,
+    # a autoria da acao se perderia. Coluna nulavel de proposito (migracao automatica do boot).
+    user_email = Column(String, nullable=True)
     action = Column(String, nullable=False, index=True)
     entity = Column(String, nullable=False)
     entity_id = Column(String, nullable=True)
