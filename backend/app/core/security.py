@@ -1,3 +1,4 @@
+import hashlib
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
@@ -21,9 +22,29 @@ def verify_password_constant_time(plain_password: str, hashed_password: str | No
     return bcrypt.checkpw(plain_password.encode("utf-8"), (hashed_password or _DUMMY_HASH).encode("utf-8"))
 
 
-def create_access_token(subject: str) -> str:
-    expire = datetime.now(timezone.utc) + timedelta(minutes=settings.access_token_expire_minutes)
-    payload = {"sub": subject, "exp": expire}
+def password_fingerprint(hashed_password: str | None) -> str:
+    """Impressao curta do hash da senha atual, guardada no token. Trocar a senha muda o hash e,
+    portanto, a impressao: a renovacao de sessao recusa tokens de antes da troca. Nao expoe a
+    senha nem o hash (so 8 caracteres de um SHA-256 do hash)."""
+    return hashlib.sha256((hashed_password or "").encode("utf-8")).hexdigest()[:8]
+
+
+def create_access_token(
+    subject: str,
+    auth_at: datetime | None = None,
+    password_hash: str | None = None,
+) -> str:
+    """`auth_at` e o momento do login original e atravessa as renovacoes (sessao deslizante):
+    e ele que limita a duracao total da sessao. `password_hash` gera a impressao usada pra
+    cortar a renovacao quando a senha muda."""
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=settings.access_token_expire_minutes)
+    payload = {
+        "sub": subject,
+        "exp": expire,
+        "auth_at": int((auth_at or now).timestamp()),
+        "pv": password_fingerprint(password_hash),
+    }
     return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
 
 

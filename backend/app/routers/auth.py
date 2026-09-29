@@ -14,6 +14,7 @@ from app.core.security import (
     create_access_token,
     decode_access_token,
     hash_password,
+    password_fingerprint,
     verify_password_constant_time,
 )
 from app.models.invite import GroupInvite
@@ -126,7 +127,7 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
 
     log_action(db, action="login", entity="user", user_id=user.id, entity_id=user.id)
 
-    token = create_access_token(subject=str(user.id))
+    token = create_access_token(subject=str(user.id), password_hash=user.hashed_password)
     return Token(access_token=token)
 
 
@@ -197,7 +198,7 @@ def login_with_google(request: Request, data: GoogleLogin, db: Session = Depends
         log_action(db, action="register", entity="user", user_id=user.id, entity_id=user.id, details="google")
 
     log_action(db, action="login", entity="user", user_id=user.id, entity_id=user.id, details="google")
-    token = create_access_token(subject=str(user.id))
+    token = create_access_token(subject=str(user.id), password_hash=user.hashed_password)
     return Token(access_token=token)
 
 
@@ -248,6 +249,35 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         if locked_until > datetime.now(timezone.utc):
             raise HTTPException(status_code=401, detail="Conta bloqueada")
     return user
+
+
+@router.post("/refresh", response_model=Token)
+@limiter.limit("30/minute")
+def refresh_session(
+    request: Request,
+    token: str = Depends(oauth2_scheme),
+    current_user: User = Depends(get_current_user),
+):
+    """Sessao deslizante: troca um token ainda valido por um novo, sem novo login. Sem isso a TV
+    e qualquer aba aberta caem depois de 60 minutos. Usuario apagado e conta bloqueada ja sao
+    barrados pelo get_current_user; aqui ficam o teto absoluto e a troca de senha."""
+    claims = decode_access_token(token)  # get_current_user ja validou; so le as claims
+
+    now = datetime.now(timezone.utc)
+    # Token de antes desta versao nao tem auth_at: a sessao passa a contar a partir de agora
+    auth_at = datetime.fromtimestamp(claims["auth_at"], tz=timezone.utc) if "auth_at" in claims else now
+
+    if settings.session_max_hours > 0 and now - auth_at > timedelta(hours=settings.session_max_hours):
+        raise HTTPException(status_code=401, detail="Sessao expirada, entre novamente")
+
+    # Token de antes desta versao nao tem pv: aceita. Com pv, exige que a senha nao tenha mudado.
+    if "pv" in claims and claims["pv"] != password_fingerprint(current_user.hashed_password):
+        raise HTTPException(status_code=401, detail="Sessao invalida, entre novamente")
+
+    new_token = create_access_token(
+        subject=str(current_user.id), auth_at=auth_at, password_hash=current_user.hashed_password
+    )
+    return Token(access_token=new_token)
 
 
 @router.get("/me", response_model=UserOut)

@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     # em repouso -- separada do jwt_secret pra nao acoplar rotacao de uma na outra.
     encryption_key: str = "change-me-in-env"
     access_token_expire_minutes: int = 60
+    # Sessao deslizante (POST /auth/refresh): teto absoluto desde o login, em horas. Depois disso
+    # e preciso entrar de novo, mesmo com a tela aberta. 0 desliga o teto (sessao sem fim).
+    session_max_hours: int = 168
     max_failed_login_attempts: int = 5
     account_lock_minutes: int = 15
     cors_origins: str = "http://localhost:5173"
