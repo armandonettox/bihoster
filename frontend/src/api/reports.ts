@@ -48,6 +48,8 @@ export interface EmbedConfig {
   embed_url: string;
   access_token: string;
   page_name: string | null;
+  /** Quando o embed token expira (ISO UTC com Z); null se o backend for de uma versao antiga */
+  expires_at?: string | null;
 }
 
 export async function getEmbedConfig(workspaceId: number, reportId: number): Promise<EmbedConfig> {
