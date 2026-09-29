@@ -57,6 +57,10 @@ class ReportUpdate(BaseModel):
         return self
 
 
+class ReportMove(BaseModel):
+    direction: Literal["up", "down"]
+
+
 class ReportOut(BaseModel):
     id: int
     collection_id: int

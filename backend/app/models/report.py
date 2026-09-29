@@ -21,4 +21,8 @@ class Report(Base):
     pbi_page_name = Column(String, nullable=True)
     # Secao da colecao onde o relatorio aparece: relatorio, painel, apresentacao ou tv
     display_type = Column(String, default="relatorio", nullable=False)
+    # Ordem dentro da secao (colecao + display_type), do menor pro maior. Nulo = ainda nao
+    # reordenado: fica depois dos que tem posicao, na ordem de criacao. Coluna nulavel de
+    # proposito (a migracao automatica do boot so adiciona colunas nulaveis).
+    position = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
