@@ -67,21 +67,26 @@ export default function CollectionHome() {
   const isAdmin = role === "admin";
   const { showToast } = useToast();
 
+  // Os efeitos abaixo dependem so do id da colecao, nao do objeto: o reload do WorkspaceContext
+  // cria um objeto novo a cada chamada (ex: ao mudar o intervalo da TV ou editar a colecao), e
+  // depender do objeto resetava a pagina inteira e registrava a visita em "Recentes" de novo.
+  const workspaceId = currentWorkspace?.id;
+
   const loadRequestIdRef = useRef(0);
   const loadReports = useCallback(async () => {
-    if (!currentWorkspace) return;
+    if (workspaceId === undefined) return;
     const requestId = ++loadRequestIdRef.current;
-    const data = await reportsApi.listReports(currentWorkspace.id);
+    const data = await reportsApi.listReports(workspaceId);
     // Ignora respostas de uma colecao/pedido antigo que chegaram depois de um mais recente --
     // evita mostrar os relatorios da colecao errada ao trocar de colecao rapidamente.
     if (requestId !== loadRequestIdRef.current) return;
     setReports(data);
-  }, [currentWorkspace]);
+  }, [workspaceId]);
 
   useEffect(() => {
-    if (!currentWorkspace) return;
-    homeApi.recordCollectionView(currentWorkspace.id).catch(() => {});
-  }, [currentWorkspace]);
+    if (workspaceId === undefined) return;
+    homeApi.recordCollectionView(workspaceId).catch(() => {});
+  }, [workspaceId]);
 
   useEffect(() => {
     setLoading(true);
