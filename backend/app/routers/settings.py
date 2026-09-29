@@ -9,7 +9,7 @@ from app.core.database import get_db
 from app.core.workspace_deps import require_platform_admin
 from app.models.settings import AppSettings
 from app.models.user import User
-from app.models.workspace import Group, GroupMember
+from app.models.workspace import Group, GroupMember, Workspace
 from app.schemas.settings import SettingsOut, SettingsUpdate
 
 SECURITY_SENSITIVE_FIELDS = {
@@ -96,6 +96,12 @@ def update_settings(
                     "Adicione outro administrador antes de desativar."
                 ),
             )
+
+    # A colecao padrao precisa existir: um id solto deixava o redirecionamento da home apontando
+    # pra uma colecao inexistente (404/403 na tela inicial de todo mundo).
+    default_workspace_id = changed_fields.get("default_workspace_id")
+    if default_workspace_id is not None and not db.query(Workspace).get(default_workspace_id):
+        raise HTTPException(status_code=400, detail="A colecao padrao escolhida nao existe")
 
     for field, value in changed_fields.items():
         setattr(settings_row, field, value)
