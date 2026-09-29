@@ -22,6 +22,9 @@ services:
       # "Forcar HTTPS atras de proxy"). Sem isso, "Forcar HTTPS" em Configuracoes > Geral entra
       # em loop de redirect quando o TLS termina num proxy na frente do backend.
       TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-false}
+      # Limite de duracao de uma sessao (horas desde o login). A sessao se renova sozinha, entao
+      # sem esse teto ela nunca expiraria. 0 desliga o limite.
+      SESSION_MAX_HOURS: ${SESSION_MAX_HOURS:-168}
     volumes:
       - backend_data:/app/data
       - backend_uploads:/app/static/uploads

@@ -12,6 +12,12 @@ export async function login(email: string, password: string): Promise<string> {
   return data.access_token as string;
 }
 
+/** Troca o token atual por um novo (sessao deslizante), sem pedir senha de novo. */
+export async function refreshSession(): Promise<string> {
+  const { data } = await api.post("/auth/refresh");
+  return data.access_token as string;
+}
+
 export async function register(name: string, email: string, password: string): Promise<User> {
   const { data } = await api.post("/auth/register", { name, email, password });
   return data as User;

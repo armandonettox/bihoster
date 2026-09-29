@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import * as authApi from "../api/auth";
 import type { User } from "../api/auth";
 import { safeStorage } from "../utils/safeStorage";
@@ -13,9 +13,45 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+// O token dura 60 min; renova bem antes disso. Sem renovacao a TV e qualquer aba aberta caiam
+// depois de uma hora.
+const REFRESH_EVERY_MS = 20 * 60 * 1000;
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const lastRefreshRef = useRef(Date.now());
+
+  // Sessao deslizante: enquanto ha usuario logado, troca o token periodicamente.
+  useEffect(() => {
+    if (!user) return;
+    lastRefreshRef.current = Date.now();
+
+    async function refresh() {
+      try {
+        const token = await authApi.refreshSession();
+        safeStorage.setItem("token", token);
+        lastRefreshRef.current = Date.now();
+      } catch {
+        // Falha de rede: tenta de novo no proximo ciclo. Se foi 401 (sessao vencida, senha
+        // trocada), o interceptor do axios ja cuida de mandar pro login.
+      }
+    }
+
+    const timer = setInterval(refresh, REFRESH_EVERY_MS);
+    // Timers ficam pra tras quando o computador dorme ou a aba fica em segundo plano: ao voltar,
+    // renova na hora se ja passou do ciclo.
+    function handleVisibility() {
+      if (document.visibilityState === "visible" && Date.now() - lastRefreshRef.current >= REFRESH_EVERY_MS) {
+        refresh();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [user]);
 
   useEffect(() => {
     const token = safeStorage.getItem("token");

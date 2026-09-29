@@ -47,6 +47,15 @@ Sem isso, o backend nunca enxerga a conexão como HTTPS de verdade e entra num l
 301. **Nunca ative essa variável se o backend estiver exposto direto na internet sem proxy na
 frente** — qualquer cliente poderia forjar o header e escapar dessa checagem.
 
+### Duração da sessão
+
+A sessão de login se renova sozinha enquanto a tela estiver aberta, então o **Modo TV** e as abas
+paradas não caem a cada hora. Para não existir sessão eterna, há um limite absoluto desde o
+login, controlado por `SESSION_MAX_HOURS` no `.env` (padrão **168**, ou seja, 7 dias): depois
+disso é preciso entrar de novo. Trocar a senha também encerra a renovação das sessões antigas.
+`SESSION_MAX_HOURS=0` desliga o limite — só faça isso se aceitar que uma sessão roubada nunca
+expira enquanto alguém a mantiver aberta.
+
 ### Atualizações
 
 **Configurações → Atualizações** mostra a versão instalada, se há uma versão mais nova
