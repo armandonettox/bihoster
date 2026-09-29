@@ -6,6 +6,20 @@ import type { Report } from "../api/reports";
 import ReportEmbed from "../components/ReportEmbed";
 import { extractErrorMessage } from "../api/client";
 
+const PLAYLIST_REFRESH_MS = 3 * 60 * 1000;
+
+/** Mesma playlist? Compara id, nome e conexao dos relatorios, na mesma ordem. */
+function sameQueue(a: Report[], b: Report[]): boolean {
+  if (a.length !== b.length) return false;
+  return a.every(
+    (report, i) =>
+      report.id === b[i].id &&
+      report.name === b[i].name &&
+      report.pbi_page_name === b[i].pbi_page_name &&
+      report.powerbi_connection_id === b[i].powerbi_connection_id,
+  );
+}
+
 export default function TvPlaylistPlayer() {
   const { workspaceId } = useParams();
   const id = Number(workspaceId);
@@ -20,7 +34,9 @@ export default function TvPlaylistPlayer() {
   useEffect(() => {
     let cancelled = false;
 
-    async function load() {
+    // `silent`: recarga periodica em segundo plano. Nao mostra "carregando", nao troca a tela por
+    // erro se falhar (a TV segue mostrando o que ja tem) e so mexe no estado se algo mudou.
+    async function load(silent: boolean) {
       try {
         const [workspace, reports] = await Promise.all([
           workspacesApi.listWorkspaces().then((all) => all.find((w) => w.id === id)),
@@ -28,24 +44,37 @@ export default function TvPlaylistPlayer() {
         ]);
         if (cancelled) return;
         if (!workspace) {
-          setError("Colecao nao encontrada ou voce nao tem acesso a ela.");
+          if (!silent) setError("Colecao nao encontrada ou voce nao tem acesso a ela.");
           return;
         }
         setCollectionName(workspace.name);
         setIntervalSeconds(workspace.tv_interval_seconds);
-        setQueue(reports.filter((r) => r.display_type === "tv"));
+        const nextQueue = reports.filter((r) => r.display_type === "tv");
+        // Mantem o mesmo array quando a lista nao mudou: trocar a referencia reiniciaria o
+        // temporizador de rotacao a cada recarga.
+        setQueue((current) => (sameQueue(current, nextQueue) ? current : nextQueue));
       } catch (err: any) {
-        if (!cancelled) setError(extractErrorMessage(err) || "Nao foi possivel carregar o modo TV desta colecao.");
+        if (!cancelled && !silent) {
+          setError(extractErrorMessage(err) || "Nao foi possivel carregar o modo TV desta colecao.");
+        }
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && !silent) setLoading(false);
       }
     }
 
-    load();
+    load(false);
+    // Uma TV fica ligada por dias: sem isso, editar a lista ou o intervalo nunca chegava a ela.
+    const refreshTimer = setInterval(() => load(true), PLAYLIST_REFRESH_MS);
     return () => {
       cancelled = true;
+      clearInterval(refreshTimer);
     };
   }, [id]);
+
+  // Se a lista encolheu e o indice atual saiu do intervalo, volta pro inicio
+  useEffect(() => {
+    setIndex((i) => (queue.length > 0 && i >= queue.length ? 0 : i));
+  }, [queue.length]);
 
   useEffect(() => {
     if (queue.length < 2) return;
