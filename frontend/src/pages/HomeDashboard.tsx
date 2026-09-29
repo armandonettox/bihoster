@@ -18,6 +18,7 @@ import Modal from "../components/Modal";
 import EditCollectionModal from "../components/EditCollectionModal";
 import { SkeletonList } from "../components/Skeleton";
 import { useToast } from "../context/ToastContext";
+import { useUrlTab } from "../hooks/useUrlTab";
 import { safeStorage } from "../utils/safeStorage";
 import { extractErrorMessage } from "../api/client";
 
@@ -261,8 +262,11 @@ function CollectionCard({
   );
 }
 
+const TAB_KEYS = TABS.map((t) => t.key);
+
 export default function HomeDashboard() {
-  const [tab, setTab] = useState<Tab>("collections");
+  // Aba na URL (?tab=), lembrando a ultima aberta
+  const [tab, setTab] = useUrlTab<Tab>(TAB_KEYS, "collections", { storageKey: "home_tab" });
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (safeStorage.getItem(HOME_VIEW_MODE_KEY) as ViewMode) || "icon"
   );
@@ -315,9 +319,10 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     if (searchParams.get("new") === "collection") {
-      setTab("collections");
       setCreating(true);
-      setSearchParams({}, { replace: true });
+      // Limpa o ?new= e ja fixa a aba de colecoes numa unica troca de URL (limpar tudo apagaria
+      // tambem o ?tab= e a tela voltaria pra aba lembrada)
+      setSearchParams({ tab: "collections" }, { replace: true });
     }
   }, [searchParams, setSearchParams]);
 

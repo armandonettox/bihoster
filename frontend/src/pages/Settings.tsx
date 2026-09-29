@@ -1,6 +1,7 @@
-import { useState, useRef, type KeyboardEvent } from "react";
+import { useRef, type KeyboardEvent } from "react";
 import { Link } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { useUrlTab } from "../hooks/useUrlTab";
 import GeneralTab from "./settings/GeneralTab";
 import CollectionsTab from "./settings/CollectionsTab";
 import BrandTab from "./settings/BrandTab";
@@ -23,9 +24,12 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "updates", label: "Atualizacoes" },
 ];
 
+const TAB_KEYS = TABS.map((t) => t.key);
+
 export default function Settings() {
   const { workspaces } = useWorkspace();
-  const [tab, setTab] = useState<Tab>("general");
+  // Aba na URL (?tab=): recarregar mantem a aba e da pra compartilhar um link direto; lembra a ultima
+  const [tab, setTab] = useUrlTab<Tab>(TAB_KEYS, "general", { storageKey: "settings_tab" });
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
