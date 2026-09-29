@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -17,11 +18,34 @@ router = APIRouter(prefix="/workspaces/{workspace_id}/powerbi", tags=["powerbi"]
 _prune_expired = powerbi.prune_expired
 
 
-# Cache simples em memoria do embed token por (colecao, relatorio, usuario) -- o token do Power BI
-# dura ~60 minutos, entao guardar por 50 evita gerar um novo a cada vez que o usuario reabre
-# o mesmo relatorio, sem arriscar servir um token vencido.
-_EMBED_CACHE_TTL = timedelta(minutes=50)
+# Cache simples em memoria do embed token por (colecao, relatorio, usuario): evita gerar um novo
+# a cada vez que o usuario reabre o mesmo relatorio. Vale ate a expiracao real do token menos
+# essa margem, pra nunca entregar um token quase vencido.
+_EMBED_CACHE_MARGIN = timedelta(minutes=5)
+# Validade assumida quando o Power BI nao informa `expiration` (o embed token dura ~1h)
+_EMBED_DEFAULT_LIFETIME = timedelta(minutes=60)
 _embed_cache: dict[tuple[int, int, int], tuple[datetime, EmbedConfig]] = {}
+
+
+def _parse_token_expiration(raw: Optional[str]) -> datetime:
+    """`expiration` do GenerateToken vem em ISO 8601 UTC (ex: 2026-09-29T20:00:00Z, com fracao de
+    segundo de 7 casas). Sem o campo, ou com um valor ilegivel, assume a validade padrao."""
+    if raw:
+        try:
+            cleaned = raw.strip().replace("Z", "+00:00")
+            # Python le no maximo 6 casas de fracao de segundo; o Power BI manda 7
+            if "." in cleaned:
+                head, _, tail = cleaned.partition(".")
+                digits = "".join(ch for ch in tail if ch.isdigit())[:6]
+                zone = tail[len("".join(ch for ch in tail if ch.isdigit())):]
+                cleaned = f"{head}.{digits}{zone}"
+            parsed = datetime.fromisoformat(cleaned)
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return parsed.astimezone(timezone.utc)
+        except ValueError:
+            pass
+    return datetime.now(timezone.utc) + _EMBED_DEFAULT_LIFETIME
 
 # Historico/agendamento de atualizacao do dataset mudam pouco -- cachear alguns minutos evita
 # uma chamada ao Power BI por card toda vez que a colecao e aberta (pesa bastante no modo icone).
@@ -82,13 +106,20 @@ def get_embed_config(
         username=current_user.email if needs_identity else None,
     )
 
+    expires_at = _parse_token_expiration(token_response.get("expiration"))
     config = EmbedConfig(
         report_id=report.pbi_report_id,
         embed_url=details["embedUrl"],
         access_token=token_response["token"],
         page_name=report.pbi_page_name,
+        expires_at=expires_at,
     )
-    _embed_cache[cache_key] = (datetime.now(timezone.utc) + _EMBED_CACHE_TTL, config)
+    # O cache vale ate _EMBED_CACHE_MARGIN antes de o token vencer (antes eram 50 min fixos, entao
+    # o usuario podia receber um token com poucos minutos de vida). Token que ja esta perto do
+    # vencimento nao entra no cache: a proxima chamada gera outro.
+    cache_until = expires_at - _EMBED_CACHE_MARGIN
+    if cache_until > datetime.now(timezone.utc):
+        _embed_cache[cache_key] = (cache_until, config)
     return config
 
 
