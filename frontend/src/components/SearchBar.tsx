@@ -23,6 +23,7 @@ export default function SearchBar() {
   const [results, setResults] = useState<SearchResultEntry[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [searchFailed, setSearchFailed] = useState(false);
   const [activeIndex, setActiveIndex] = useState(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
@@ -59,8 +60,13 @@ export default function SearchBar() {
   useEffect(() => {
     const trimmed = query.trim();
     if (!trimmed) {
+      // Invalida qualquer busca ainda em voo: sem isso, a resposta chegava depois de o campo
+      // ser limpo e reabria o dropdown com resultados de um texto que nao existe mais.
+      requestIdRef.current++;
       setResults([]);
       setOpen(false);
+      setLoading(false);
+      setSearchFailed(false);
       return;
     }
     setLoading(true);
@@ -72,6 +78,14 @@ export default function SearchBar() {
           // Ignora respostas de buscas antigas que chegaram depois de uma mais recente.
           if (requestId !== requestIdRef.current) return;
           setResults(data);
+          setSearchFailed(false);
+          setActiveIndex(-1);
+          setOpen(true);
+        })
+        .catch(() => {
+          if (requestId !== requestIdRef.current) return;
+          setResults([]);
+          setSearchFailed(true);
           setActiveIndex(-1);
           setOpen(true);
         })
@@ -100,9 +114,10 @@ export default function SearchBar() {
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
       setActiveIndex((i) => (i - 1 + results.length) % results.length);
-    } else if (e.key === "Enter" && activeIndex >= 0) {
+    } else if (e.key === "Enter") {
+      // Sem item destacado com as setas, Enter abre o primeiro resultado (antes nao fazia nada)
       e.preventDefault();
-      openEntry(results[activeIndex]);
+      openEntry(results[activeIndex >= 0 ? activeIndex : 0]);
     } else if (e.key === "Escape") {
       setOpen(false);
     }
@@ -131,6 +146,8 @@ export default function SearchBar() {
               <div className="skeleton skeleton-line" style={{ width: "80%" }} />
               <div className="skeleton skeleton-line" style={{ width: "60%" }} />
             </div>
+          ) : searchFailed ? (
+            <p className="search-bar-empty">Nao foi possivel buscar agora. Tente de novo.</p>
           ) : results.length === 0 ? (
             <p className="search-bar-empty">Nenhum relatorio encontrado.</p>
           ) : (
