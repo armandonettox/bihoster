@@ -20,6 +20,16 @@ _reports_cache: dict[tuple[int, str], tuple[datetime, list]] = {}
 _pages_cache: dict[tuple[int, str, str], tuple[datetime, list]] = {}
 
 
+def invalidate_catalog_cache(connection_id: int) -> None:
+    """Descarta workspaces/relatorios/paginas em cache de uma conta. Chamado ao editar ou excluir
+    a conta: sem isso o editor via, por ate 5 minutos, o catalogo do tenant antigo (e o id de
+    uma conta apagada, que o SQLite pode reaproveitar, herdava a lista em cache)."""
+    _workspaces_cache.pop(connection_id, None)
+    for cache in (_reports_cache, _pages_cache):
+        for key in [k for k in cache if k[0] == connection_id]:
+            cache.pop(key, None)
+
+
 def _get_connection_or_404(db: Session, connection_id: int) -> PowerBIConnection:
     return get_or_404(db, PowerBIConnection, "Conta do Power BI nao encontrada", id=connection_id)
 
