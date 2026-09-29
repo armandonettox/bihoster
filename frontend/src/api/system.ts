@@ -12,6 +12,8 @@ export interface VersionStatus {
   current_version: string;
   latest: ReleaseInfo | null;
   has_update: boolean;
+  /** true quando a consulta ao GitHub falhou: nao da pra afirmar que esta atualizado */
+  check_failed: boolean;
   auto_update_enabled: boolean;
 }
 

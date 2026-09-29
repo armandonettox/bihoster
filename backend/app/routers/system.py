@@ -14,18 +14,22 @@ router = APIRouter(prefix="/system", tags=["system"])
 
 @router.get("/version")
 def get_version_status(_=Depends(require_platform_admin)):
+    check_failed = False
     try:
         latest = system_update.fetch_latest_release()
     except httpx.HTTPError:
-        # GitHub fora do ar ou rate limit -- nao pode derrubar a aba, so nao mostra "tem
-        # atualizacao" ate a proxima tentativa.
+        # GitHub fora do ar ou rate limit -- nao pode derrubar a aba, mas tambem nao pode fingir
+        # que "esta atualizado": sinaliza a falha pra interface avisar em vez de mostrar "sem
+        # atualizacao".
         latest = None
+        check_failed = True
 
     has_update = bool(latest and system_update.is_newer(latest.version, settings.app_version))
     return {
         "current_version": settings.app_version,
         "latest": latest,
         "has_update": has_update,
+        "check_failed": check_failed,
         "auto_update_enabled": system_update.is_auto_update_enabled(),
     }
 
@@ -53,7 +57,8 @@ def apply_update(
         )
 
     try:
-        latest = system_update.fetch_latest_release()
+        # Ignora o cache: ao aplicar, a versao precisa ser a real de agora
+        latest = system_update.fetch_latest_release(force=True)
     except httpx.HTTPError:
         raise HTTPException(status_code=502, detail="Nao foi possivel consultar a ultima versao no GitHub agora.")
 
@@ -62,6 +67,8 @@ def apply_update(
 
     try:
         log_path = system_update.apply_update(latest.version)
+    except system_update.UpdateAlreadyRunning as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
 

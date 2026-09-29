@@ -95,6 +95,10 @@ export default function UpdatesTab() {
             <span className="badge" style={{ background: "var(--color-accent)", color: "#fff" }}>
               Nova versao disponivel
             </span>
+          ) : status?.check_failed ? (
+            <span className="badge" title="Nao foi possivel consultar o GitHub agora">
+              Nao foi possivel verificar
+            </span>
           ) : (
             <span className="badge">Atualizado</span>
           )}

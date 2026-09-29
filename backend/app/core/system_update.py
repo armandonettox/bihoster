@@ -1,8 +1,9 @@
 import os
 import subprocess
+import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional, TypeVar
 
 import httpx
 from pydantic import BaseModel
@@ -11,9 +12,41 @@ from app.core.config import settings
 
 GITHUB_REPO = "armandonettox/bihoster"
 GITHUB_API_BASE = f"https://api.github.com/repos/{GITHUB_REPO}"
-# Sem autenticacao -- endpoint publico de um repo publico, rate limit de 60 req/h por IP
-# e mais que suficiente pro uso (a aba so consulta ao abrir e ao clicar em "Atualizar").
+# Sem autenticacao -- endpoint publico de um repo publico, rate limit de 60 req/h por IP.
 _HTTP_TIMEOUT = 10.0
+
+# Cada abertura da aba Atualizacoes (e cada usuario admin) consultava o GitHub de novo, gastando
+# o limite de 60 req/h por IP. Guarda a resposta por alguns minutos; falhas nao sao cacheadas.
+_RELEASE_CACHE_TTL_SECONDS = 600.0
+_release_cache: dict[str, tuple[float, object]] = {}
+
+# Uma atualizacao reinicia os containers; duas ao mesmo tempo (duplo clique, dois admins)
+# disputariam o mesmo `docker compose pull && up -d`. A trava expira sozinha caso fique presa.
+APPLY_LOCK_STALE_SECONDS = 600
+# A aba mostra os logs completos de cada atualizacao; sem limite a resposta cresce para sempre
+MAX_UPDATE_LOGS = 10
+MAX_LOG_CHARS = 20_000
+
+_T = TypeVar("_T")
+
+
+class UpdateAlreadyRunning(Exception):
+    """Ja existe uma atualizacao em andamento neste host."""
+
+
+def clear_release_cache() -> None:
+    _release_cache.clear()
+
+
+def _cached(key: str, fetch: Callable[[], _T], force: bool) -> _T:
+    now = time.monotonic()
+    if not force:
+        hit = _release_cache.get(key)
+        if hit and now - hit[0] < _RELEASE_CACHE_TTL_SECONDS:
+            return hit[1]  # type: ignore[return-value]
+    value = fetch()
+    _release_cache[key] = (now, value)
+    return value
 
 
 class ReleaseInfo(BaseModel):
@@ -61,9 +94,13 @@ def is_newer(candidate: str, current: str) -> bool:
     return _parse_version(candidate) > _parse_version(current)
 
 
-def fetch_release_history(limit: int = 10) -> list[ReleaseInfo]:
+def fetch_release_history(limit: int = 10, force: bool = False) -> list[ReleaseInfo]:
     """Ultimas releases publicadas no GitHub, mais recente primeiro. Marca qual delas e a
     versao rodando agora (settings.app_version, gravada em /app/VERSION no build)."""
+    return _cached(f"history:{limit}", lambda: _fetch_release_history(limit), force)
+
+
+def _fetch_release_history(limit: int) -> list[ReleaseInfo]:
     response = httpx.get(
         f"{GITHUB_API_BASE}/releases",
         params={"per_page": limit},
@@ -86,7 +123,12 @@ def fetch_release_history(limit: int = 10) -> list[ReleaseInfo]:
     return releases
 
 
-def fetch_latest_release() -> Optional[ReleaseInfo]:
+def fetch_latest_release(force: bool = False) -> Optional[ReleaseInfo]:
+    """`force=True` ignora o cache -- usado ao aplicar a atualizacao, que precisa da versao real."""
+    return _cached("latest", _fetch_latest_release, force)
+
+
+def _fetch_latest_release() -> Optional[ReleaseInfo]:
     response = httpx.get(
         f"{GITHUB_API_BASE}/releases/latest",
         headers={"Accept": "application/vnd.github+json"},
@@ -123,34 +165,65 @@ def apply_update(target_version: str) -> Path:
             "`.:/deploy:ro` esta montado no servico backend."
         )
 
+    lock_path = _acquire_apply_lock()
+
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     log_path = _update_log_dir() / f"{timestamp}_v{target_version}.log"
 
     env = os.environ.copy()
     env["APP_VERSION"] = target_version
 
-    with open(log_path, "wb") as log_file:
-        log_file.write(f"Atualizando para v{target_version}\n".encode("utf-8"))
-        log_file.flush()
-        subprocess.Popen(
-            [
-                "sh",
-                "-c",
-                f"docker compose --project-directory {deploy_dir} -f {compose_file} pull "
-                f"&& docker compose --project-directory {deploy_dir} -f {compose_file} up -d",
-            ],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            env=env,
-            start_new_session=True,
-        )
+    try:
+        with open(log_path, "wb") as log_file:
+            log_file.write(f"Atualizando para v{target_version}\n".encode("utf-8"))
+            log_file.flush()
+            subprocess.Popen(
+                [
+                    "sh",
+                    "-c",
+                    f"docker compose --project-directory {deploy_dir} -f {compose_file} pull "
+                    f"&& docker compose --project-directory {deploy_dir} -f {compose_file} up -d",
+                ],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                env=env,
+                start_new_session=True,
+            )
+    except Exception:
+        # Nao conseguiu disparar: solta a trava, senao o admin ficaria bloqueado ate ela expirar
+        lock_path.unlink(missing_ok=True)
+        raise
 
+    # Em sucesso a trava fica de proposito: o processo segue em background e o container vai ser
+    # recriado. Ela expira sozinha (APPLY_LOCK_STALE_SECONDS).
     return log_path
+
+
+def _acquire_apply_lock() -> Path:
+    """Cria a trava de forma atomica (O_EXCL). Se ja existe e nao esta velha, ha outra
+    atualizacao em andamento."""
+    lock_path = _update_log_dir() / "apply.lock"
+    try:
+        if time.time() - lock_path.stat().st_mtime > APPLY_LOCK_STALE_SECONDS:
+            lock_path.unlink(missing_ok=True)
+    except FileNotFoundError:
+        pass
+    try:
+        fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+    except FileExistsError:
+        raise UpdateAlreadyRunning(
+            "Ja existe uma atualizacao em andamento -- aguarde alguns minutos antes de tentar de novo."
+        )
+    os.close(fd)
+    return lock_path
 
 
 def list_update_logs() -> list[dict]:
     log_dir = _update_log_dir()
     logs = []
-    for path in sorted(log_dir.glob("*.log"), reverse=True):
-        logs.append({"filename": path.name, "content": path.read_text(encoding="utf-8", errors="replace")})
+    for path in sorted(log_dir.glob("*.log"), reverse=True)[:MAX_UPDATE_LOGS]:
+        content = path.read_text(encoding="utf-8", errors="replace")
+        if len(content) > MAX_LOG_CHARS:
+            content = "[... inicio do log omitido ...]\n" + content[-MAX_LOG_CHARS:]
+        logs.append({"filename": path.name, "content": content})
     return logs
