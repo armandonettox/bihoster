@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useBranding } from "../context/BrandingContext";
 import { useWorkspace } from "../context/WorkspaceContext";
@@ -27,6 +27,13 @@ export default function Layout() {
     // sidebar vira um overlay por cima do conteudo em vez de dividir a largura.
     return typeof window !== "undefined" && window.innerWidth < 768;
   });
+
+  // Em tela estreita a sidebar e um overlay por cima do conteudo: fecha ao navegar (escolher
+  // colecao, favorito etc), senao ela continua cobrindo a pagina nova. Nao grava a preferencia
+  // em storage, pra nao sobrescrever o que o usuario escolheu no desktop.
+  useEffect(() => {
+    if (window.innerWidth < 768) setCollapsed(true);
+  }, [location.key]);
 
   function toggleSidebar() {
     setCollapsed((prev) => {
