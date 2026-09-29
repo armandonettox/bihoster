@@ -1,7 +1,8 @@
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
+
+from app.schemas.types import UtcDatetime
 
 
 class UserGroupOut(BaseModel):
@@ -16,7 +17,7 @@ class UserDirectoryOut(BaseModel):
     name: str
     email: str
     groups: list[UserGroupOut]
-    last_login: Optional[datetime]
+    last_login: Optional[UtcDatetime]
 
 
 class PendingInviteOut(BaseModel):
@@ -24,4 +25,4 @@ class PendingInviteOut(BaseModel):
     email: str
     group_id: int
     group_name: str
-    created_at: datetime
+    created_at: UtcDatetime

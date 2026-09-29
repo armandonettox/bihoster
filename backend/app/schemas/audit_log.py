@@ -1,7 +1,8 @@
-from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel
+
+from app.schemas.types import UtcDatetime
 
 
 class AuditLogOut(BaseModel):
@@ -14,7 +15,7 @@ class AuditLogOut(BaseModel):
     entity: str
     entity_id: Optional[str]
     details: Optional[str]
-    created_at: datetime
+    created_at: UtcDatetime
 
     class Config:
         from_attributes = True
