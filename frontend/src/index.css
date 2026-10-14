@@ -1963,6 +1963,16 @@ table.table tr:last-child td {
   margin: 0;
 }
 
+/* Resultado que e uma colecao (e nao um relatorio): so contorno, pra se distinguir do selo de colecao dos relatorios */
+.search-bar-kind-collection {
+  background-color: transparent;
+  border: 1px solid var(--color-primary);
+}
+
+:root[data-theme="dark"] .search-bar-kind-collection {
+  background-color: transparent;
+}
+
 /* --- Celula de grupos (dropdown de marcacao) --- */
 
 .groups-cell-trigger {

@@ -1,21 +1,33 @@
-import { useEffect, useRef, useState, useMemo, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  useMemo,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
+} from "react";
 import { useNavigate } from "react-router-dom";
 import * as searchApi from "../api/search";
 import type { SearchResultEntry } from "../api/search";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { getHighlightRanges } from "../utils/highlight";
 
 function highlightMatch(text: string, term: string) {
-  const trimmed = term.trim();
-  if (!trimmed) return text;
-  const index = text.toLowerCase().indexOf(trimmed.toLowerCase());
-  if (index === -1) return text;
-  return (
-    <>
-      {text.slice(0, index)}
-      <mark className="search-bar-highlight">{text.slice(index, index + trimmed.length)}</mark>
-      {text.slice(index + trimmed.length)}
-    </>
-  );
+  const ranges = getHighlightRanges(text, term);
+  if (ranges.length === 0) return text;
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+  ranges.forEach(([start, end], index) => {
+    if (start > cursor) parts.push(text.slice(cursor, start));
+    parts.push(
+      <mark key={index} className="search-bar-highlight">
+        {text.slice(start, end)}
+      </mark>,
+    );
+    cursor = end;
+  });
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return <>{parts}</>;
 }
 
 export default function SearchBar() {
@@ -128,7 +140,8 @@ export default function SearchBar() {
       <input
         ref={inputRef}
         className="input search-bar-input"
-        placeholder="Buscar relatorios..."
+        placeholder="Buscar relatorios e colecoes..."
+        aria-label="Buscar relatorios e colecoes"
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         onFocus={() => query.trim() && setOpen(true)}
@@ -149,11 +162,11 @@ export default function SearchBar() {
           ) : searchFailed ? (
             <p className="search-bar-empty">Nao foi possivel buscar agora. Tente de novo.</p>
           ) : results.length === 0 ? (
-            <p className="search-bar-empty">Nenhum relatorio encontrado.</p>
+            <p className="search-bar-empty">Nenhum resultado encontrado.</p>
           ) : (
             results.map((entry, index) => (
               <button
-                key={entry.id}
+                key={`${entry.kind ?? "relatorio"}-${entry.id}`}
                 id={`search-bar-option-${index}`}
                 role="option"
                 aria-selected={index === activeIndex}
@@ -162,7 +175,11 @@ export default function SearchBar() {
                 onMouseEnter={() => setActiveIndex(index)}
               >
                 <span style={{ fontWeight: 600 }}>{highlightMatch(entry.name, query)}</span>
-                <span className="badge">{entry.workspace_name}</span>
+                {entry.kind === "colecao" ? (
+                  <span className="badge search-bar-kind-collection">Colecao</span>
+                ) : (
+                  <span className="badge">{entry.workspace_name}</span>
+                )}
               </button>
             ))
           )}
