@@ -19,6 +19,7 @@ function report(id: number, name = `Relatorio ${id}`): Report {
     pbi_report_id: `r${id}`,
     pbi_dataset_id: null,
     pbi_page_name: null,
+    pbi_page_names: [],
     display_type: "relatorio",
   };
 }

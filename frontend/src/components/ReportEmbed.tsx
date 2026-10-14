@@ -19,6 +19,11 @@ function msUntilRenewal(expiresAt: string | null | undefined): number | null {
   return Math.max(MIN_RENEW_DELAY_MS, expiry - Date.now() - RENEW_BEFORE_EXPIRY_MS);
 }
 
+interface PageTab {
+  name: string;
+  displayName: string;
+}
+
 export default function ReportEmbed({
   reportId,
   height = 600,
@@ -33,13 +38,19 @@ export default function ReportEmbed({
   const { currentWorkspace } = useWorkspace();
   const effectiveWorkspaceId = workspaceId ?? currentWorkspace?.id;
   const containerRef = useRef<HTMLDivElement>(null);
+  const embeddedRef = useRef<pbi.Report | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Barra de abas propria: so existe quando mais de uma aba foi escolhida pro relatorio
+  const [tabs, setTabs] = useState<PageTab[]>([]);
+  const [activePage, setActivePage] = useState<string | null>(null);
 
   useEffect(() => {
     if (!effectiveWorkspaceId) return;
 
     let cancelled = false;
+    setTabs([]);
+    setActivePage(null);
     let service: pbi.service.Service | null = null;
     let renewTimer: ReturnType<typeof setTimeout> | null = null;
     setError(null);
@@ -79,29 +90,52 @@ export default function ReportEmbed({
           pbi.factories.routerFactory,
         );
 
+        // Abas escolhidas na hora de adicionar (nomes tecnicos do Power BI, nao os titulos).
+        // Backend antigo so manda page_name.
+        const selectedPages = config.page_names ?? (config.page_name ? [config.page_name] : []);
+
         const embeddedReport = service.embed(containerRef.current, {
           type: "report",
           id: config.report_id,
           embedUrl: config.embed_url,
           accessToken: config.access_token,
           tokenType: pbi.models.TokenType.Embed,
-          // Uma aba especifica escolhida na hora de adicionar -- pageName vem do Power BI
-          // (nome tecnico, nao o titulo exibido), embeda direto naquela pagina.
-          pageName: config.page_name || undefined,
+          // Abre direto na primeira aba escolhida
+          pageName: selectedPages[0],
           settings: {
             panes: {
               filters: { visible: false },
-              // Com aba especifica, nunca mostra a navegacao entre paginas -- so faria sentido
-              // pro relatorio inteiro, onde a pessoa pode querer trocar de aba.
-              pageNavigation: { visible: !config.page_name },
+              // Com abas escolhidas, a navegacao nativa do Power BI (que mostraria todas) some:
+              // com uma aba so nao ha o que navegar, com varias a barra propria abaixo assume.
+              pageNavigation: { visible: selectedPages.length === 0 },
             },
           },
         }) as pbi.Report;
+        embeddedRef.current = embeddedReport;
 
         scheduleRenewal(embeddedReport, config.expires_at);
 
+        embeddedReport.on("pageChanged", (event) => {
+          const newPage = (event.detail as { newPage?: { name?: string } } | undefined)?.newPage;
+          if (newPage?.name) setActivePage(newPage.name);
+        });
+
         embeddedReport.on("loaded", async () => {
-          if (config.page_name) return;
+          if (selectedPages.length > 1) {
+            try {
+              const pages = await embeddedReport.getPages();
+              const chosen = pages
+                .filter((page) => selectedPages.includes(page.name))
+                .map((page) => ({ name: page.name, displayName: page.displayName }));
+              if (cancelled) return;
+              if (chosen.length > 1) setTabs(chosen);
+              const current = pages.find((page) => page.isActive);
+              if (current) setActivePage(current.name);
+            } catch {
+              // Sem a lista de paginas nao da pra montar a barra: fica so na primeira aba escolhida.
+            }
+          }
+          if (selectedPages.length > 0) return;
           try {
             const pages = await embeddedReport.getPages();
             if (pages.length <= 1) {
@@ -122,6 +156,7 @@ export default function ReportEmbed({
 
     return () => {
       cancelled = true;
+      embeddedRef.current = null;
       if (renewTimer) clearTimeout(renewTimer);
       if (service && containerRef.current) {
         service.reset(containerRef.current);
@@ -149,6 +184,28 @@ export default function ReportEmbed({
           className="skeleton report-embed-skeleton"
           style={{ height: height === "100%" ? "100%" : height }}
         />
+      )}
+      {tabs.length > 1 && (
+        <div className="report-page-tabs" role="tablist" aria-label="Abas do relatorio">
+          {tabs.map((tab) => (
+            <button
+              key={tab.name}
+              type="button"
+              role="tab"
+              aria-selected={tab.name === activePage}
+              className={`btn btn-sm report-page-tab ${tab.name === activePage ? "btn-secondary" : "btn-ghost"}`}
+              onClick={() => {
+                setActivePage(tab.name);
+                embeddedRef.current?.setPage(tab.name).catch(() => {
+                  // Falhou ao trocar: o evento pageChanged nao vem e a aba marcada volta a refletir a real
+                  embeddedRef.current?.getActivePage().then((page) => setActivePage(page.name)).catch(() => {});
+                });
+              }}
+            >
+              {tab.displayName}
+            </button>
+          ))}
+        </div>
       )}
       <div
         ref={containerRef}

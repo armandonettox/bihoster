@@ -19,7 +19,7 @@ function sameQueue(a: Report[], b: Report[]): boolean {
     (report, i) =>
       report.id === b[i].id &&
       report.name === b[i].name &&
-      report.pbi_page_name === b[i].pbi_page_name &&
+      report.pbi_page_names.join("|") === b[i].pbi_page_names.join("|") &&
       report.powerbi_connection_id === b[i].powerbi_connection_id,
   );
 }

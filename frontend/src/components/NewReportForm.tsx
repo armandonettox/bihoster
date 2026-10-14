@@ -8,6 +8,7 @@ import type { PowerBIConnection } from "../api/powerbiConnections";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { extractErrorMessage } from "../api/client";
 import Modal from "./Modal";
+import MultiSelectDropdown from "./MultiSelectDropdown";
 
 const DISPLAY_TYPE_OPTIONS: { key: DisplayType; label: string; hint: string }[] = [
   { key: "relatorio", label: "Relatorio", hint: "Aparece na lista, um relatorio expandido por vez." },
@@ -35,7 +36,7 @@ export default function NewReportForm({
   const [pbiReportId, setPbiReportId] = useState(editingReport?.pbi_report_id || "");
   const [datasetId, setDatasetId] = useState(editingReport?.pbi_dataset_id || "");
   const [pages, setPages] = useState<PowerBIPage[]>([]);
-  const [pageName, setPageName] = useState(editingReport?.pbi_page_name || "");
+  const [pageNames, setPageNames] = useState<string[]>(editingReport?.pbi_page_names ?? []);
   const [displayType, setDisplayType] = useState<DisplayType>(editingReport?.display_type || "relatorio");
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
@@ -131,7 +132,7 @@ export default function NewReportForm({
 
   function handleSelectReport(reportId: string) {
     setPbiReportId(reportId);
-    setPageName("");
+    setPageNames([]);
     const report = pbiReports.find((r) => r.id === reportId);
     setDatasetId(report?.dataset_id || "");
     if (!name) setName(report?.name || "");
@@ -149,7 +150,7 @@ export default function NewReportForm({
         pbi_workspace_id: pbiWorkspaceId,
         pbi_report_id: pbiReportId,
         pbi_dataset_id: datasetId || null,
-        pbi_page_name: pageName || null,
+        pbi_page_names: pageNames,
         display_type: displayType,
       };
       if (editingReport) {
@@ -250,25 +251,21 @@ export default function NewReportForm({
             )}
 
             {pbiReportId && (
-              <label className="field">
-                Aba a exibir
-                <select
-                  className="input"
-                  value={pageName}
-                  onChange={(e) => setPageName(e.target.value)}
+              <div className="field">
+                Abas a exibir
+                <MultiSelectDropdown
+                  ariaLabel="Abas a exibir"
+                  options={pages.map((p) => ({ value: p.name, label: p.display_name }))}
+                  selected={pageNames}
+                  onChange={setPageNames}
+                  placeholder={loadingPages ? "Carregando..." : "Relatorio inteiro (todas as abas)"}
                   disabled={loadingPages}
-                >
-                  <option value="">{loadingPages ? "Carregando..." : "Relatorio inteiro (todas as abas)"}</option>
-                  {pages.map((p) => (
-                    <option key={p.name} value={p.name}>
-                      {p.display_name}
-                    </option>
-                  ))}
-                </select>
+                />
                 <span style={{ fontWeight: 400, fontSize: 12 }}>
-                  Escolha uma aba pra adicionar so ela na colecao, sem navegacao entre as demais.
+                  Marque as abas que devem aparecer. Com uma so, ela aparece sozinha; com varias, aparece uma
+                  barra pra trocar entre elas. Sem nenhuma marcada, o relatorio inteiro e exibido.
                 </span>
-              </label>
+              </div>
             )}
           </>
         )}

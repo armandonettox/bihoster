@@ -112,6 +112,7 @@ def get_embed_config(
         embed_url=details["embedUrl"],
         access_token=token_response["token"],
         page_name=report.pbi_page_name,
+        page_names=report.pbi_page_names,
         expires_at=expires_at,
     )
     # O cache vale ate _EMBED_CACHE_MARGIN antes de o token vencer (antes eram 50 min fixos, entao

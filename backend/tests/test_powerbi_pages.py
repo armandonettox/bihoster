@@ -142,3 +142,134 @@ def test_embed_config_propaga_page_name_do_relatorio(client):
 
     assert resp.status_code == 200
     assert resp.json()["page_name"] == "ReportSection1"
+
+
+def _create_report(client, headers, workspace, connection, **extra):
+    return client.post(
+        f"/workspaces/{workspace['id']}/reports/",
+        json={
+            "name": "Vendas",
+            "powerbi_connection_id": connection["id"],
+            "pbi_workspace_id": "pbi-ws-1",
+            "pbi_report_id": "pbi-report-1",
+            **extra,
+        },
+        headers=headers,
+    )
+
+
+def test_criar_relatorio_com_varias_abas_persiste_a_lista(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+
+    resp = _create_report(
+        client, headers, workspace, connection, pbi_page_names=["ReportSection1", "ReportSection3"]
+    )
+
+    assert resp.status_code == 201
+    body = resp.json()
+    assert body["pbi_page_names"] == ["ReportSection1", "ReportSection3"]
+    # A primeira aba continua em pbi_page_name pra clientes antigos
+    assert body["pbi_page_name"] == "ReportSection1"
+
+
+def test_lista_de_abas_descarta_vazios_e_repetidos_mantendo_a_ordem(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+
+    resp = _create_report(
+        client, headers, workspace, connection, pbi_page_names=[" B ", "", "A", "B", "  "]
+    )
+
+    assert resp.status_code == 201
+    assert resp.json()["pbi_page_names"] == ["B", "A"]
+
+
+def test_formato_legado_de_uma_aba_vira_lista_de_um_item(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+
+    body = _create_report(client, headers, workspace, connection, pbi_page_name="ReportSection2").json()
+
+    assert body["pbi_page_names"] == ["ReportSection2"]
+
+
+def test_relatorio_sem_abas_tem_lista_vazia(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+
+    body = _create_report(client, headers, workspace, connection).json()
+
+    assert body["pbi_page_names"] == []
+    assert body["pbi_page_name"] is None
+
+
+def test_editar_para_lista_vazia_volta_ao_relatorio_inteiro(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+    report = _create_report(
+        client, headers, workspace, connection, pbi_page_names=["ReportSection1", "ReportSection2"]
+    ).json()
+
+    resp = client.put(
+        f"/workspaces/{workspace['id']}/reports/{report['id']}",
+        json={"pbi_page_names": []},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["pbi_page_names"] == []
+    assert resp.json()["pbi_page_name"] is None
+
+
+def test_editar_outro_campo_nao_mexe_nas_abas(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+    report = _create_report(
+        client, headers, workspace, connection, pbi_page_names=["ReportSection1", "ReportSection2"]
+    ).json()
+
+    resp = client.put(
+        f"/workspaces/{workspace['id']}/reports/{report['id']}",
+        json={"name": "Novo nome"},
+        headers=headers,
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["pbi_page_names"] == ["ReportSection1", "ReportSection2"]
+
+
+def test_relatorio_antigo_so_com_pbi_page_name_aparece_como_lista(client, db_session):
+    """Banco de antes da selecao multipla: pbi_page_names_json nulo, pbi_page_name preenchido."""
+    from app.models.report import Report
+
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+    report = _create_report(client, headers, workspace, connection).json()
+
+    row = db_session.query(Report).get(report["id"])
+    row.pbi_page_name = "ReportSection9"
+    row.pbi_page_names_json = None
+    db_session.commit()
+
+    resp = client.get(f"/workspaces/{workspace['id']}/reports/{report['id']}", headers=headers)
+    assert resp.json()["pbi_page_names"] == ["ReportSection9"]
+
+
+def test_embed_config_propaga_a_lista_de_abas(client):
+    headers = _auth_headers(_register_and_login(client))
+    workspace, connection = _make_workspace_and_connection(client, headers)
+    report = _create_report(
+        client, headers, workspace, connection, pbi_page_names=["ReportSection1", "ReportSection2"]
+    ).json()
+
+    with patch.object(
+        powerbi_core, "get_report_details", return_value={"embedUrl": "https://fake/embed"}
+    ), patch.object(powerbi_core, "generate_embed_token", return_value={"token": "fake-token"}):
+        resp = client.get(
+            f"/workspaces/{workspace['id']}/powerbi/reports/{report['id']}/embed", headers=headers
+        )
+
+    assert resp.status_code == 200
+    assert resp.json()["page_names"] == ["ReportSection1", "ReportSection2"]
+    assert resp.json()["page_name"] == "ReportSection1"

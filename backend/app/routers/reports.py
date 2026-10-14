@@ -9,9 +9,12 @@ from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User, UserRole
 from app.routers.powerbi import invalidate_embed_cache
-from app.schemas.report import ReportCreate, ReportMove, ReportOut, ReportUpdate
+from app.schemas.report import ReportCreate, ReportMove, ReportOut, ReportUpdate, resolve_page_names
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/reports", tags=["reports"])
+
+# Campos de aba tratados a parte (viram a coluna JSON + a primeira aba, via Report.set_page_names)
+_PAGE_FIELDS = {"pbi_page_name", "pbi_page_names"}
 
 
 def _validate_connection_exists(db: Session, connection_id: int) -> None:
@@ -57,7 +60,10 @@ def create_report(
     current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
 ):
     _validate_connection_exists(db, data.powerbi_connection_id)
-    report = Report(collection_id=workspace_id, **data.model_dump())
+    report = Report(collection_id=workspace_id, **data.model_dump(exclude=_PAGE_FIELDS))
+    page_names = resolve_page_names(data)
+    if page_names is not None:
+        report.set_page_names(page_names)
     db.add(report)
     db.commit()
     db.refresh(report)
@@ -78,11 +84,14 @@ def update_report(
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
 
-    changed_fields = data.model_dump(exclude_unset=True)
+    changed_fields = data.model_dump(exclude_unset=True, exclude=_PAGE_FIELDS)
     if "powerbi_connection_id" in changed_fields:
         _validate_connection_exists(db, changed_fields["powerbi_connection_id"])
     for field, value in changed_fields.items():
         setattr(report, field, value)
+    page_names = resolve_page_names(data)
+    if page_names is not None:
+        report.set_page_names(page_names)
 
     db.commit()
     db.refresh(report)

@@ -11,6 +11,8 @@ export interface Report {
   pbi_report_id: string;
   pbi_dataset_id: string | null;
   pbi_page_name: string | null;
+  /** Abas escolhidas pra exibir (nomes tecnicos). Vazia = relatorio inteiro. */
+  pbi_page_names: string[];
   display_type: DisplayType;
 }
 
@@ -20,7 +22,7 @@ export interface ReportInput {
   pbi_workspace_id: string;
   pbi_report_id: string;
   pbi_dataset_id?: string | null;
-  pbi_page_name?: string | null;
+  pbi_page_names?: string[];
   display_type?: DisplayType;
 }
 
@@ -48,6 +50,8 @@ export interface EmbedConfig {
   embed_url: string;
   access_token: string;
   page_name: string | null;
+  /** Abas escolhidas pra exibir; ausente em backend de versao antiga. Vazia = relatorio inteiro. */
+  page_names?: string[];
   /** Quando o embed token expira (ISO UTC com Z); null se o backend for de uma versao antiga */
   expires_at?: string | null;
 }
