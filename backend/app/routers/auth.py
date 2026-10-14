@@ -22,7 +22,16 @@ from app.models.password_reset import PasswordResetToken
 from app.models.settings import AppSettings
 from app.models.user import User
 from app.models.workspace import GroupMember
-from app.schemas.user import GoogleLogin, ResetPassword, Token, UserCreate, UserLogin, UserOut
+from app.schemas.user import (
+    ChangePassword,
+    GoogleLogin,
+    ProfileUpdate,
+    ResetPassword,
+    Token,
+    UserCreate,
+    UserLogin,
+    UserOut,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -36,6 +45,29 @@ def _get_app_settings(db: Session) -> AppSettings:
         db.commit()
         db.refresh(settings_row)
     return settings_row
+
+
+def _register_failed_attempt(db: Session, user: User) -> None:
+    """Conta uma senha errada e, passando do limite, bloqueia a conta por um tempo. Usado no login
+    e na troca de senha, pra quem tem uma sessao aberta nao poder adivinhar a senha atual sem
+    limite."""
+    user.failed_login_attempts += 1
+    if user.failed_login_attempts >= settings.max_failed_login_attempts:
+        user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=settings.account_lock_minutes)
+        log_action(db, action="account_locked", entity="user", user_id=user.id, entity_id=user.id)
+    db.commit()
+
+
+def _user_out(db: Session, user: User) -> UserOut:
+    from app.core.workspace_deps import is_platform_admin
+
+    return UserOut(
+        id=user.id,
+        name=user.name,
+        email=user.email,
+        is_platform_admin=is_platform_admin(db, user.id),
+        can_change_password=user.registered_via == "password",
+    )
 
 
 def _consume_invites(db: Session, user: User) -> None:
@@ -114,11 +146,7 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     password_ok = verify_password_constant_time(data.password, user.hashed_password if user else None)
     if not user or not password_ok:
         if user:
-            user.failed_login_attempts += 1
-            if user.failed_login_attempts >= settings.max_failed_login_attempts:
-                user.locked_until = datetime.now(timezone.utc) + timedelta(minutes=settings.account_lock_minutes)
-                log_action(db, action="account_locked", entity="user", user_id=user.id, entity_id=user.id)
-            db.commit()
+            _register_failed_attempt(db, user)
         raise HTTPException(status_code=401, detail="Email ou senha invalidos")
 
     user.failed_login_attempts = 0
@@ -248,6 +276,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             locked_until = locked_until.replace(tzinfo=timezone.utc)
         if locked_until > datetime.now(timezone.utc):
             raise HTTPException(status_code=401, detail="Conta bloqueada")
+    # Token emitido antes de uma troca de senha (ou de um reset) deixa de valer na hora, em todas
+    # as rotas -- nao so na renovacao. Token de antes do campo pv existir nao tem a claim e passa.
+    if "pv" in payload and payload["pv"] != password_fingerprint(user.hashed_password):
+        raise HTTPException(status_code=401, detail="Sessao invalida, entre novamente")
     return user
 
 
@@ -282,11 +314,45 @@ def refresh_session(
 
 @router.get("/me", response_model=UserOut)
 def me(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    from app.core.workspace_deps import is_platform_admin
+    return _user_out(db, current_user)
 
-    return UserOut(
-        id=current_user.id,
-        name=current_user.name,
-        email=current_user.email,
-        is_platform_admin=is_platform_admin(db, current_user.id),
-    )
+
+@router.patch("/me", response_model=UserOut)
+def update_me(data: ProfileUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """O proprio usuario troca o nome. O email e a identidade da conta e nao muda por aqui."""
+    current_user.name = data.name
+    db.commit()
+    db.refresh(current_user)
+    log_action(db, action="update_profile", entity="user", user_id=current_user.id, entity_id=current_user.id)
+    return _user_out(db, current_user)
+
+
+@router.post("/change-password", response_model=Token)
+@limiter.limit("5/minute")
+def change_password(
+    request: Request,
+    data: ChangePassword,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """O proprio usuario troca a senha, informando a atual. Devolve um token novo: o de antes
+    deixa de valer (a impressao da senha mudou), entao quem trocou continua logado e as outras
+    sessoes caem. Erro de senha atual e 400, nao 401: o cliente trata 401 como sessao vencida e
+    deslogaria a pessoa so por errar a senha."""
+    if current_user.registered_via != "password":
+        raise HTTPException(status_code=400, detail="Esta conta entra pelo Google e nao tem senha para trocar")
+
+    if not verify_password_constant_time(data.current_password, current_user.hashed_password):
+        _register_failed_attempt(db, current_user)
+        raise HTTPException(status_code=400, detail="Senha atual incorreta")
+
+    if data.current_password == data.new_password:
+        raise HTTPException(status_code=400, detail="A nova senha deve ser diferente da atual")
+
+    current_user.hashed_password = hash_password(data.new_password)
+    current_user.failed_login_attempts = 0
+    current_user.locked_until = None
+    db.commit()
+
+    log_action(db, action="change_password", entity="user", user_id=current_user.id, entity_id=current_user.id)
+    return Token(access_token=create_access_token(subject=str(current_user.id), password_hash=current_user.hashed_password))

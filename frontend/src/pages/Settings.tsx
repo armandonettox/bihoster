@@ -1,7 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
-import { Link } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useUrlTab } from "../hooks/useUrlTab";
+import PageLoading from "../components/PageLoading";
 import GeneralTab from "./settings/GeneralTab";
 import CollectionsTab from "./settings/CollectionsTab";
 import BrandTab from "./settings/BrandTab";
@@ -10,10 +10,13 @@ import GroupsTab from "./settings/GroupsTab";
 import AuthTab from "./settings/AuthTab";
 import AuditTab from "./settings/AuditTab";
 import UpdatesTab from "./settings/UpdatesTab";
+import AccountTab from "./settings/AccountTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "audit" | "updates";
+type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "audit" | "updates" | "account";
 
-const TABS: { key: Tab; label: string }[] = [
+// Abas de administracao: so quem administra alguma colecao. O servidor protege cada rota de
+// qualquer jeito; aqui e so o que a pessoa ve.
+const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: "general", label: "Geral" },
   { key: "collections", label: "Coleções" },
   { key: "brand", label: "Marca" },
@@ -24,31 +27,26 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "updates", label: "Atualizacoes" },
 ];
 
-const TAB_KEYS = TABS.map((t) => t.key);
+// Todo usuario tem a sua conta, administre ou nao
+const ACCOUNT_TAB: { key: Tab; label: string } = { key: "account", label: "Minha conta" };
 
 export default function Settings() {
-  const { workspaces } = useWorkspace();
-  // Aba na URL (?tab=): recarregar mantem a aba e da pra compartilhar um link direto; lembra a ultima
-  const [tab, setTab] = useUrlTab<Tab>(TAB_KEYS, "general", { storageKey: "settings_tab" });
+  const { workspaces, loading } = useWorkspace();
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
+  const tabs = isAnyAdmin ? [...ADMIN_TABS, ACCOUNT_TAB] : [ACCOUNT_TAB];
 
-  if (!isAnyAdmin) {
-    return (
-      <div className="empty-state" style={{ alignItems: "center", textAlign: "center", padding: "60px 20px" }}>
-        <span className="material-symbols-outlined" style={{ fontSize: 40, color: "var(--color-text-muted)" }}>
-          lock
-        </span>
-        <p style={{ color: "var(--color-text-muted)", margin: "8px 0 4px" }}>
-          Voce nao tem permissao para acessar esta pagina.
-        </p>
-        <Link to="/" className="btn btn-secondary btn-sm">
-          Voltar ao inicio
-        </Link>
-      </div>
-    );
-  }
+  // Aba na URL (?tab=): recarregar mantem a aba e da pra compartilhar um link direto; lembra a ultima.
+  // Quem nao e admin so tem "account": qualquer outro valor na URL cai nela.
+  const [tab, setTab] = useUrlTab<Tab>(
+    tabs.map((t) => t.key),
+    isAnyAdmin ? "general" : "account",
+    { storageKey: "settings_tab" },
+  );
+
+  // Sem saber se a pessoa administra alguma colecao, nao da pra decidir quais abas mostrar
+  if (loading) return <PageLoading />;
 
   function focusTab(key: Tab) {
     setTab(key);
@@ -56,42 +54,48 @@ export default function Settings() {
   }
 
   function handleTabsKeyDown(e: KeyboardEvent<HTMLDivElement>) {
-    const index = TABS.findIndex((t) => t.key === tab);
+    const index = tabs.findIndex((t) => t.key === tab);
     if (e.key === "ArrowRight") {
       e.preventDefault();
-      focusTab(TABS[(index + 1) % TABS.length].key);
+      focusTab(tabs[(index + 1) % tabs.length].key);
     } else if (e.key === "ArrowLeft") {
       e.preventDefault();
-      focusTab(TABS[(index - 1 + TABS.length) % TABS.length].key);
+      focusTab(tabs[(index - 1 + tabs.length) % tabs.length].key);
     }
   }
 
   return (
     <div className="settings-page">
       <div className="settings-header">
-        <h1>Configuracoes</h1>
-        <p>Gerencie a marca do sistema, colecoes, membros e grupos de acesso.</p>
+        <h1>{isAnyAdmin ? "Configuracoes" : "Minha conta"}</h1>
+        <p>
+          {isAnyAdmin
+            ? "Gerencie a marca do sistema, colecoes, membros e grupos de acesso."
+            : "Gerencie o seu nome e a sua senha."}
+        </p>
       </div>
 
-      <div className="settings-tabs" role="tablist" onKeyDown={handleTabsKeyDown}>
-        {TABS.map((t) => (
-          <button
-            key={t.key}
-            ref={(el) => {
-              tabButtonRefs.current[t.key] = el;
-            }}
-            id={`settings-tab-${t.key}`}
-            role="tab"
-            aria-selected={tab === t.key}
-            aria-controls={`settings-tabpanel-${t.key}`}
-            tabIndex={tab === t.key ? 0 : -1}
-            className={`settings-tab ${tab === t.key ? "settings-tab-active" : ""}`}
-            onClick={() => setTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {tabs.length > 1 && (
+        <div className="settings-tabs" role="tablist" onKeyDown={handleTabsKeyDown}>
+          {tabs.map((t) => (
+            <button
+              key={t.key}
+              ref={(el) => {
+                tabButtonRefs.current[t.key] = el;
+              }}
+              id={`settings-tab-${t.key}`}
+              role="tab"
+              aria-selected={tab === t.key}
+              aria-controls={`settings-tabpanel-${t.key}`}
+              tabIndex={tab === t.key ? 0 : -1}
+              className={`settings-tab ${tab === t.key ? "settings-tab-active" : ""}`}
+              onClick={() => setTab(t.key)}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div role="tabpanel" id={`settings-tabpanel-${tab}`} aria-labelledby={`settings-tab-${tab}`}>
         {tab === "general" && <GeneralTab />}
@@ -102,6 +106,7 @@ export default function Settings() {
         {tab === "auth" && <AuthTab />}
         {tab === "audit" && <AuditTab />}
         {tab === "updates" && <UpdatesTab />}
+        {tab === "account" && <AccountTab />}
       </div>
     </div>
   );

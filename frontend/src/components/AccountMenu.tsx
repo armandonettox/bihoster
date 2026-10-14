@@ -81,6 +81,15 @@ export default function AccountMenu() {
 
           <div className="topbar-menu-divider" />
 
+          <button
+            className="topbar-menu-item"
+            onClick={() => {
+              setOpen(false);
+              navigate("/settings?tab=account");
+            }}
+          >
+            Minha conta
+          </button>
           {isAnyAdmin && (
             <button
               className="topbar-menu-item"

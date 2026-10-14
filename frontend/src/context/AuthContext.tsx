@@ -9,6 +9,9 @@ interface AuthContextValue {
   login: (email: string, password: string) => Promise<void>;
   loginWithGoogle: (idToken: string) => Promise<void>;
   logout: () => void;
+  updateName: (name: string) => Promise<void>;
+  /** Troca a senha e guarda o token novo (o de antes deixa de valer), sem deslogar quem trocou. */
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -85,8 +88,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }
 
+  async function updateName(name: string) {
+    setUser(await authApi.updateName(name));
+  }
+
+  async function changePassword(currentPassword: string, newPassword: string) {
+    const token = await authApi.changePassword(currentPassword, newPassword);
+    safeStorage.setItem("token", token);
+  }
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, updateName, changePassword }}>
       {children}
     </AuthContext.Provider>
   );
