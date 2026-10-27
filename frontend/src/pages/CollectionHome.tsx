@@ -46,7 +46,7 @@ export default function CollectionHome() {
   const [fullscreenSection, setFullscreenSection] = useState<"apresentacao" | "tv" | null>(null);
   const [fullscreenReportId, setFullscreenReportId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>(
-    () => (safeStorage.getItem(VIEW_MODE_KEY) as ViewMode) || "list"
+    () => (safeStorage.getItem(VIEW_MODE_KEY) as ViewMode) || "icon"
   );
   const [tvIntervalDraft, setTvIntervalDraft] = useState("15");
   const [movingReportId, setMovingReportId] = useState<number | null>(null);
