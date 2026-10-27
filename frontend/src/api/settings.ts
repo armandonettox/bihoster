@@ -14,6 +14,7 @@ export interface AppSettings {
   site_url: string | null;
   support_email: string | null;
   force_https: boolean;
+  single_collection_redirect: boolean;
   default_workspace_id: number | null;
   allow_registration: boolean;
   google_oauth_enabled: boolean;

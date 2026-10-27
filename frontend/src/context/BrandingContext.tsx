@@ -5,6 +5,7 @@ import { assetUrl } from "../api/client";
 
 interface BrandingContextValue {
   settings: AppSettings | null;
+  loaded: boolean;
   reload: () => Promise<void>;
 }
 
@@ -30,6 +31,7 @@ function applyToDocument(settings: AppSettings) {
 
 export function BrandingProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [loaded, setLoaded] = useState(false);
 
   async function reload() {
     try {
@@ -38,6 +40,8 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
       applyToDocument(data);
     } catch {
       // Se o backend nao estiver disponivel ainda, mantem a paleta padrao do CSS
+    } finally {
+      setLoaded(true);
     }
   }
 
@@ -45,7 +49,7 @@ export function BrandingProvider({ children }: { children: ReactNode }) {
     reload();
   }, []);
 
-  return <BrandingContext.Provider value={{ settings, reload }}>{children}</BrandingContext.Provider>;
+  return <BrandingContext.Provider value={{ settings, loaded, reload }}>{children}</BrandingContext.Provider>;
 }
 
 export function useBranding(): BrandingContextValue {

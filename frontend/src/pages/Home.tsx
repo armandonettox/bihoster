@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBranding } from "../context/BrandingContext";
 import { useWorkspace } from "../context/WorkspaceContext";
@@ -10,35 +10,37 @@ function firstName(name?: string): string {
 }
 
 export default function Home() {
-  const { settings } = useBranding();
+  const { settings, loaded } = useBranding();
   const { user } = useAuth();
   const { currentWorkspace, workspaces, loading: workspacesLoading, selectWorkspace } = useWorkspace();
   const navigate = useNavigate();
-  const [redirecting, setRedirecting] = useState(true);
+
+  const ready = loaded && !workspacesLoading;
 
   useEffect(() => {
-    const workspaceId = settings?.default_workspace_id;
+    if (!ready) return;
 
-    if (!workspaceId) {
-      setRedirecting(false);
-      return;
+    // Coleção inicial configurada pelo admin tem prioridade
+    const defaultId = settings?.default_workspace_id;
+    if (defaultId) {
+      const hasAccess = workspaces.some((w) => w.id === defaultId);
+      if (hasAccess) {
+        if (currentWorkspace?.id !== defaultId) selectWorkspace(defaultId);
+        navigate("/collection", { replace: true });
+        return;
+      }
     }
 
-    if (workspacesLoading) return;
-
-    const hasAccess = workspaces.some((w) => w.id === workspaceId);
-    if (!hasAccess) {
-      setRedirecting(false);
-      return;
+    // Redireciona para a unica colecao quando o toggle esta ativo
+    if (settings?.single_collection_redirect && workspaces.length === 1) {
+      const targetId = workspaces[0].id;
+      if (currentWorkspace?.id !== targetId) selectWorkspace(targetId);
+      navigate("/collection", { replace: true });
     }
+  }, [ready, settings?.default_workspace_id, settings?.single_collection_redirect, workspaces, currentWorkspace?.id, navigate, selectWorkspace]);
 
-    if (currentWorkspace?.id !== workspaceId) {
-      selectWorkspace(workspaceId);
-    }
-    navigate("/collection");
-  }, [settings?.default_workspace_id, currentWorkspace?.id, workspacesLoading, workspaces, navigate, selectWorkspace]);
-
-  if (redirecting && settings?.default_workspace_id) {
+  // Aguarda o carregamento antes de decidir o que mostrar (evita piscar o painel)
+  if (!ready) {
     return null;
   }
 

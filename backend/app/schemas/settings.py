@@ -17,6 +17,7 @@ _SETTINGS_NOT_NULLABLE_FIELDS = (
     "login_layout",
     "timezone",
     "force_https",
+    "single_collection_redirect",
     "allow_registration",
     "google_oauth_enabled",
 )
@@ -31,6 +32,7 @@ class SettingsUpdate(BaseModel):
     site_url: Optional[str] = Field(default=None, max_length=500)
     support_email: Optional[str] = Field(default=None, max_length=200)
     force_https: Optional[bool] = None
+    single_collection_redirect: Optional[bool] = None
     default_workspace_id: Optional[int] = None
     allow_registration: Optional[bool] = None
     google_oauth_enabled: Optional[bool] = None
@@ -86,6 +88,7 @@ class SettingsOut(BaseModel):
     site_url: Optional[str]
     support_email: Optional[str]
     force_https: bool
+    single_collection_redirect: bool = False
     default_workspace_id: Optional[int]
     allow_registration: bool
     google_oauth_enabled: bool

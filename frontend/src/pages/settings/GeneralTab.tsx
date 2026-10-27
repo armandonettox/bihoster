@@ -68,6 +68,7 @@ export default function GeneralTab() {
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [homeWorkspaceId, setHomeWorkspaceId] = useState<number | "">(settings?.default_workspace_id || "");
+  const [singleCollectionRedirect, setSingleCollectionRedirect] = useState(settings?.single_collection_redirect || false);
 
   useEffect(() => {
     workspacesApi.listAllWorkspaces().then(setWorkspaces);
@@ -83,6 +84,7 @@ export default function GeneralTab() {
     setForceHttps(settings.force_https || false);
     setTimezone(settings.timezone || "America/Sao_Paulo");
     setHomeWorkspaceId(settings.default_workspace_id || "");
+    setSingleCollectionRedirect(settings.single_collection_redirect || false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings === null]);
 
@@ -109,6 +111,13 @@ export default function GeneralTab() {
     setHomeWorkspaceId(workspaceId);
     await settingsApi.updateSettings({ default_workspace_id: workspaceId || null });
     await reload();
+  }
+
+  async function handleSingleCollectionRedirectChange(checked: boolean) {
+    setSingleCollectionRedirect(checked);
+    await settingsApi.updateSettings({ single_collection_redirect: checked });
+    await reload();
+    showToast("Configuracao salva.");
   }
 
   return (
@@ -208,6 +217,28 @@ export default function GeneralTab() {
         <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 12, marginBottom: 0 }}>
           Usuarios sem acesso a essa colecao veem a tela padrao normalmente.
         </p>
+
+        <div style={{ marginTop: 20 }}>
+          <label className="field">
+            Abrir direto a colecao unica
+            <div className="toggle-field" style={{ marginTop: 4 }}>
+              <label className="toggle-switch">
+                <input
+                  type="checkbox"
+                  checked={singleCollectionRedirect}
+                  onChange={(e) => handleSingleCollectionRedirectChange(e.target.checked)}
+                />
+                <span className="toggle-switch-track" />
+              </label>
+              <span style={{ fontWeight: 400, fontSize: 13, color: "var(--color-text-muted)" }}>
+                {singleCollectionRedirect ? "Habilitado" : "Desabilitado"}
+              </span>
+            </div>
+            <span style={{ fontWeight: 400, fontSize: 12 }}>
+              Quando ativado, usuarios com acesso a uma unica colecao entram direto nela, sem passar pela tela inicial.
+            </span>
+          </label>
+        </div>
       </div>
 
       <PowerBiConnectionsSection />

@@ -23,6 +23,10 @@ class AppSettings(Base):
     force_https = Column(Boolean, default=False, nullable=False)
     default_workspace_id = Column(Integer, nullable=True)
 
+    # nullable por causa da migracao automatica: ALTER TABLE nao suporta DEFAULT, entao linhas
+    # existentes chegam com NULL; _to_out usa bool() para normalizar antes de devolver ao cliente
+    single_collection_redirect = Column(Boolean, default=False, nullable=True)
+
     allow_registration = Column(Boolean, default=True, nullable=False)
     google_oauth_enabled = Column(Boolean, default=False, nullable=False)
     google_client_id = Column(String, nullable=True)

@@ -55,6 +55,7 @@ def _to_out(settings_row: AppSettings) -> SettingsOut:
         site_url=settings_row.site_url,
         support_email=settings_row.support_email,
         force_https=settings_row.force_https,
+        single_collection_redirect=bool(settings_row.single_collection_redirect),
         default_workspace_id=settings_row.default_workspace_id,
         allow_registration=settings_row.allow_registration,
         google_oauth_enabled=settings_row.google_oauth_enabled,
