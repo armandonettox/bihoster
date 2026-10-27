@@ -1,6 +1,6 @@
 import json
 
-from sqlalchemy import Column, Integer, String, Text, ForeignKey, DateTime, func
+from sqlalchemy import Boolean, Column, Integer, String, Text, ForeignKey, DateTime, func
 
 from app.core.database import Base
 
@@ -25,6 +25,10 @@ class Report(Base):
     # antigo, de antes da selecao multipla: vale o pbi_page_name. "[]" = relatorio inteiro. Coluna
     # de texto nulavel de proposito (a migracao automatica do boot so adiciona colunas nulaveis).
     pbi_page_names_json = Column(Text, nullable=True)
+    # Controles do iframe do Power BI: nullable de proposito (migracao automatica so adiciona
+    # colunas nulaveis). False/NULL = oculto; True = visivel.
+    show_filter_pane = Column(Boolean, default=False, nullable=True)
+    show_page_nav = Column(Boolean, default=False, nullable=True)
     # Secao da colecao onde o relatorio aparece: relatorio, painel, apresentacao ou tv
     display_type = Column(String, default="relatorio", nullable=False)
     # Ordem dentro da secao (colecao + display_type), do menor pro maior. Nulo = ainda nao

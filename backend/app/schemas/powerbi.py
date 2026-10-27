@@ -15,6 +15,8 @@ class EmbedConfig(BaseModel):
     # Quando o embed token expira (UTC, com Z): o frontend usa pra renovar o token antes de o
     # relatorio ficar em branco (ex: modo TV, ou aba deixada aberta por mais de 1h).
     expires_at: Optional[UtcDatetime] = None
+    show_filter_pane: bool = False
+    show_page_nav: bool = False
 
 
 class RefreshHistoryItem(BaseModel):

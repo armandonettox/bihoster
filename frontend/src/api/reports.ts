@@ -14,6 +14,8 @@ export interface Report {
   /** Abas escolhidas pra exibir (nomes tecnicos). Vazia = relatorio inteiro. */
   pbi_page_names: string[];
   display_type: DisplayType;
+  show_filter_pane: boolean;
+  show_page_nav: boolean;
 }
 
 export interface ReportInput {
@@ -24,6 +26,8 @@ export interface ReportInput {
   pbi_dataset_id?: string | null;
   pbi_page_names?: string[];
   display_type?: DisplayType;
+  show_filter_pane?: boolean;
+  show_page_nav?: boolean;
 }
 
 export async function listReports(workspaceId: number): Promise<Report[]> {
@@ -54,6 +58,8 @@ export interface EmbedConfig {
   page_names?: string[];
   /** Quando o embed token expira (ISO UTC com Z); null se o backend for de uma versao antiga */
   expires_at?: string | null;
+  show_filter_pane: boolean;
+  show_page_nav: boolean;
 }
 
 export async function getEmbedConfig(workspaceId: number, reportId: number): Promise<EmbedConfig> {

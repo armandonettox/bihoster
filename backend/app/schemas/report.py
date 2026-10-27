@@ -51,6 +51,8 @@ class ReportCreate(BaseModel):
     pbi_page_name: Optional[str] = Field(default=None, max_length=100)
     pbi_page_names: Optional[PageNames] = None
     display_type: DisplayType = "relatorio"
+    show_filter_pane: bool = False
+    show_page_nav: bool = False
 
     @field_validator(*_REPORT_TEXT_FIELDS)
     @classmethod
@@ -69,6 +71,8 @@ class ReportUpdate(BaseModel):
     pbi_page_name: Optional[str] = Field(default=None, max_length=100)
     pbi_page_names: Optional[PageNames] = None
     display_type: Optional[DisplayType] = None
+    show_filter_pane: Optional[bool] = None
+    show_page_nav: Optional[bool] = None
 
     @field_validator(*_REPORT_TEXT_FIELDS)
     @classmethod
@@ -99,6 +103,8 @@ class ReportOut(BaseModel):
     pbi_page_name: Optional[str]
     pbi_page_names: list[str] = []
     display_type: DisplayType
+    show_filter_pane: bool = False
+    show_page_nav: bool = False
 
     class Config:
         from_attributes = True

@@ -104,10 +104,12 @@ export default function ReportEmbed({
           pageName: selectedPages[0],
           settings: {
             panes: {
-              filters: { visible: false },
-              // Com abas escolhidas, a navegacao nativa do Power BI (que mostraria todas) some:
-              // com uma aba so nao ha o que navegar, com varias a barra propria abaixo assume.
-              pageNavigation: { visible: selectedPages.length === 0 },
+              filters: { visible: config.show_filter_pane ?? false },
+              // Com abas escolhidas e show_page_nav desativado, a navegacao nativa some:
+              // a barra propria abaixo assume quando ha multiplas abas selecionadas.
+              pageNavigation: {
+                visible: config.show_page_nav ?? (selectedPages.length === 0),
+              },
             },
           },
         }) as pbi.Report;
@@ -136,13 +138,17 @@ export default function ReportEmbed({
             }
           }
           if (selectedPages.length > 0) return;
-          try {
-            const pages = await embeddedReport.getPages();
-            if (pages.length <= 1) {
-              await embeddedReport.updateSettings({ panes: { pageNavigation: { visible: false } } });
+          // Sem abas selecionadas: oculta a barra nativa se o relatorio tem uma so pagina
+          // ou se o admin desativou a navegacao para este relatorio.
+          if (!config.show_page_nav) {
+            try {
+              const pages = await embeddedReport.getPages();
+              if (pages.length <= 1) {
+                await embeddedReport.updateSettings({ panes: { pageNavigation: { visible: false } } });
+              }
+            } catch {
+              // Sem problema se nao der pra checar as paginas -- fica com a barra padrao.
             }
-          } catch {
-            // Sem problema se nao der pra checar as paginas -- fica com a barra padrao.
           }
         });
       })

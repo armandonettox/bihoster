@@ -38,6 +38,8 @@ export default function NewReportForm({
   const [pages, setPages] = useState<PowerBIPage[]>([]);
   const [pageNames, setPageNames] = useState<string[]>(editingReport?.pbi_page_names ?? []);
   const [displayType, setDisplayType] = useState<DisplayType>(editingReport?.display_type || "relatorio");
+  const [showFilterPane, setShowFilterPane] = useState(editingReport?.show_filter_pane ?? false);
+  const [showPageNav, setShowPageNav] = useState(editingReport?.show_page_nav ?? false);
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingReports, setLoadingReports] = useState(false);
@@ -152,6 +154,8 @@ export default function NewReportForm({
         pbi_dataset_id: datasetId || null,
         pbi_page_names: pageNames,
         display_type: displayType,
+        show_filter_pane: showFilterPane,
+        show_page_nav: showPageNav,
       };
       if (editingReport) {
         await reportsApi.updateReport(currentWorkspace.id, editingReport.id, input);
@@ -288,6 +292,26 @@ export default function NewReportForm({
             {DISPLAY_TYPE_OPTIONS.find((opt) => opt.key === displayType)?.hint}
           </span>
         </label>
+
+        <div className="field" style={{ gap: 6 }}>
+          Opcoes do iframe
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={showFilterPane}
+              onChange={(e) => setShowFilterPane(e.target.checked)}
+            />
+            Mostrar painel de filtros lateral
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={showPageNav}
+              onChange={(e) => setShowPageNav(e.target.checked)}
+            />
+            Mostrar barra de navegacao de paginas
+          </label>
+        </div>
 
         {error && <p className="auth-error">{error}</p>}
         <div style={{ display: "flex", gap: 8 }}>

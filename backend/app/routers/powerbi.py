@@ -114,6 +114,8 @@ def get_embed_config(
         page_name=report.pbi_page_name,
         page_names=report.pbi_page_names,
         expires_at=expires_at,
+        show_filter_pane=bool(report.show_filter_pane),
+        show_page_nav=bool(report.show_page_nav),
     )
     # O cache vale ate _EMBED_CACHE_MARGIN antes de o token vencer (antes eram 50 min fixos, entao
     # o usuario podia receber um token com poucos minutos de vida). Token que ja esta perto do
