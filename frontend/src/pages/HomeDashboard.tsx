@@ -156,7 +156,7 @@ function FavoriteReportList({
               </span>
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0 }}>
-              <span className="badge">{workspace?.name || ""}</span>
+              <span className="badge badge-name">{workspace?.name || ""}</span>
               <span className="home-page-item-arrow">&rsaquo;</span>
             </span>
           </button>

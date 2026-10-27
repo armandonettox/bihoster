@@ -428,7 +428,7 @@ export default function CollectionHome() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
         <div>
-          <h1 style={{ color: "var(--color-primary)", margin: 0 }}>{currentWorkspace.name}</h1>
+          <h1 style={{ color: "var(--color-primary-text)", margin: 0 }}>{currentWorkspace.name}</h1>
           {currentWorkspace.description && (
             <p style={{ fontSize: 13, color: "var(--color-text-muted)", marginTop: 6 }}>{currentWorkspace.description}</p>
           )}

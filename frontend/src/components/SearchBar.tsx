@@ -178,7 +178,7 @@ export default function SearchBar() {
                 {entry.kind === "colecao" ? (
                   <span className="badge search-bar-kind-collection">Colecao</span>
                 ) : (
-                  <span className="badge">{entry.workspace_name}</span>
+                  <span className="badge badge-name">{entry.workspace_name}</span>
                 )}
               </button>
             ))

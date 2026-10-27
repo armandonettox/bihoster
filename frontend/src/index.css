@@ -1451,6 +1451,11 @@ table.table tr:last-child td {
   text-transform: capitalize;
 }
 
+/* Nome de colecao digitado pelo usuario: mostrar como foi escrito */
+.badge-name {
+  text-transform: none;
+}
+
 :root[data-theme="dark"] .badge {
   background-color: rgba(91, 155, 213, 0.2);
   color: var(--color-secondary);
@@ -1916,7 +1921,7 @@ table.table tr:last-child td {
 }
 
 .search-bar-highlight {
-  background-color: rgba(0, 180, 166, 0.3);
+  background-color: color-mix(in srgb, var(--color-secondary) 35%, transparent);
   color: inherit;
   border-radius: 2px;
   padding: 0 1px;
