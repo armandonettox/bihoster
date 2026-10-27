@@ -21,6 +21,8 @@ function report(id: number, name = `Relatorio ${id}`): Report {
     pbi_page_name: null,
     pbi_page_names: [],
     display_type: "relatorio",
+    show_filter_pane: false,
+    show_page_nav: false,
   };
 }
 
