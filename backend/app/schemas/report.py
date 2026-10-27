@@ -103,8 +103,14 @@ class ReportOut(BaseModel):
     pbi_page_name: Optional[str]
     pbi_page_names: list[str] = []
     display_type: DisplayType
+    # NULL no banco (registros anteriores a esta coluna) vira False -- mesmo padrao do settings.
     show_filter_pane: bool = False
     show_page_nav: bool = False
+
+    @field_validator("show_filter_pane", "show_page_nav", mode="before")
+    @classmethod
+    def coerce_nullable_bool(cls, v: object) -> bool:
+        return bool(v)
 
     class Config:
         from_attributes = True
