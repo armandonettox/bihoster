@@ -101,6 +101,18 @@ describe("useTvInterval - gravar", () => {
     expect(result.current.draft).toBe("15");
   });
 
+  it.each([[""], ["   "]])("campo vazio (%j) volta ao valor salvo em vez de gravar o minimo", async (vazio) => {
+    const { result } = setup();
+
+    await act(async () => {
+      await result.current.commit(vazio);
+    });
+
+    expect(updateWorkspace).not.toHaveBeenCalled();
+    expect(mocks.reload).not.toHaveBeenCalled();
+    expect(result.current.draft).toBe("15");
+  });
+
   it("devolve o campo ao valor salvo e avisa quando a gravacao falha", async () => {
     updateWorkspace.mockRejectedValue(new Error("500"));
     const { result } = setup();

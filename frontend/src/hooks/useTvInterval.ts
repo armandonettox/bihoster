@@ -15,7 +15,9 @@ export function useTvInterval(workspace: Workspace | null | undefined, reload: (
 
   async function commit(rawValue: string) {
     if (!workspace) return;
-    const parsed = Number(rawValue);
+    // Campo vazio nao e numero: Number("") vale 0 e cairia no minimo (3 s), gravando um valor que
+    // ninguem digitou. Vazio volta pro valor salvo, igual a qualquer outro texto invalido.
+    const parsed = rawValue.trim() === "" ? NaN : Number(rawValue);
     // So envia ao backend quando o valor digitado for um numero valido dentro do intervalo
     // permitido -- evita gravar 0 (ou lixo) momentaneamente enquanto o campo esta sendo editado.
     const seconds = Number.isFinite(parsed) ? Math.min(3600, Math.max(3, Math.round(parsed))) : workspace.tv_interval_seconds;
