@@ -1,3 +1,5 @@
+import logging
+import time
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -116,6 +118,29 @@ async def force_https_redirect(request: Request, call_next):
             return RedirectResponse(url=str(https_url), status_code=301)
 
     return await call_next(request)
+
+
+logger = logging.getLogger(__name__)
+
+# Acima disso a requisicao e registrada no log do backend como lenta.
+SLOW_REQUEST_MS = 1000
+
+
+@app.middleware("http")
+async def request_timing(request: Request, call_next):
+    """Mede quanto o backend levou em cada requisicao: devolve o tempo no cabecalho Server-Timing
+    (aparece na aba Rede do navegador e no `curl -i`) e avisa no log quando passa de
+    SLOW_REQUEST_MS. Registrado depois do force_https_redirect, entao mede tudo, inclusive ele.
+    Loga so metodo, caminho e status -- nunca a query string, que pode ter token."""
+    started = time.perf_counter()
+    response = await call_next(request)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    response.headers["Server-Timing"] = f"app;dur={elapsed_ms:.1f}"
+    if elapsed_ms >= SLOW_REQUEST_MS:
+        logger.warning(
+            "requisicao lenta: %s %s -> %s em %.0f ms", request.method, request.url.path, response.status_code, elapsed_ms
+        )
+    return response
 
 
 # Absoluto (relativo a este arquivo, nao ao cwd) -- rodar `uvicorn app.main:app` de um

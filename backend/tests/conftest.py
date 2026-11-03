@@ -55,6 +55,17 @@ def make_workspace(db_session):
     return _make
 
 
+def _limpa_caches_do_powerbi():
+    """Os caches do Power BI sao dicionarios em memoria do processo. Cada teste recria o banco do
+    zero e reaproveita os mesmos ids (colecao 1, relatorio 1), entao um cache que sobrasse de um
+    teste serviria dado de outro."""
+    from app.routers import powerbi as embed_router
+
+    embed_router._embed_cache.clear()
+    embed_router._refresh_info_cache.clear()
+    embed_router._report_static_cache.clear()
+
+
 @pytest.fixture()
 def client(db_session):
     """TestClient da API real, com o banco trocado pela sessao isolada de db_session --
@@ -72,8 +83,10 @@ def client(db_session):
 
     app.dependency_overrides[get_db] = _override_get_db
     limiter.reset()
+    _limpa_caches_do_powerbi()
     try:
         yield TestClient(app)
     finally:
         app.dependency_overrides.clear()
         limiter.reset()
+        _limpa_caches_do_powerbi()

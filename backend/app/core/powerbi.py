@@ -23,6 +23,16 @@ AAD_TOKEN_URL = "https://login.microsoftonline.com/{tenant_id}/oauth2/v2.0/token
 POWERBI_API_BASE = "https://api.powerbi.com/v1.0/myorg"
 POWERBI_SCOPE = "https://analysis.windows.net/powerbi/api/.default"
 
+# Cliente HTTP unico, compartilhado por todas as chamadas ao Power BI e a Azure AD. `httpx.get`/
+# `httpx.post` soltos criam um cliente novo a cada chamada, entao cada uma abria conexao TCP e
+# fazia o handshake TLS de novo (varias centenas de ms por chamada). Com o cliente compartilhado
+# a conexao fica aberta (keep-alive) e as chamadas seguintes reaproveitam. E seguro entre threads:
+# os endpoints sincronos rodam na threadpool do FastAPI.
+_http = httpx.Client(
+    timeout=30,
+    limits=httpx.Limits(max_connections=40, max_keepalive_connections=20, keepalive_expiry=60),
+)
+
 # Cache simples em memoria do token de cada conta Power BI (Service Principal), por connection_id --
 # guarda tambem o client_id usado pra nao servir um token velho apos a conta ser reconfigurada.
 _cached_tokens: dict[int, tuple[str, str, datetime]] = {}  # connection_id -> (token, client_id, expires_at)
@@ -63,7 +73,7 @@ def _get_aad_token(connection: PowerBIConnection) -> str:
         "scope": POWERBI_SCOPE,
     }
 
-    response = httpx.post(url, data=data, timeout=30)
+    response = _http.post(url, data=data)
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao autenticar na Azure AD: {_error_detail(response)}")
 
@@ -81,7 +91,7 @@ def _headers(connection: PowerBIConnection) -> dict:
 def list_workspaces(connection: PowerBIConnection) -> list[dict]:
     """Lista os workspaces (grupos) do Power BI que a service principal enxerga."""
     url = f"{POWERBI_API_BASE}/groups?$top=200"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao listar workspaces do Power BI: {_error_detail(response)}")
     return response.json().get("value", [])
@@ -90,7 +100,7 @@ def list_workspaces(connection: PowerBIConnection) -> list[dict]:
 def list_reports(connection: PowerBIConnection, workspace_id: str) -> list[dict]:
     """Lista os relatorios publicados num workspace do Power BI."""
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao listar relatorios do Power BI: {_error_detail(response)}")
     return response.json().get("value", [])
@@ -98,7 +108,7 @@ def list_reports(connection: PowerBIConnection, workspace_id: str) -> list[dict]
 
 def get_report_details(connection: PowerBIConnection, workspace_id: str, report_id: str) -> dict:
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao buscar relatorio no Power BI: {_error_detail(response)}")
     return response.json()
@@ -108,7 +118,7 @@ def list_pages(connection: PowerBIConnection, workspace_id: str, report_id: str)
     """Lista as paginas (abas) publicadas dentro de um relatorio -- usado pra deixar escolher
     so uma aba especifica em vez do relatorio inteiro ao adicionar numa colecao."""
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/pages"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao listar paginas do relatorio no Power BI: {_error_detail(response)}")
     return response.json().get("value", [])
@@ -118,7 +128,7 @@ def dataset_requires_effective_identity(connection: PowerBIConnection, workspace
     """So dataset com RLS configurado aceita (e exige) identidade efetiva no GenerateToken --
     mandar identidade para um dataset sem RLS faz a API rejeitar a chamada."""
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao buscar dataset no Power BI: {_error_detail(response)}")
     return bool(response.json().get("isEffectiveIdentityRequired"))
@@ -149,7 +159,7 @@ def generate_embed_token(
             }
         ]
 
-    response = httpx.post(url, headers=_headers(connection), json=body, timeout=30)
+    response = _http.post(url, headers=_headers(connection), json=body)
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao gerar embed token: {_error_detail(response)}")
     return response.json()
@@ -157,14 +167,14 @@ def generate_embed_token(
 
 def refresh_dataset(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> None:
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}/refreshes"
-    response = httpx.post(url, headers=_headers(connection), timeout=30)
+    response = _http.post(url, headers=_headers(connection))
     if response.status_code != 202:
         raise PowerBIError(f"Falha ao iniciar atualizacao do dataset: {_error_detail(response)}")
 
 
 def get_refresh_history(connection: PowerBIConnection, workspace_id: str, dataset_id: str, top: int = 10) -> list[dict]:
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}/refreshes?$top={top}"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao buscar historico de atualizacao: {_error_detail(response)}")
     return response.json().get("value", [])
@@ -203,7 +213,7 @@ def _next_scheduled_refresh(schedule: dict) -> Optional[datetime]:
 
 def get_refresh_schedule(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> Optional[dict]:
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}/refreshSchedule"
-    response = httpx.get(url, headers=_headers(connection), timeout=30)
+    response = _http.get(url, headers=_headers(connection))
     if response.status_code != 200:
         return None
     return response.json()

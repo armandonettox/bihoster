@@ -52,12 +52,20 @@ def _parse_token_expiration(raw: Optional[str]) -> datetime:
 _REFRESH_INFO_CACHE_TTL = timedelta(minutes=5)
 _refresh_info_cache: dict[tuple[int, int], tuple[datetime, dict]] = {}
 
+# Dados do relatorio que mudam pouco e nao dependem de quem pede: a URL de embed e se o dataset
+# exige identidade efetiva (RLS). Sem este cache, cada usuario novo (e cada reinicio do backend)
+# refazia duas chamadas ao Power BI por relatorio antes mesmo de gerar o token. O TTL e curto
+# porque o RLS pode ser ligado no Power BI; se o token for recusado, a entrada e descartada na hora.
+_REPORT_STATIC_CACHE_TTL = timedelta(minutes=30)
+_report_static_cache: dict[tuple[int, int], tuple[datetime, dict]] = {}
+
 
 def invalidate_embed_cache(workspace_id: int, report_id: int) -> None:
-    """Chamado ao editar/excluir um relatorio -- tira dos dois caches pra nao servir dado velho."""
+    """Chamado ao editar/excluir um relatorio -- tira dos tres caches pra nao servir dado velho."""
     for key in [k for k in _embed_cache if k[0] == workspace_id and k[1] == report_id]:
         _embed_cache.pop(key, None)
     _refresh_info_cache.pop((workspace_id, report_id), None)
+    _report_static_cache.pop((workspace_id, report_id), None)
 
 
 def _get_report_or_404(db: Session, workspace_id: int, report_id: int) -> Report:
@@ -73,6 +81,23 @@ def _get_connection_or_error(db: Session, report: Report) -> PowerBIConnection:
             status_code=400, detail="Esse relatorio nao tem uma conta do Power BI configurada -- edite o relatorio e escolha uma"
         )
     return connection
+
+
+def _get_report_static(connection: PowerBIConnection, workspace_id: int, report: Report) -> dict:
+    """URL de embed e exigencia de RLS do relatorio, com cache (ver _REPORT_STATIC_CACHE_TTL)."""
+    _prune_expired(_report_static_cache)
+    cache_key = (workspace_id, report.id)
+    cached = _report_static_cache.get(cache_key)
+    if cached:
+        return cached[1]
+
+    details = powerbi.get_report_details(connection, report.pbi_workspace_id, report.pbi_report_id)
+    needs_identity = bool(report.pbi_dataset_id) and powerbi.dataset_requires_effective_identity(
+        connection, report.pbi_workspace_id, report.pbi_dataset_id
+    )
+    static = {"embed_url": details["embedUrl"], "needs_identity": needs_identity}
+    _report_static_cache[cache_key] = (datetime.now(timezone.utc) + _REPORT_STATIC_CACHE_TTL, static)
+    return static
 
 
 @router.get("/reports/{report_id}/embed", response_model=EmbedConfig)
@@ -93,23 +118,26 @@ def get_embed_config(
     connection = _get_connection_or_error(db, report)
 
     # PowerBIError propaga pro handler global em main.py (converte pra 502 automaticamente).
-    details = powerbi.get_report_details(connection, report.pbi_workspace_id, report.pbi_report_id)
-
-    needs_identity = bool(report.pbi_dataset_id) and powerbi.dataset_requires_effective_identity(
-        connection, report.pbi_workspace_id, report.pbi_dataset_id
-    )
-    token_response = powerbi.generate_embed_token(
-        connection,
-        workspace_id=report.pbi_workspace_id,
-        report_id=report.pbi_report_id,
-        dataset_id=report.pbi_dataset_id if needs_identity else None,
-        username=current_user.email if needs_identity else None,
-    )
+    static = _get_report_static(connection, workspace_id, report)
+    needs_identity = static["needs_identity"]
+    try:
+        token_response = powerbi.generate_embed_token(
+            connection,
+            workspace_id=report.pbi_workspace_id,
+            report_id=report.pbi_report_id,
+            dataset_id=report.pbi_dataset_id if needs_identity else None,
+            username=current_user.email if needs_identity else None,
+        )
+    except powerbi.PowerBIError:
+        # O dado guardado pode estar velho (RLS ligado ou desligado no Power BI): na proxima
+        # tentativa busca de novo em vez de repetir o mesmo erro ate o TTL vencer.
+        _report_static_cache.pop((workspace_id, report_id), None)
+        raise
 
     expires_at = _parse_token_expiration(token_response.get("expiration"))
     config = EmbedConfig(
         report_id=report.pbi_report_id,
-        embed_url=details["embedUrl"],
+        embed_url=static["embed_url"],
         access_token=token_response["token"],
         page_name=report.pbi_page_name,
         page_names=report.pbi_page_names,
