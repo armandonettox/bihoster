@@ -30,8 +30,8 @@ jobs:
         env:
           JWT_SECRET: ci-only-secret-not-used-in-prod-000000000000
           ENCRYPTION_KEY: ci-only-key-not-used-in-prod-00000000000000
-      # continue-on-error: CVE conhecida sem correcao upstream (ecdsa/python-jose, ver
-      # comentario em requirements.txt) nao pode quebrar o build -- isso so avisa no log.
+      # continue-on-error: a auditoria so avisa no log, nao quebra o build por causa de uma
+      # CVE de dependencia (o ecdsa saiu quando o python-jose foi trocado pelo PyJWT).
       - run: pip install pip-audit -q && pip-audit -r requirements.txt
         continue-on-error: true
 

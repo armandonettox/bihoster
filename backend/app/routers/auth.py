@@ -2,7 +2,7 @@ from datetime import datetime, timedelta, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
-from jose import JWTError
+from jwt import PyJWTError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -264,7 +264,7 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])
-    except (JWTError, KeyError, ValueError):
+    except (PyJWTError, KeyError, ValueError):
         raise HTTPException(status_code=401, detail="Token invalido")
 
     user = db.query(User).get(user_id)

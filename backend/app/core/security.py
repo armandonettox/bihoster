@@ -2,7 +2,7 @@ import hashlib
 from datetime import datetime, timedelta, timezone
 
 import bcrypt
-from jose import jwt
+import jwt
 
 from app.core.config import settings
 

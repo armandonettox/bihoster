@@ -3,11 +3,7 @@ uvicorn[standard]==0.53.0
 email-validator==2.3.0
 sqlalchemy==2.0.54
 pydantic-settings==2.15.0
-# python-jose traz `ecdsa` como dependencia transitiva, que tem uma CVE conhecida sem correcao
-# planejada (CVE-2024-23342, timing attack Minerva em operacoes ECDSA). Nao exploravel aqui:
-# JWT_ALGORITHM e fixo em HS256 (HMAC simetrico) em core/config.py, entao o app nunca chama
-# assinatura/verificacao ECDSA. So reavaliar se algum dia trocar pra um algoritmo ES256/ES384.
-python-jose[cryptography]==3.5.0
+PyJWT==2.15.1
 cryptography==50.0.1
 bcrypt==5.0.0
 python-multipart==0.0.32

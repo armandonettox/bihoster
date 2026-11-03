@@ -4,7 +4,7 @@ usuario apagado, conta bloqueada, teto absoluto da sessao e troca de senha."""
 
 from datetime import datetime, timedelta, timezone
 
-from jose import jwt
+import jwt
 
 from app.core import security
 from app.core.config import settings
