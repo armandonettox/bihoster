@@ -12,7 +12,7 @@ const getEmailStatus = vi.mocked(emailApi.getEmailStatus);
 
 beforeEach(() => {
   mocks.user = { is_platform_admin: true };
-  getEmailStatus.mockResolvedValue({ configured: true });
+  getEmailStatus.mockResolvedValue({ configured: true, allowed_domains: [] });
 });
 
 describe("useCanSendByEmail", () => {
@@ -23,7 +23,7 @@ describe("useCanSendByEmail", () => {
   });
 
   it("administrador com o e-mail ainda nao configurado nao pode", async () => {
-    getEmailStatus.mockResolvedValue({ configured: false });
+    getEmailStatus.mockResolvedValue({ configured: false, allowed_domains: [] });
     const { result } = renderHook(() => useCanSendByEmail());
 
     await waitFor(() => expect(getEmailStatus).toHaveBeenCalled());

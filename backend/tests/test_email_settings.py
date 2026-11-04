@@ -55,13 +55,18 @@ class TestPermissao:
         assert client.post("/settings/email/test", json={"to": "a@x.com"}, headers=pessoa).status_code == 403
 
     def test_o_status_serve_para_qualquer_pessoa_logada_e_so_diz_sim_ou_nao(self, client, admin, pessoa):
-        assert client.get("/settings/email/status", headers=pessoa).json() == {"configured": False}
+        assert client.get("/settings/email/status", headers=pessoa).json() == {"configured": False, "allowed_domains": []}
 
         _salvar(client, admin)
 
         resp = client.get("/settings/email/status", headers=pessoa)
-        assert resp.json() == {"configured": True}
+        assert resp.json() == {"configured": True, "allowed_domains": []}
         assert "smtp.exemplo.test" not in resp.text
+
+    def test_o_status_informa_os_dominios_permitidos(self, client, admin, pessoa):
+        _salvar(client, admin, email_allowed_domains="Empresa.com, outra.com.br")
+
+        assert client.get("/settings/email/status", headers=pessoa).json()["allowed_domains"] == ["empresa.com", "outra.com.br"]
 
     def test_o_status_exige_login(self, client):
         assert client.get("/settings/email/status").status_code == 401

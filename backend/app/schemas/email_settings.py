@@ -53,6 +53,9 @@ class EmailSettingsOut(BaseModel):
 
 class EmailStatus(BaseModel):
     configured: bool
+    # Dominios onde se pode mandar e-mail (vazio = qualquer um). A tela de assinaturas precisa saber:
+    # editor da colecao so assina quando ha lista.
+    allowed_domains: list[str] = []
 
 
 class EmailTestRequest(BaseModel):

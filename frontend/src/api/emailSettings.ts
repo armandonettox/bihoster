@@ -37,8 +37,14 @@ export async function updateEmailSettings(input: EmailSettingsUpdate): Promise<E
   return data;
 }
 
-/** Qualquer pessoa logada: so diz se o envio por e-mail esta disponivel, nunca os dados do servidor. */
-export async function getEmailStatus(): Promise<{ configured: boolean }> {
+export interface EmailStatus {
+  configured: boolean;
+  /** Dominios onde se pode mandar e-mail; vazio = qualquer um */
+  allowed_domains: string[];
+}
+
+/** Qualquer pessoa logada: diz se o envio por e-mail esta disponivel e para quais dominios, nunca os dados do servidor. */
+export async function getEmailStatus(): Promise<EmailStatus> {
   const { data } = await api.get("/settings/email/status");
   return data;
 }

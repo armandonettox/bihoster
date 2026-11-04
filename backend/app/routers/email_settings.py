@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import log_action
 from app.core.database import get_db
-from app.core.email_sender import EmailError, disallowed_recipients, load_smtp_config, send_email
+from app.core.email_sender import EmailError, allowed_domains, disallowed_recipients, load_smtp_config, send_email
 from app.core.rate_limit import limiter
 from app.core.workspace_deps import require_platform_admin
 from app.models.settings import AppSettings
@@ -51,7 +51,8 @@ def get_email_settings(db: Session = Depends(get_db), _: User = Depends(require_
 def get_email_status(db: Session = Depends(get_db), _: User = Depends(get_current_user)):
     """Quem esta logado so precisa saber se o envio por e-mail esta disponivel (pra mostrar ou
     esconder o botao), nunca os dados do servidor."""
-    return EmailStatus(configured=load_smtp_config(_get_or_create_settings(db)) is not None)
+    row = _get_or_create_settings(db)
+    return EmailStatus(configured=load_smtp_config(row) is not None, allowed_domains=allowed_domains(row))
 
 
 @router.put("/", response_model=EmailSettingsOut)

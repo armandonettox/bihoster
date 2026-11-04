@@ -1663,7 +1663,8 @@ table.table tr:last-child td {
 }
 
 /* Botao de sair: contorno, icone e a tecla ao lado, pra parecer clicavel e dizer o atalho */
-.fullscreen-exit {
+.fullscreen-exit,
+.fullscreen-action {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -1679,16 +1680,19 @@ table.table tr:last-child td {
   transition: background-color 0.12s ease, border-color 0.12s ease;
 }
 
-.fullscreen-exit .material-symbols-outlined {
+.fullscreen-exit .material-symbols-outlined,
+.fullscreen-action .material-symbols-outlined {
   font-size: 18px;
 }
 
-.fullscreen-exit:hover {
+.fullscreen-exit:hover,
+.fullscreen-action:hover {
   background-color: var(--color-surface-hover);
   border-color: var(--color-text-muted);
 }
 
-.fullscreen-exit:focus-visible {
+.fullscreen-exit:focus-visible,
+.fullscreen-action:focus-visible {
   outline: 2px solid var(--color-secondary);
   outline-offset: 2px;
 }
@@ -1708,6 +1712,7 @@ table.table tr:last-child td {
 /* Tela estreita: some o texto "Sair" e a tecla, fica so o icone */
 @media (max-width: 600px) {
   .fullscreen-exit span:not(.material-symbols-outlined),
+  .fullscreen-action span:not(.material-symbols-outlined),
   .fullscreen-exit kbd {
     display: none;
   }

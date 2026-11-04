@@ -5,10 +5,20 @@ import * as reportsApi from "../api/reports";
 import { deferred, makeReport } from "../test-fixtures";
 import ReportFullscreen from "./ReportFullscreen";
 
-const mocks = vi.hoisted(() => ({ selectWorkspace: vi.fn() }));
+const mocks = vi.hoisted(() => ({ selectWorkspace: vi.fn(), access: { canSubscribe: false, allowedDomains: [] as string[] } }));
 
 vi.mock("../api/reports", () => ({ getReport: vi.fn() }));
-vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ selectWorkspace: mocks.selectWorkspace }) }));
+vi.mock("../context/WorkspaceContext", () => ({
+  useWorkspace: () => ({ selectWorkspace: mocks.selectWorkspace, workspaces: [{ id: 3, role: "editor" }] }),
+}));
+vi.mock("../hooks/useSubscriptionAccess", () => ({ useSubscriptionAccess: () => mocks.access }));
+vi.mock("../components/ReportSubscriptionsModal", () => ({
+  default: ({ onClose }: { onClose: () => void }) => (
+    <div role="dialog">
+      janela de assinaturas<button onClick={onClose}>fechar janela</button>
+    </div>
+  ),
+}));
 vi.mock("../context/BrandingContext", () => ({ useBranding: () => ({ settings: null }) }));
 vi.mock("../components/ReportEmbed", () => ({
   default: ({ reportId, workspaceId }: { reportId: number; workspaceId: number }) => (
@@ -34,6 +44,7 @@ function abrir(historico: string[], indice = historico.length - 1) {
 beforeEach(() => {
   document.title = "BIHoster";
   mocks.selectWorkspace.mockReset();
+  mocks.access = { canSubscribe: false, allowedDomains: [] };
   getReport.mockResolvedValue(RELATORIO);
 });
 
@@ -122,5 +133,48 @@ describe("ReportFullscreen - sair", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sair da tela cheia (Esc)" }));
 
     await waitFor(() => expect(screen.getByText("pagina da colecao")).toBeTruthy());
+  });
+});
+
+describe("ReportFullscreen - assinatura", () => {
+  it("sem permissao nao ha botao Assinar", async () => {
+    abrir(["/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+
+    expect(screen.queryByRole("button", { name: /Assinar/ })).toBeNull();
+  });
+
+  it("com permissao o botao abre a janela de assinaturas", async () => {
+    mocks.access = { canSubscribe: true, allowedDomains: [] };
+    abrir(["/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+
+    fireEvent.click(screen.getByRole("button", { name: /Assinar/ }));
+
+    expect(screen.getByText("janela de assinaturas")).toBeTruthy();
+  });
+
+  it("com a janela aberta o Esc nao sai da tela cheia", async () => {
+    mocks.access = { canSubscribe: true, allowedDomains: [] };
+    abrir(["/collection", "/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+    fireEvent.click(screen.getByRole("button", { name: /Assinar/ }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByText("pagina da colecao")).toBeNull();
+    expect(screen.getByText("janela de assinaturas")).toBeTruthy();
+  });
+
+  it("fechada a janela, o Esc volta a sair", async () => {
+    mocks.access = { canSubscribe: true, allowedDomains: [] };
+    abrir(["/collection", "/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+    fireEvent.click(screen.getByRole("button", { name: /Assinar/ }));
+    fireEvent.click(screen.getByRole("button", { name: "fechar janela" }));
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(await screen.findByText("pagina da colecao")).toBeTruthy();
   });
 });
