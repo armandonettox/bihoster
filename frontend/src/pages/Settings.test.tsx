@@ -20,6 +20,7 @@ vi.mock("./settings/BrandTab", async () => (await import("../test-stubs")).tabSt
 vi.mock("./settings/MembersTab", async () => (await import("../test-stubs")).tabStub("tab:members"));
 vi.mock("./settings/GroupsTab", async () => (await import("../test-stubs")).tabStub("tab:groups"));
 vi.mock("./settings/AuthTab", async () => (await import("../test-stubs")).tabStub("tab:auth"));
+vi.mock("./settings/EmailTab", async () => (await import("../test-stubs")).tabStub("tab:email"));
 vi.mock("./settings/AuditTab", async () => (await import("../test-stubs")).tabStub("tab:audit"));
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
 vi.mock("./settings/AccountTab", async () => (await import("../test-stubs")).tabStub("tab:account"));
@@ -53,7 +54,7 @@ describe("Settings - quem nao administra nenhuma colecao", () => {
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Minha conta");
   });
 
-  it.each(["members", "general", "audit", "updates", "auth", "brand", "groups", "collections"])(
+  it.each(["members", "general", "audit", "updates", "auth", "email", "brand", "groups", "collections"])(
     "?tab=%s na URL cai na conta, nunca mostra a aba de administracao",
     (tab) => {
       renderAt(`/settings?tab=${tab}`);
@@ -88,7 +89,13 @@ describe("Settings - quem administra alguma colecao", () => {
     const labels = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(labels).toContain("Minha conta");
     expect(labels).toContain("Membros");
-    expect(labels).toHaveLength(9);
+    expect(labels).toContain("E-mail");
+    expect(labels).toHaveLength(10);
+  });
+
+  it("?tab=email abre a aba de e-mail", () => {
+    renderAt("/settings?tab=email");
+    expect(content()).toBe("tab:email");
   });
 
   it("?tab=account abre a conta", () => {
