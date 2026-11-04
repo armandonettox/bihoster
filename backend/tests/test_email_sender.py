@@ -88,6 +88,7 @@ class TestMensagem:
 def smtp_falso():
     """Troca smtplib.SMTP e SMTP_SSL por servidores de mentira que guardam o que receberam"""
     servidor = MagicMock()
+    servidor.esmtp_features = {"auth": "LOGIN PLAIN XOAUTH2"}  # o que o Google oferece
     with patch.object(email_sender.smtplib, "SMTP", return_value=servidor) as smtp, patch.object(
         email_sender.smtplib, "SMTP_SSL", return_value=servidor
     ) as smtp_ssl:
@@ -101,8 +102,13 @@ class TestEnvio:
         smtp_falso.smtp.assert_called_once()
         smtp_falso.smtp_ssl.assert_not_called()
         ordem = [c[0] for c in smtp_falso.servidor.method_calls]
-        assert ordem.index("starttls") < ordem.index("login") < ordem.index("send_message")
-        smtp_falso.servidor.login.assert_called_once_with("usuario", "segredo-smtp")
+        assert ordem.index("starttls") < ordem.index("auth") < ordem.index("send_message")
+        smtp_falso.servidor.auth.assert_called_once()
+        metodo, objeto = smtp_falso.servidor.auth.call_args.args
+        assert metodo == "PLAIN"
+        assert objeto() == "\0usuario\0segredo-smtp"
+        assert smtp_falso.servidor.auth.call_args.kwargs["initial_response_ok"] is False
+        smtp_falso.servidor.login.assert_not_called()  # o login() tenta um 2o metodo e esconde o erro real
         smtp_falso.servidor.quit.assert_called_once()
 
     def test_ssl_abre_a_conexao_ja_criptografada_sem_starttls(self, smtp_falso):
@@ -116,11 +122,12 @@ class TestEnvio:
         email_sender.send_email(_config(security="none", username=None, password=None), ["a@x.test"], "Oi", "corpo")
 
         smtp_falso.servidor.starttls.assert_not_called()
-        smtp_falso.servidor.login.assert_not_called()
+        smtp_falso.servidor.auth.assert_not_called()
 
     def test_sem_usuario_nao_tenta_autenticar(self, smtp_falso):
         email_sender.send_email(_config(username=None, password=None), ["a@x.test"], "Oi", "corpo")
 
+        smtp_falso.servidor.auth.assert_not_called()
         smtp_falso.servidor.login.assert_not_called()
 
     def test_valida_o_certificado_do_servidor(self, smtp_falso):
@@ -129,6 +136,55 @@ class TestEnvio:
         contexto = smtp_falso.servidor.starttls.call_args.kwargs["context"]
         assert contexto.verify_mode == ssl.CERT_REQUIRED
         assert contexto.check_hostname is True
+
+
+class TestMetodoDeLogin:
+    def test_so_tenta_um_metodo_mesmo_quando_o_servidor_oferece_varios(self, smtp_falso):
+        email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert smtp_falso.servidor.auth.call_count == 1
+
+    def test_sem_plain_usa_login(self, smtp_falso):
+        smtp_falso.servidor.esmtp_features = {"auth": "LOGIN XOAUTH2"}
+
+        email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert smtp_falso.servidor.auth.call_args.args[0] == "LOGIN"
+        assert (smtp_falso.servidor.user, smtp_falso.servidor.password) == ("usuario", "segredo-smtp")
+
+    def test_servidor_com_outro_metodo_deixa_o_smtplib_escolher(self, smtp_falso):
+        smtp_falso.servidor.esmtp_features = {"auth": "CRAM-MD5"}
+
+        email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        smtp_falso.servidor.login.assert_called_once_with("usuario", "segredo-smtp")
+        smtp_falso.servidor.auth.assert_not_called()
+
+
+class TestSenhaDeAppDoGoogle:
+    def _senha_enviada(self, smtp_falso, **extra):
+        email_sender.send_email(_config(**extra), ["a@x.test"], "Oi", "corpo")
+        return smtp_falso.servidor.auth.call_args.args[1]()
+
+    def test_tira_os_espacos_da_senha_de_app_copiada_em_grupos_de_4(self, smtp_falso):
+        enviada = self._senha_enviada(smtp_falso, host="smtp.gmail.com", password="abcd efgh ijkl mnop")
+
+        assert enviada == "\0usuario\0abcdefghijklmnop"
+
+    def test_vale_tambem_para_o_rele_do_google(self, smtp_falso):
+        enviada = self._senha_enviada(smtp_falso, host="smtp-relay.gmail.com", password="abcd efgh ijkl mnop")
+
+        assert enviada.endswith("abcdefghijklmnop")
+
+    def test_senha_que_nao_parece_senha_de_app_nao_e_alterada(self, smtp_falso):
+        enviada = self._senha_enviada(smtp_falso, host="smtp.gmail.com", password="minha senha com espacos")
+
+        assert enviada.endswith("minha senha com espacos")
+
+    def test_outros_servidores_nunca_tem_a_senha_alterada(self, smtp_falso):
+        enviada = self._senha_enviada(smtp_falso, host="smtp.outro.com", password="abcd efgh ijkl mnop")
+
+        assert enviada.endswith("abcd efgh ijkl mnop")
 
 
 class TestLimites:
@@ -176,7 +232,7 @@ class TestErros:
         [
             ("ehlo", "iniciar a conversa"),
             ("starttls", "STARTTLS"),
-            ("login", "fazer o login"),
+            ("auth", "fazer o login"),
             ("send_message", "enviar a mensagem"),
         ],
     )
@@ -223,13 +279,44 @@ class TestErros:
         assert "enviar a mensagem" in texto
         assert "segredo-smtp" not in texto
 
-    def test_erro_de_login_continua_com_mensagem_fixa_sem_repetir_o_texto_do_servidor(self, smtp_falso):
-        smtp_falso.servidor.login.side_effect = smtplib.SMTPAuthenticationError(534, b"5.7.9 Application-specific password required")
+    def test_login_recusado_mostra_o_codigo_e_o_texto_do_servidor_com_uma_dica(self, smtp_falso):
+        smtp_falso.servidor.auth.side_effect = smtplib.SMTPAuthenticationError(
+            535, b"5.7.8 Username and Password not accepted. Learn more at\n 5.7.8 https://support.google.com/mail"
+        )
 
         with pytest.raises(EmailError) as erro:
             email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
 
-        assert str(erro.value) == "O servidor recusou o usuario ou a senha do SMTP."
+        mensagem = str(erro.value)
+        assert "recusou o usuario ou a senha (535)" in mensagem
+        assert "5.7.8 Username and Password not accepted" in mensagem
+        assert "senha de app de 16 letras" in mensagem
+
+    def test_google_pedindo_senha_de_app_explica_como_gerar(self, smtp_falso):
+        smtp_falso.servidor.auth.side_effect = smtplib.SMTPAuthenticationError(
+            534, b"5.7.9 Application-specific password required"
+        )
+
+        with pytest.raises(EmailError, match="myaccount.google.com/apppasswords"):
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+    def test_servidor_que_repete_a_senha_na_resposta_nao_a_mostra(self, smtp_falso):
+        smtp_falso.servidor.auth.side_effect = smtplib.SMTPAuthenticationError(535, b"senha segredo-smtp nao aceita")
+
+        with pytest.raises(EmailError) as erro:
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert "segredo-smtp" not in str(erro.value)
+        assert "***" in str(erro.value)
+
+    def test_o_log_do_login_recusado_tambem_nao_tem_a_senha(self, smtp_falso, caplog):
+        smtp_falso.servidor.auth.side_effect = smtplib.SMTPAuthenticationError(535, b"senha segredo-smtp nao aceita")
+
+        with caplog.at_level("WARNING", logger="app.core.email_sender"):
+            with pytest.raises(EmailError):
+                email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert "segredo-smtp" not in " ".join(r.getMessage() for r in caplog.records)
 
     def test_falha_de_conexao_tambem_e_traduzida(self):
         with patch.object(email_sender.smtplib, "SMTP", side_effect=socket.gaierror("nao resolve")):
@@ -237,7 +324,7 @@ class TestErros:
                 email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
 
     def test_a_senha_nunca_aparece_na_mensagem_de_erro(self, smtp_falso):
-        smtp_falso.servidor.login.side_effect = smtplib.SMTPAuthenticationError(535, b"senha segredo-smtp invalida")
+        smtp_falso.servidor.auth.side_effect = smtplib.SMTPAuthenticationError(535, b"senha segredo-smtp invalida")
 
         with pytest.raises(EmailError) as erro:
             email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")

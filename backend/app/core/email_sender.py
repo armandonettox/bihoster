@@ -71,6 +71,46 @@ def disallowed_recipients(settings_row, recipients: Sequence[str]) -> list[str]:
     return [r for r in recipients if r.rsplit("@", 1)[-1].lower() not in domains]
 
 
+def _login(server: smtplib.SMTP, username: str, password: str) -> None:
+    """Login com UM metodo so. O `smtplib.login()` tenta PLAIN e, se o servidor recusa a credencial, tenta
+    LOGIN em seguida; servidores como o Google fecham a conexao depois da primeira recusa, entao a segunda
+    tentativa estoura "conexao fechada" e esconde o motivo verdadeiro: a resposta 535 do servidor."""
+    offered = server.esmtp_features.get("auth", "").upper().split()
+    if "PLAIN" in offered:
+        server.auth("PLAIN", lambda challenge=None: f"\0{username}\0{password}", initial_response_ok=False)
+    elif "LOGIN" in offered:
+        server.user, server.password = username, password
+        server.auth("LOGIN", server.auth_login, initial_response_ok=False)
+    else:
+        server.login(username, password)  # outros metodos (ex: CRAM-MD5): o smtplib escolhe
+
+
+def _password_for(config: SmtpConfig) -> str:
+    """Senha a enviar. A senha de app do Google e mostrada em grupos de 4 letras separados por espaco, mas
+    sao 16 letras seguidas: quem copia com os espacos tem o login recusado. So para servidores do Google."""
+    password = config.password or ""
+    if config.host.lower().endswith("gmail.com"):
+        compact = "".join(password.split())
+        if len(compact) == 16 and compact.isalnum():
+            return compact
+    return password
+
+
+def _login_hint(code: int, detail: str) -> str:
+    """Dica do que conferir, conforme o que o servidor respondeu."""
+    if code == 534 or "5.7.9" in detail or "pplication-specific" in detail:
+        return (
+            "O Google exige uma senha de app: gere em myaccount.google.com/apppasswords, "
+            "com a verificacao em duas etapas ligada nessa conta."
+        )
+    if "5.7.8" in detail or code == 535:
+        return (
+            "Confira o usuario (o e-mail completo) e a senha. No Google use a senha de app de 16 letras, "
+            "nao a senha da conta."
+        )
+    return "Confira o usuario e a senha."
+
+
 def _short(value) -> str:
     """Texto curto e de uma linha so, pra mensagem e log (a resposta do servidor pode ter varias linhas)."""
     if isinstance(value, bytes):
@@ -133,11 +173,20 @@ def send_email(
                 server.ehlo()
         if config.username:
             stage = "fazer o login"
-            server.login(config.username, config.password or "")
+            _login(server, config.username, _password_for(config))
         stage = "enviar a mensagem"
         server.send_message(message)
-    except smtplib.SMTPAuthenticationError:
-        raise EmailError("O servidor recusou o usuario ou a senha do SMTP.") from None
+    except smtplib.SMTPAuthenticationError as exc:
+        # O texto vem do servidor (ex: "535 5.7.8 Username and Password not accepted") e diz o motivo
+        # real. Se algum servidor o repetir com a senha dentro, ela e coberta antes de aparecer.
+        detail = _short(exc.smtp_error)
+        for secret in {config.password or "", _password_for(config)}:
+            if secret:
+                detail = detail.replace(secret, "***")
+        logger.warning("SMTP: login recusado (%s): %s", exc.smtp_code, detail)
+        raise EmailError(
+            f"O servidor recusou o usuario ou a senha ({exc.smtp_code}): {detail} {_login_hint(exc.smtp_code, detail)}"
+        ) from None
     except smtplib.SMTPRecipientsRefused:
         raise EmailError("O servidor recusou um ou mais destinatarios.") from None
     except smtplib.SMTPSenderRefused:
