@@ -7,6 +7,7 @@ import type { Report } from "../api/reports";
 import * as workspacesApi from "../api/workspaces";
 import type { Workspace } from "../api/workspaces";
 import { makeReport, makeWorkspace } from "../test-fixtures";
+import { preloadPowerBi } from "../utils/powerbiService";
 import CollectionHome from "./CollectionHome";
 
 const mocks = vi.hoisted(() => ({
@@ -37,6 +38,7 @@ vi.mock("../components/ReportEmbed", () => ({
   default: ({ reportId }: { reportId: number }) => <div data-testid={`embed-${reportId}`} />,
 }));
 vi.mock("../components/ReportThumbnail", () => ({ default: () => null }));
+vi.mock("../utils/powerbiService", () => ({ preloadPowerBi: vi.fn() }));
 vi.mock("../components/LazyMount", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../components/NewReportForm", () => ({ default: () => null }));
 vi.mock("../components/EditCollectionModal", () => ({ default: () => null }));
@@ -132,6 +134,39 @@ describe("CollectionHome - carga e secoes", () => {
     await waitFor(() =>
       expect(mocks.showToast).toHaveBeenCalledWith("Nao foi possivel carregar os relatorios desta colecao.", "error"),
     );
+  });
+});
+
+describe("CollectionHome - carregar menos coisas ao mesmo tempo", () => {
+  it("pre-carrega o Power BI em segundo plano ao abrir a colecao", async () => {
+    await renderLoaded();
+
+    await waitFor(() => expect(preloadPowerBi).toHaveBeenCalledTimes(1));
+  });
+
+  it("no modo lista so o relatorio aberto fica montado; abrir outro desmonta o anterior", async () => {
+    await renderLoaded();
+    fireEvent.click(screen.getAllByTitle("Ver como lista")[0]);
+    expect(screen.queryByTestId("embed-1")).toBeNull();
+
+    fireEvent.click(screen.getByText("Vendas Mensal"));
+    expect(screen.getByTestId("embed-1")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Vendas Anual"));
+    expect(screen.queryByTestId("embed-1")).toBeNull();
+    expect(screen.getByTestId("embed-2")).toBeTruthy();
+    expect(screen.getAllByTestId(/^embed-/)).toHaveLength(1);
+  });
+
+  it("fechar o relatorio aberto desmonta o embed (nao fica escondido rodando)", async () => {
+    await renderLoaded();
+    fireEvent.click(screen.getAllByTitle("Ver como lista")[0]);
+    fireEvent.click(screen.getByText("Vendas Mensal"));
+    expect(screen.getByTestId("embed-1")).toBeTruthy();
+
+    fireEvent.click(screen.getByText("Vendas Mensal"));
+
+    expect(screen.queryByTestId("embed-1")).toBeNull();
   });
 });
 

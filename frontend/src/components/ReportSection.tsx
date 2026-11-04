@@ -13,7 +13,6 @@ export default function ReportSection({
   onViewModeChange,
   headerAction,
   activeReportId,
-  mountedReportIds,
   onToggleActive,
   onOpenFullscreen,
   renderActions,
@@ -24,7 +23,6 @@ export default function ReportSection({
   onViewModeChange: (mode: ViewMode) => void;
   headerAction?: ReactNode;
   activeReportId: number | null;
-  mountedReportIds: Set<number>;
   onToggleActive: (reportId: number) => void;
   onOpenFullscreen: (reportId: number) => void;
   renderActions: (report: Report, sectionReports: Report[]) => ReactNode;
@@ -66,15 +64,10 @@ export default function ReportSection({
                   {renderActions(report, reports)}
                 </div>
               </div>
-              {mountedReportIds.has(report.id) && (
-                <div
-                  style={{
-                    display: activeReportId === report.id ? "block" : "none",
-                    marginTop: 14,
-                    paddingTop: 14,
-                    borderTop: "1px solid var(--color-border)",
-                  }}
-                >
+              {/* So o relatorio aberto fica montado. Antes, os ja abertos ficavam vivos e escondidos, e
+                  cada um continuava rodando no navegador mesmo depois de fechado. */}
+              {activeReportId === report.id && (
+                <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--color-border)" }}>
                   <ReportEmbed reportId={report.id} height={360} />
                 </div>
               )}

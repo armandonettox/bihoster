@@ -124,7 +124,7 @@ describe("useCollectionReports - excluir", () => {
     expect(listReports).toHaveBeenCalledTimes(1);
   });
 
-  it("excluir o relatorio expandido limpa o expandido e desmonta o embed dele", async () => {
+  it("excluir o relatorio expandido deixa nenhum expandido", async () => {
     listReports.mockResolvedValueOnce([r1, r2]).mockResolvedValueOnce([r2]);
     const { result } = await setupLoaded();
     act(() => result.current.toggleActiveReport(1));
@@ -135,21 +135,27 @@ describe("useCollectionReports - excluir", () => {
     });
 
     expect(result.current.activeReportId).toBeNull();
-    expect(result.current.mountedReportIds.has(1)).toBe(false);
   });
 });
 
 describe("useCollectionReports - expandir", () => {
-  it("expande um relatorio e, ao fechar, mantem o embed montado (so escondido)", async () => {
+  it("expande um relatorio e fecha ao clicar de novo", async () => {
     const { result } = await setupLoaded();
 
     act(() => result.current.toggleActiveReport(1));
     expect(result.current.activeReportId).toBe(1);
-    expect(result.current.mountedReportIds.has(1)).toBe(true);
 
     act(() => result.current.toggleActiveReport(1));
     expect(result.current.activeReportId).toBeNull();
-    expect(result.current.mountedReportIds.has(1)).toBe(true);
+  });
+
+  it("so um relatorio fica expandido: abrir outro fecha o anterior", async () => {
+    const { result } = await setupLoaded();
+
+    act(() => result.current.toggleActiveReport(1));
+    act(() => result.current.toggleActiveReport(2));
+
+    expect(result.current.activeReportId).toBe(2);
   });
 
   it("trocar de colecao fecha o que estava expandido", async () => {
@@ -161,7 +167,6 @@ describe("useCollectionReports - expandir", () => {
     await waitFor(() => expect(result.current.reports).toEqual([]));
 
     expect(result.current.activeReportId).toBeNull();
-    expect(result.current.mountedReportIds.size).toBe(0);
   });
 });
 

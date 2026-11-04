@@ -12,7 +12,6 @@ export function useCollectionReports(workspaceId: number | undefined) {
   const [reports, setReports] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeReportId, setActiveReportId] = useState<number | null>(null);
-  const [mountedReportIds, setMountedReportIds] = useState<Set<number>>(new Set());
   const [movingReportId, setMovingReportId] = useState<number | null>(null);
 
   const loadRequestIdRef = useRef(0);
@@ -39,7 +38,6 @@ export function useCollectionReports(workspaceId: number | undefined) {
   useEffect(() => {
     setLoading(true);
     setActiveReportId(null);
-    setMountedReportIds(new Set());
     loadReports()
       .catch(() => showToast("Nao foi possivel carregar os relatorios desta colecao.", "error"))
       .finally(() => setLoading(false));
@@ -48,7 +46,6 @@ export function useCollectionReports(workspaceId: number | undefined) {
 
   function toggleActiveReport(reportId: number) {
     setActiveReportId((current) => (current === reportId ? null : reportId));
-    setMountedReportIds((current) => (current.has(reportId) ? current : new Set(current).add(reportId)));
   }
 
   async function deleteReport(reportId: number) {
@@ -60,12 +57,6 @@ export function useCollectionReports(workspaceId: number | undefined) {
       return;
     }
     if (activeReportId === reportId) setActiveReportId(null);
-    setMountedReportIds((current) => {
-      if (!current.has(reportId)) return current;
-      const next = new Set(current);
-      next.delete(reportId);
-      return next;
-    });
     // O servidor ja confirmou: tira da lista na hora, sem esperar uma segunda ida a rede, e
     // recarrega em segundo plano so pra alinhar com o servidor.
     setReports((current) => current.filter((r) => r.id !== reportId));
@@ -93,7 +84,6 @@ export function useCollectionReports(workspaceId: number | undefined) {
     loading,
     refreshReports,
     activeReportId,
-    mountedReportIds,
     toggleActiveReport,
     deleteReport,
     movingReportId,

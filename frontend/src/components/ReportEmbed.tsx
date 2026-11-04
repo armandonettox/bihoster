@@ -3,6 +3,8 @@ import * as pbi from "powerbi-client";
 import * as reportsApi from "../api/reports";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { extractErrorMessage } from "../api/client";
+import { createEmbedTimer } from "../utils/embedTiming";
+import { getPowerBiService, isPreloadStarted } from "../utils/powerbiService";
 
 // O backend so entrega um token novo depois que o do cache vence (5 min antes da expiracao real),
 // entao renova um pouco depois desse ponto, ainda com folga antes de o token vencer de verdade.
@@ -51,7 +53,11 @@ export default function ReportEmbed({
     let cancelled = false;
     setTabs([]);
     setActivePage(null);
-    let service: pbi.service.Service | null = null;
+    const timer = createEmbedTimer(reportId, { preloaded: isPreloadStarted() });
+    // O elemento e guardado agora: quando o cleanup roda, o React ja zerou containerRef.current, e o
+    // reset do servico compartilhado nunca seria chamado (os embeds ficariam registrados nele).
+    const container = containerRef.current;
+    let embedded = false;
     let renewTimer: ReturnType<typeof setTimeout> | null = null;
     setError(null);
     setLoading(true);
@@ -82,19 +88,16 @@ export default function ReportEmbed({
     reportsApi
       .getEmbedConfig(effectiveWorkspaceId, reportId)
       .then((config) => {
-        if (cancelled || !containerRef.current) return;
-
-        service = new pbi.service.Service(
-          pbi.factories.hpmFactory,
-          pbi.factories.wpmpFactory,
-          pbi.factories.routerFactory,
-        );
+        if (cancelled || !container) return;
+        timer.mark("config");
 
         // Abas escolhidas na hora de adicionar (nomes tecnicos do Power BI, nao os titulos).
         // Backend antigo so manda page_name.
         const selectedPages = config.page_names ?? (config.page_name ? [config.page_name] : []);
 
-        const embeddedReport = service.embed(containerRef.current, {
+        timer.mark("embed");
+        embedded = true;
+        const embeddedReport = getPowerBiService().embed(container, {
           type: "report",
           id: config.report_id,
           embedUrl: config.embed_url,
@@ -122,7 +125,17 @@ export default function ReportEmbed({
           if (newPage?.name) setActivePage(newPage.name);
         });
 
+        embeddedReport.on("rendered", () => {
+          timer.mark("rendered");
+          timer.finish();
+        });
+
+        embeddedReport.on("error", () => {
+          timer.finish(true);
+        });
+
         embeddedReport.on("loaded", async () => {
+          timer.mark("loaded");
           if (selectedPages.length > 1) {
             try {
               const pages = await embeddedReport.getPages();
@@ -154,6 +167,7 @@ export default function ReportEmbed({
       })
       .catch((err) => {
         if (cancelled) return;
+        timer.finish(true);
         setError(extractErrorMessage(err) || "Nao foi possivel carregar o relatorio do Power BI.");
       })
       .finally(() => {
@@ -164,8 +178,8 @@ export default function ReportEmbed({
       cancelled = true;
       embeddedRef.current = null;
       if (renewTimer) clearTimeout(renewTimer);
-      if (service && containerRef.current) {
-        service.reset(containerRef.current);
+      if (embedded && container) {
+        getPowerBiService().reset(container);
       }
     };
   }, [reportId, effectiveWorkspaceId]);

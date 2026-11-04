@@ -23,6 +23,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { safeStorage } from "../utils/safeStorage";
 import { useCollectionReports } from "../hooks/useCollectionReports";
 import { useTvInterval } from "../hooks/useTvInterval";
+import { preloadPowerBi } from "../utils/powerbiService";
 
 const SECTION_TITLES: Record<DisplayType, string> = {
   relatorio: "Relatorios",
@@ -48,7 +49,6 @@ export default function CollectionHome() {
     loading,
     refreshReports,
     activeReportId,
-    mountedReportIds,
     toggleActiveReport,
     deleteReport,
     movingReportId,
@@ -89,6 +89,13 @@ export default function CollectionHome() {
     if (workspaceId === undefined) return;
     homeApi.recordCollectionView(workspaceId).catch(() => {});
   }, [workspaceId]);
+
+  // Esquenta o Power BI em segundo plano logo depois de a pagina aparecer: quem entra numa colecao
+  // vai abrir um relatorio, e o primeiro abre mais rapido com os recursos ja no cache do navegador.
+  useEffect(() => {
+    const timer = window.setTimeout(preloadPowerBi, 300);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (!fullscreenReportId) return;
@@ -182,7 +189,6 @@ export default function CollectionHome() {
         onViewModeChange={changeViewMode}
         headerAction={headerAction}
         activeReportId={activeReportId}
-        mountedReportIds={mountedReportIds}
         onToggleActive={toggleActiveReport}
         onOpenFullscreen={setFullscreenReportId}
         renderActions={renderActions}
