@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import * as workspacesApi from "../api/workspaces";
 import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
+import FullscreenHeader from "../components/FullscreenHeader";
 import ReportEmbed from "../components/ReportEmbed";
 import SlideshowControls from "../components/SlideshowControls";
 import SlideshowProgress from "../components/SlideshowProgress";
@@ -28,7 +29,6 @@ export default function TvPlaylistPlayer() {
   const { workspaceId } = useParams();
   const id = Number(workspaceId);
 
-  const [collectionName, setCollectionName] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState(15);
   const [queue, setQueue] = useState<Report[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,7 +50,6 @@ export default function TvPlaylistPlayer() {
           if (!silent) setError("Colecao nao encontrada ou voce nao tem acesso a ela.");
           return;
         }
-        setCollectionName(workspace.name);
         setIntervalSeconds(workspace.tv_interval_seconds);
         const nextQueue = reports.filter((r) => r.display_type === "tv");
         // Mantem o mesmo array quando a lista nao mudou: trocar a referencia reiniciaria o
@@ -109,20 +108,21 @@ export default function TvPlaylistPlayer() {
 
   return (
     <div className="fullscreen-view">
-      <div className="fullscreen-view-header">
-        <div>
-          <span style={{ fontWeight: 700 }}>{collectionName}</span>
-          <span style={{ color: "var(--color-text-muted)", marginLeft: 10 }}>{current.name}</span>
-        </div>
-        <SlideshowControls
-          index={index}
-          count={queue.length}
-          paused={slideshow.paused}
-          onPrev={slideshow.prev}
-          onNext={slideshow.next}
-          onTogglePause={slideshow.togglePause}
-        />
-      </div>
+      {/* Pagina aberta numa aba propria (TV): sem botao Sair, so a logo, o nome e os controles */}
+      <FullscreenHeader
+        title={current.name}
+        showTitle
+        controls={
+          <SlideshowControls
+            index={index}
+            count={queue.length}
+            paused={slideshow.paused}
+            onPrev={slideshow.prev}
+            onNext={slideshow.next}
+            onTogglePause={slideshow.togglePause}
+          />
+        }
+      />
       {queue.length > 1 && <SlideshowProgress countdown={slideshow.countdown} paused={slideshow.paused} />}
       <div className="fullscreen-view-body">
         <ReportEmbed key={current.id} reportId={current.id} workspaceId={id} height="100%" />

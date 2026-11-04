@@ -1,11 +1,11 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import * as homeApi from "../api/home";
 import { useFavorites } from "../context/FavoritesContext";
 import type { DisplayType, Report } from "../api/reports";
 import { useWorkspace } from "../context/WorkspaceContext";
 import NewReportForm from "../components/NewReportForm";
 import FullscreenReportView from "../components/FullscreenReportView";
-import FullscreenSingleReport from "../components/FullscreenSingleReport";
 import EditCollectionModal from "../components/EditCollectionModal";
 import RefreshDetailsModal from "../components/RefreshDetailsModal";
 import KebabMenu from "../components/KebabMenu";
@@ -61,8 +61,13 @@ export default function CollectionHome() {
   const [editingCollection, setEditingCollection] = useState(false);
   const [showingRefreshDetails, setShowingRefreshDetails] = useState(false);
   const [confirmingDeleteReportId, setConfirmingDeleteReportId] = useState<number | null>(null);
-  const [fullscreenSection, setFullscreenSection] = useState<"apresentacao" | "tv" | null>(null);
-  const [fullscreenReportId, setFullscreenReportId] = useState<number | null>(null);
+  const navigate = useNavigate();
+  const location = useLocation();
+  // A tela cheia da Apresentacao e do Modo TV fica no historico do navegador (state da navegacao):
+  // o Voltar sai dela e o F5 nao joga a pessoa de volta pra colecao. O relatorio avulso e uma
+  // pagina propria (ver pages/ReportFullscreen.tsx).
+  const fullscreenSection =
+    (location.state as { fullscreen?: "apresentacao" | "tv" } | null)?.fullscreen ?? null;
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (safeStorage.getItem(VIEW_MODE_KEY) as ViewMode) || "icon"
   );
@@ -77,12 +82,10 @@ export default function CollectionHome() {
   const canWrite = role === "admin" || role === "editor";
   const isAdmin = role === "admin";
 
-  // O filtro, a tela cheia e a janela de atualizacoes sao da colecao aberta: ao trocar, comecam limpos
+  // O filtro e a janela de atualizacoes sao da colecao aberta: ao trocar, comecam limpos
   useEffect(() => {
     setFilter("");
     setShowingRefreshDetails(false);
-    setFullscreenSection(null);
-    setFullscreenReportId(null);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -96,15 +99,6 @@ export default function CollectionHome() {
     const timer = window.setTimeout(preloadPowerBi, 300);
     return () => window.clearTimeout(timer);
   }, []);
-
-  useEffect(() => {
-    if (!fullscreenReportId) return;
-    function handleKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") setFullscreenReportId(null);
-    }
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [fullscreenReportId]);
 
   if (!currentWorkspace) return null;
 
@@ -122,25 +116,22 @@ export default function CollectionHome() {
   const shownTv = filterByName(tvReports, filter, (r) => r.name);
   const shownTotal = shownRelatorio.length + shownPainel.length + shownApresentacao.length + shownTv.length;
 
+  // Abrir um relatorio em tela cheia e ir para a pagina dele (o Voltar do navegador sai)
+  function openReport(reportId: number) {
+    navigate(`/collection/${currentWorkspace!.id}/report/${reportId}`);
+  }
+
+  function openSection(section: "apresentacao" | "tv") {
+    navigate(location.pathname + location.search, { state: { fullscreen: section } });
+  }
+
   if (fullscreenSection) {
     return (
       <FullscreenReportView
         mode={fullscreenSection}
-        collectionName={currentWorkspace.name}
         reports={fullscreenSection === "apresentacao" ? apresentacaoReports : tvReports}
         tvIntervalSeconds={currentWorkspace.tv_interval_seconds}
-        onExit={() => setFullscreenSection(null)}
-      />
-    );
-  }
-
-  const fullscreenReport = fullscreenReportId ? reports.find((r) => r.id === fullscreenReportId) : null;
-  if (fullscreenReport) {
-    return (
-      <FullscreenSingleReport
-        collectionName={currentWorkspace.name}
-        report={fullscreenReport}
-        onExit={() => setFullscreenReportId(null)}
+        onExit={() => navigate(-1)}
       />
     );
   }
@@ -190,7 +181,7 @@ export default function CollectionHome() {
         headerAction={headerAction}
         activeReportId={activeReportId}
         onToggleActive={toggleActiveReport}
-        onOpenFullscreen={setFullscreenReportId}
+        onOpenFullscreen={openReport}
         renderActions={renderActions}
       />
     );
@@ -264,7 +255,7 @@ export default function CollectionHome() {
           {section(
             "apresentacao",
             shownApresentacao,
-            <button className="btn btn-secondary btn-sm" onClick={() => setFullscreenSection("apresentacao")}>
+            <button className="btn btn-secondary btn-sm" onClick={() => openSection("apresentacao")}>
               <span className="material-symbols-outlined" style={{ fontSize: 16, verticalAlign: "middle", marginRight: 4 }}>
                 play_arrow
               </span>
@@ -281,11 +272,11 @@ export default function CollectionHome() {
                 intervalDraft={tvInterval.draft}
                 onIntervalChange={tvInterval.setDraft}
                 onIntervalCommit={tvInterval.commit}
-                onOpenTv={() => setFullscreenSection("tv")}
+                onOpenTv={() => openSection("tv")}
               />
               <ReportIconGrid
                 reports={shownTv}
-                onOpenFullscreen={setFullscreenReportId}
+                onOpenFullscreen={openReport}
                 renderActions={renderActions}
               />
             </>

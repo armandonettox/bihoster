@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as homeApi from "../api/home";
 import * as reportsApi from "../api/reports";
@@ -69,12 +70,30 @@ const REPORTS: Report[] = [
   makeReport(8, { name: "TV Loja 2", display_type: "tv" }),
 ];
 
+// Pagina de mentira da tela cheia de um relatorio: mostra os numeros que vieram no endereco
+function PaginaDoRelatorio() {
+  const { workspaceId, reportId } = useParams();
+  return <div data-testid="pagina-relatorio">{`${workspaceId}/${reportId}`}</div>;
+}
+
+/** A colecao dentro de um roteador de memoria, com a rota da pagina de tela cheia do relatorio */
+function montar(entrada: string | { pathname: string; state?: unknown } = "/collection") {
+  return (
+    <MemoryRouter initialEntries={[entrada]}>
+      <Routes>
+        <Route path="/collection" element={<CollectionHome />} />
+        <Route path="/collection/:workspaceId/report/:reportId" element={<PaginaDoRelatorio />} />
+      </Routes>
+    </MemoryRouter>
+  );
+}
+
 function comRole(role: Workspace["role"]) {
   mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role, tv_interval_seconds: 15 });
 }
 
 async function renderLoaded() {
-  const utils = render(<CollectionHome />);
+  const utils = render(montar());
   await screen.findByRole("heading", { name: "Relatorios" });
   return utils;
 }
@@ -97,7 +116,7 @@ beforeEach(() => {
 describe("CollectionHome - carga e secoes", () => {
   it("nao renderiza nada nem chama a API sem colecao selecionada", () => {
     mocks.workspace = null;
-    const { container } = render(<CollectionHome />);
+    const { container } = render(montar());
 
     expect(container.firstChild).toBeNull();
     expect(listReports).not.toHaveBeenCalled();
@@ -122,14 +141,14 @@ describe("CollectionHome - carga e secoes", () => {
 
   it("avisa quando uma colecao nao tem relatorios", async () => {
     listReports.mockResolvedValue([]);
-    render(<CollectionHome />);
+    render(montar());
 
     expect(await screen.findByText("Nenhum relatorio nesta colecao ainda.")).toBeTruthy();
   });
 
   it("avisa com um toast quando a lista nao carrega", async () => {
     listReports.mockRejectedValue(new Error("rede"));
-    render(<CollectionHome />);
+    render(montar());
 
     await waitFor(() =>
       expect(mocks.showToast).toHaveBeenCalledWith("Nao foi possivel carregar os relatorios desta colecao.", "error"),
@@ -264,7 +283,7 @@ describe("CollectionHome - filtro por nome", () => {
     expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("Estoque");
 
     mocks.workspace = makeWorkspace({ id: 9, name: "Outra colecao" });
-    rerender(<CollectionHome />);
+    rerender(montar());
 
     await waitFor(() => expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe(""));
   });
@@ -312,18 +331,23 @@ describe("CollectionHome - reordenar", () => {
 });
 
 describe("CollectionHome - tela cheia", () => {
-  it("abre um relatorio em tela cheia ao clicar no card e sai com Esc", async () => {
+  it("clicar no cartao abre a pagina propria do relatorio, com colecao e relatorio no endereco", async () => {
     await renderLoaded();
 
     fireEvent.click(screen.getByText("Vendas Mensal").closest('[role="button"]') as HTMLElement);
 
-    expect(screen.getByRole("button", { name: "Sair (Esc)" })).toBeTruthy();
-    expect(screen.getByTestId("embed-1")).toBeTruthy();
+    expect(screen.getByTestId("pagina-relatorio").textContent).toBe("3/1");
+    expect(screen.queryByRole("heading", { name: "Colecao Vendas" })).toBeNull();
+  });
 
-    fireEvent.keyDown(document, { key: "Escape" });
+  it("no modo lista, o botao de tela cheia do relatorio aberto tambem vai para a pagina dele", async () => {
+    await renderLoaded();
+    fireEvent.click(screen.getAllByTitle("Ver como lista")[0]);
+    fireEvent.click(screen.getByText("Vendas Anual"));
 
-    expect(screen.queryByRole("button", { name: "Sair (Esc)" })).toBeNull();
-    expect(screen.getByRole("heading", { name: "Colecao Vendas" })).toBeTruthy();
+    fireEvent.click(screen.getByTitle("Tela cheia"));
+
+    expect(screen.getByTestId("pagina-relatorio").textContent).toBe("3/2");
   });
 
   it("o Modo TV usa a lista completa mesmo com a pagina filtrada", async () => {
@@ -345,6 +369,14 @@ describe("CollectionHome - tela cheia", () => {
     fireEvent.click(screen.getByRole("button", { name: "sair da secao" }));
     expect(screen.queryByTestId("fullscreen-section")).toBeNull();
     expect(screen.getByRole("heading", { name: "Colecao Vendas" })).toBeTruthy();
+  });
+
+  it("a tela cheia da TV fica no historico: recarregar a pagina nao joga de volta pra colecao", async () => {
+    // Uma entrada do historico que ja traz a tela cheia, como acontece depois do F5
+    render(montar({ pathname: "/collection", state: { fullscreen: "tv" } }));
+
+    expect(await screen.findByTestId("fullscreen-section")).toBeTruthy();
+    expect(screen.getByTestId("fullscreen-section").textContent).toContain("tv:2");
   });
 });
 

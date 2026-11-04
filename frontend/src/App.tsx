@@ -23,6 +23,7 @@ const CollectionHome = lazy(() => import("./pages/CollectionHome"));
 const Settings = lazy(() => import("./pages/Settings"));
 const WorkspaceOnboarding = lazy(() => import("./pages/WorkspaceOnboarding"));
 const TvPlaylistPlayer = lazy(() => import("./pages/TvPlaylistPlayer"));
+const ReportFullscreen = lazy(() => import("./pages/ReportFullscreen"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function WorkspaceGate() {
@@ -58,6 +59,16 @@ function RoutedContent() {
             <ProtectedRoute>
               <WorkspaceProvider>
                 <TvPlaylistPlayer />
+              </WorkspaceProvider>
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/collection/:workspaceId/report/:reportId"
+          element={
+            <ProtectedRoute>
+              <WorkspaceProvider>
+                <ReportFullscreen />
               </WorkspaceProvider>
             </ProtectedRoute>
           }

@@ -35,6 +35,11 @@ export async function listReports(workspaceId: number): Promise<Report[]> {
   return data;
 }
 
+export async function getReport(workspaceId: number, id: number): Promise<Report> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/reports/${id}`);
+  return data;
+}
+
 export async function createReport(workspaceId: number, input: ReportInput): Promise<Report> {
   const { data } = await api.post(`/workspaces/${workspaceId}/reports/`, input);
   return data;

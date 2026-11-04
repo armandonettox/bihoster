@@ -1614,10 +1614,106 @@ table.table tr:last-child td {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 10px 20px;
+  gap: 16px;
+  padding: 8px 20px;
   border-bottom: 1px solid var(--color-border);
   background-color: var(--color-surface);
   flex-shrink: 0;
+}
+
+/* Esquerda e direita dividem o espaco igualmente: assim a faixa de acoes fica no centro de verdade */
+.fullscreen-header-brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.fullscreen-header-logo {
+  height: 26px;
+  width: auto;
+  max-width: 180px;
+  object-fit: contain;
+  border-radius: 4px;
+}
+
+.fullscreen-header-title {
+  font-weight: 600;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.fullscreen-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.fullscreen-header-end {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+/* Botao de sair: contorno, icone e a tecla ao lado, pra parecer clicavel e dizer o atalho */
+.fullscreen-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px 6px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background-color: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.fullscreen-exit .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.fullscreen-exit:hover {
+  background-color: var(--color-surface-hover);
+  border-color: var(--color-text-muted);
+}
+
+.fullscreen-exit:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.fullscreen-exit kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--color-border);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background-color: var(--color-bg);
+  color: var(--color-text-muted);
+  font-family: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+/* Tela estreita: some o texto "Sair" e a tecla, fica so o icone */
+@media (max-width: 600px) {
+  .fullscreen-exit span:not(.material-symbols-outlined),
+  .fullscreen-exit kbd {
+    display: none;
+  }
+  .fullscreen-header-title {
+    display: none;
+  }
 }
 
 /* Barra fina que enche ate a proxima troca de relatorio (Modo TV). O temporizador de verdade e o
