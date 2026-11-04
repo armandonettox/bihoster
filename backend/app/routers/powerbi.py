@@ -118,6 +118,14 @@ def _get_report_static(connection: PowerBIConnection, workspace_id: int, report:
     return static
 
 
+def get_report_static_fresh(connection, workspace_id: int, report: Report) -> dict:
+    """Igual a _get_report_static, mas IGNORA o cache e consulta o estado atual no Power BI. E o que se
+    usa quando o dado sai por e-mail: pra exibir na tela, ate 30 minutos de atraso na checagem de RLS
+    e aceitavel; pra mandar o relatorio pra fora, nao e (se o RLS for ligado, o envio tem que parar)."""
+    _report_static_cache.pop((workspace_id, report.id), None)
+    return _get_report_static(connection, workspace_id, report)
+
+
 def _generate_embed_config(
     connection: PowerBIConnection, workspace_id: int, report: Report, username: Optional[str]
 ) -> tuple[EmbedConfig, bool]:

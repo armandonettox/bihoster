@@ -94,6 +94,33 @@ class TestRunDelivery:
         assert (smtp, destinatarios, assunto, corpo) == (SMTP, ["a@x.com"], "Assunto", "Corpo")
         assert anexos == [Attachment("Vendas.pdf", b"%PDF-dados", "application/pdf")]
 
+    def test_imagem_de_varias_paginas_chega_como_zip(self):
+        job = report_delivery.create_job(1)
+        with patch.object(powerbi, "export_report", return_value=b"PK\x03\x04dados-zip"), patch.object(
+            report_delivery, "send_email"
+        ) as enviar:
+            report_delivery.run_delivery(**_entrega(job, fmt="PNG"))
+
+        assert enviar.call_args.args[4] == [Attachment("Vendas.zip", b"PK\x03\x04dados-zip", "application/zip")]
+
+    def test_imagem_de_uma_pagina_continua_png(self):
+        job = report_delivery.create_job(1)
+        with patch.object(powerbi, "export_report", return_value=b"\x89PNG\r\n\x1a\ndados"), patch.object(
+            report_delivery, "send_email"
+        ) as enviar:
+            report_delivery.run_delivery(**_entrega(job, fmt="PNG"))
+
+        assert enviar.call_args.args[4] == [Attachment("Vendas.png", b"\x89PNG\r\n\x1a\ndados", "image/png")]
+
+    def test_o_zip_so_vale_para_imagem_o_pdf_nunca_muda_de_tipo(self):
+        job = report_delivery.create_job(1)
+        with patch.object(powerbi, "export_report", return_value=b"PK\x03\x04"), patch.object(
+            report_delivery, "send_email"
+        ) as enviar:
+            report_delivery.run_delivery(**_entrega(job, fmt="PDF"))
+
+        assert enviar.call_args.args[4][0].mimetype == "application/pdf"
+
     def test_sem_abas_escolhidas_exporta_o_relatorio_inteiro(self):
         job = report_delivery.create_job(1)
         with patch.object(powerbi, "export_report", return_value=b"x") as exportar, patch.object(report_delivery, "send_email"):

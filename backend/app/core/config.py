@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     # ninguem usando o portal.
     cache_warmup_enabled: bool = True
     cache_warmup_interval_seconds: int = 240
+    # Agendador das assinaturas de relatorio (envio recorrente por e-mail). Desligue com
+    # SUBSCRIPTIONS_ENABLED=false se quiser que nenhum envio programado rode neste servidor.
+    subscriptions_enabled: bool = True
 
     class Config:
         env_file = ".env"

@@ -7,6 +7,7 @@ from app.core.workspace_deps import require_workspace_member, require_workspace_
 from app.models.favorite import Favorite
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
+from app.models.subscription import delete_subscriptions_of_reports
 from app.models.user import User, UserRole
 from app.routers.powerbi import invalidate_embed_cache
 from app.schemas.report import ReportCreate, ReportMove, ReportOut, ReportUpdate, resolve_page_names
@@ -144,6 +145,7 @@ def delete_report(
 
     report_name = report.name
     db.query(Favorite).filter(Favorite.report_id == report_id).delete(synchronize_session=False)
+    delete_subscriptions_of_reports(db, [report_id])
     db.delete(report)
     db.commit()
     invalidate_embed_cache(workspace_id, report_id)

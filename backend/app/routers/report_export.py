@@ -75,7 +75,7 @@ def export_and_email(
         raise HTTPException(status_code=400, detail="Esse e-mail esta fora dos dominios permitidos.")
 
     connection = embed_router._get_connection_or_error(db, report)
-    static = embed_router._get_report_static(connection, workspace_id, report)
+    static = embed_router.get_report_static_fresh(connection, workspace_id, report)
     if static["needs_identity"]:
         raise HTTPException(
             status_code=400,

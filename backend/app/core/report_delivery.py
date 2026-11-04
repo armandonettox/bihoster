@@ -109,6 +109,9 @@ def run_delivery(
             )
         job.status, job.message = "sending", "Enviando o e-mail..."
         mimetype, extension = powerbi.EXPORT_FORMATS[fmt]
+        if fmt == "PNG" and data[:4] == b"PK":
+            # Relatorio com varias paginas: o Power BI entrega um zip com uma imagem por pagina
+            mimetype, extension = "application/zip", ".zip"
         send_email(
             smtp,
             list(recipients),
