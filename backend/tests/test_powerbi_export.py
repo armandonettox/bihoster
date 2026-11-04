@@ -22,6 +22,22 @@ def token_da_azure():
         yield
 
 
+class TestGetExportStatus:
+    def test_202_e_exportacao_em_andamento_e_nao_erro(self):
+        corpo = {"status": "Running", "percentComplete": 40}
+        with patch.object(powerbi._http, "get", return_value=_resp(202, corpo)):
+            assert powerbi.get_export_status(CONEXAO, "ws", "rel", "exp-1") == corpo
+
+    def test_200_e_exportacao_pronta(self):
+        with patch.object(powerbi._http, "get", return_value=_resp(200, {"status": "Succeeded"})):
+            assert powerbi.get_export_status(CONEXAO, "ws", "rel", "exp-1")["status"] == "Succeeded"
+
+    def test_outros_codigos_continuam_sendo_erro(self):
+        with patch.object(powerbi._http, "get", return_value=_resp(404)):
+            with pytest.raises(powerbi.PowerBIError, match="consultar a exportacao"):
+                powerbi.get_export_status(CONEXAO, "ws", "rel", "exp-1")
+
+
 class TestStartExport:
     def test_pede_o_formato_e_devolve_o_id(self):
         with patch.object(powerbi._http, "post", return_value=_resp(202, {"id": "exp-1"})) as post:

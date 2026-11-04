@@ -241,7 +241,8 @@ def start_export(
 def get_export_status(connection: PowerBIConnection, workspace_id: str, report_id: str, export_id: str) -> dict:
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/exports/{export_id}"
     response = _http.get(url, headers=_headers(connection))
-    if response.status_code != 200:
+    # O Power BI responde 202 enquanto a exportacao roda (com o andamento no corpo) e 200 ao terminar
+    if response.status_code not in (200, 202):
         raise PowerBIError(f"Falha ao consultar a exportacao: {_error_detail(response)}")
     return response.json()
 
