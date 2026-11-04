@@ -21,6 +21,7 @@ import { useToast } from "../context/ToastContext";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { safeStorage } from "../utils/safeStorage";
 import { useCollectionReports } from "../hooks/useCollectionReports";
+import { useCollectionRefreshInfo } from "../hooks/useCollectionRefreshInfo";
 import { useTvInterval } from "../hooks/useTvInterval";
 
 const SECTION_TITLES: Record<DisplayType, string> = {
@@ -53,6 +54,10 @@ export default function CollectionHome() {
     movingReportId,
     moveReport,
   } = useCollectionReports(workspaceId);
+  const refreshInfo = useCollectionRefreshInfo(
+    workspaceId,
+    reports.map((r) => r.id),
+  );
   const tvInterval = useTvInterval(currentWorkspace, reloadWorkspaces);
 
   const [creatingReport, setCreatingReport] = useState(false);
@@ -175,7 +180,7 @@ export default function CollectionHome() {
       <ReportSection
         title={SECTION_TITLES[type]}
         reports={sectionReports}
-        workspaceId={currentWorkspace!.id}
+        refreshInfo={refreshInfo}
         viewMode={viewMode}
         onViewModeChange={changeViewMode}
         headerAction={headerAction}
@@ -270,7 +275,7 @@ export default function CollectionHome() {
               />
               <ReportIconGrid
                 reports={shownTv}
-                workspaceId={currentWorkspace.id}
+                refreshInfo={refreshInfo}
                 onOpenFullscreen={setFullscreenReportId}
                 renderActions={renderActions}
               />

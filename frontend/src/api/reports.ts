@@ -72,8 +72,10 @@ export interface RefreshInfo {
   next_refresh: string | null;
 }
 
-export async function getRefreshInfo(workspaceId: number, reportId: number): Promise<RefreshInfo> {
-  const { data } = await api.get(`/workspaces/${workspaceId}/powerbi/reports/${reportId}/refresh-info`);
+/** Ultima e proxima atualizacao de todos os relatorios da colecao, numa chamada so. A chave do
+ * resultado e o id do relatorio (como texto). */
+export async function getCollectionRefreshInfo(workspaceId: number): Promise<Record<string, RefreshInfo>> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/powerbi/refresh-info`);
   return data;
 }
 

@@ -24,7 +24,12 @@ vi.mock("../context/FavoritesContext", () => ({
   useFavorites: () => ({ favoriteIds: new Set<number>(), toggleFavorite: mocks.toggleFavorite }),
 }));
 vi.mock("../api/home", () => ({ recordCollectionView: vi.fn() }));
-vi.mock("../api/reports", () => ({ listReports: vi.fn(), deleteReport: vi.fn(), moveReport: vi.fn() }));
+vi.mock("../api/reports", () => ({
+  listReports: vi.fn(),
+  deleteReport: vi.fn(),
+  moveReport: vi.fn(),
+  getCollectionRefreshInfo: vi.fn(),
+}));
 vi.mock("../api/workspaces", () => ({ updateWorkspace: vi.fn() }));
 
 // Componentes que falam com o Power BI ou com a rede viram stubs; o resto da pagina roda de verdade
@@ -32,7 +37,6 @@ vi.mock("../components/ReportEmbed", () => ({
   default: ({ reportId }: { reportId: number }) => <div data-testid={`embed-${reportId}`} />,
 }));
 vi.mock("../components/ReportThumbnail", () => ({ default: () => null }));
-vi.mock("../components/ReportRefreshInfo", () => ({ default: () => null }));
 vi.mock("../components/LazyMount", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../components/NewReportForm", () => ({ default: () => null }));
 vi.mock("../components/EditCollectionModal", () => ({ default: () => null }));
@@ -49,6 +53,7 @@ const listReports = vi.mocked(reportsApi.listReports);
 const moveReport = vi.mocked(reportsApi.moveReport);
 const updateWorkspace = vi.mocked(workspacesApi.updateWorkspace);
 const recordCollectionView = vi.mocked(homeApi.recordCollectionView);
+const getCollectionRefreshInfo = vi.mocked(reportsApi.getCollectionRefreshInfo);
 
 // 8 relatorios: o campo de filtro so aparece a partir de 6
 const REPORTS: Report[] = [
@@ -84,6 +89,7 @@ beforeEach(() => {
   mocks.showToast.mockClear();
   listReports.mockResolvedValue(REPORTS);
   recordCollectionView.mockResolvedValue(undefined);
+  getCollectionRefreshInfo.mockResolvedValue({});
 });
 
 describe("CollectionHome - carga e secoes", () => {
@@ -126,6 +132,34 @@ describe("CollectionHome - carga e secoes", () => {
     await waitFor(() =>
       expect(mocks.showToast).toHaveBeenCalledWith("Nao foi possivel carregar os relatorios desta colecao.", "error"),
     );
+  });
+});
+
+describe("CollectionHome - ultima atualizacao", () => {
+  it("busca a info de atualizacao da colecao inteira numa requisicao so, nao uma por card", async () => {
+    await renderLoaded();
+
+    await waitFor(() => expect(getCollectionRefreshInfo).toHaveBeenCalledTimes(1));
+    expect(getCollectionRefreshInfo).toHaveBeenCalledWith(3);
+  });
+
+  it("mostra a ultima atualizacao no card do relatorio que tem a info", async () => {
+    getCollectionRefreshInfo.mockResolvedValue({
+      "1": { last_refresh: "2026-11-03T12:00:00Z", next_refresh: null },
+    });
+    await renderLoaded();
+
+    expect(await screen.findByText(/Ultima atualizacao/)).toBeTruthy();
+    expect(screen.getAllByText(/Ultima atualizacao/)).toHaveLength(1);
+  });
+
+  it("segue funcionando quando a info de atualizacao falha", async () => {
+    getCollectionRefreshInfo.mockRejectedValue(new Error("502"));
+    await renderLoaded();
+
+    await waitFor(() => expect(getCollectionRefreshInfo).toHaveBeenCalled());
+    expect(screen.queryByText(/Ultima atualizacao/)).toBeNull();
+    expect(screen.getByRole("heading", { name: "Colecao Vendas" })).toBeTruthy();
   });
 });
 

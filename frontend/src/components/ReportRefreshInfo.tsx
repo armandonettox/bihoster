@@ -1,25 +1,9 @@
-import { useEffect, useState } from "react";
-import * as reportsApi from "../api/reports";
+import type { RefreshInfo } from "../api/reports";
 import { formatDateTime } from "../utils/datetime";
 
-export default function ReportRefreshInfo({ workspaceId, reportId }: { workspaceId: number; reportId: number }) {
-  const [info, setInfo] = useState<reportsApi.RefreshInfo | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    reportsApi
-      .getRefreshInfo(workspaceId, reportId)
-      .then((data) => {
-        if (!cancelled) setInfo(data);
-      })
-      .catch(() => {
-        if (!cancelled) setInfo(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [workspaceId, reportId]);
-
+/** Mostra a ultima e a proxima atualizacao do relatorio. Recebe o dado pronto: a tela da colecao
+ * busca tudo de uma vez, em vez de cada card fazer a propria requisicao. */
+export default function ReportRefreshInfo({ info }: { info?: RefreshInfo | null }) {
   if (!info || (!info.last_refresh && !info.next_refresh)) return null;
 
   return (
