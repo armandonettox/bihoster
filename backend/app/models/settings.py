@@ -32,3 +32,17 @@ class AppSettings(Base):
     google_client_id = Column(String, nullable=True)
     google_client_secret = Column(EncryptedString, nullable=True)  # cifrado em repouso, nunca exposto pela API publica
     google_allowed_domains = Column(String, nullable=True)  # dominios separados por virgula, ex: "empresa.com,empresa.com.br"
+
+    # Servidor de e-mail (SMTP) usado pelas assinaturas de relatorio. Tudo nullable: a migracao
+    # automatica so acrescenta colunas nulaveis, e e-mail nao configurado e um estado valido.
+    # Nada disto entra em SettingsOut (a rota de configuracoes e publica): so as rotas de
+    # /settings/email, restritas a administradores, leem e gravam.
+    smtp_host = Column(String, nullable=True)
+    smtp_port = Column(Integer, nullable=True)
+    smtp_security = Column(String, nullable=True)  # "starttls", "ssl" ou "none"
+    smtp_username = Column(String, nullable=True)
+    smtp_password = Column(EncryptedString, nullable=True)  # cifrado em repouso, nunca devolvido pela API
+    smtp_from_email = Column(String, nullable=True)
+    smtp_from_name = Column(String, nullable=True)
+    # Dominios que podem receber e-mail do sistema, separados por virgula. Vazio = qualquer um.
+    email_allowed_domains = Column(String, nullable=True)

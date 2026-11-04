@@ -22,12 +22,14 @@ from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
     audit,
     auth,
+    email_settings,
     favorites,
     groups,
     home,
     powerbi,
     powerbi_catalog,
     powerbi_connections,
+    report_export,
     reports,
     search,
     system,
@@ -171,6 +173,8 @@ app.include_router(powerbi_connections.router)
 app.include_router(audit.router)
 app.include_router(audit.workspace_router)
 app.include_router(settings_router.router)
+app.include_router(email_settings.router)
+app.include_router(report_export.router)
 app.include_router(favorites.router)
 app.include_router(users.router)
 app.include_router(home.router)

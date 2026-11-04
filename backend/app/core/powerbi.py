@@ -1,6 +1,7 @@
 import threading
+import time
 from datetime import datetime, timedelta, timezone
-from typing import Optional, TypeVar
+from typing import Callable, Optional, TypeVar
 
 import httpx
 
@@ -198,6 +199,98 @@ def get_refresh_history(connection: PowerBIConnection, workspace_id: str, datase
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao buscar historico de atualizacao: {_error_detail(response)}")
     return response.json().get("value", [])
+
+
+# --- Exportar relatorio para arquivo (API ExportTo do Power BI) -----------------------------------
+# So funciona em capacidade dedicada (Premium, Embedded ou Fabric); sem ela a API responde erro, que
+# sobe como PowerBIError com o detalhe devolvido pelo Power BI.
+
+# formato -> (tipo MIME, extensao)
+EXPORT_FORMATS = {
+    "PDF": ("application/pdf", ".pdf"),
+    "PNG": ("image/png", ".png"),
+    "PPTX": ("application/vnd.openxmlformats-officedocument.presentationml.presentation", ".pptx"),
+}
+# Acima disso o arquivo nao cabe como anexo na maioria dos servidores de e-mail
+MAX_EXPORT_BYTES = 20 * 1024 * 1024
+EXPORT_TIMEOUT_SECONDS = 300
+EXPORT_POLL_SECONDS = 3
+
+
+def start_export(
+    connection: PowerBIConnection,
+    workspace_id: str,
+    report_id: str,
+    fmt: str = "PDF",
+    page_names: Optional[list[str]] = None,
+) -> str:
+    """Pede ao Power BI que exporte o relatorio e devolve o id da exportacao. `page_names` limita
+    as abas exportadas (vazio = o relatorio inteiro)."""
+    if fmt not in EXPORT_FORMATS:
+        raise PowerBIError(f"Formato de exportacao desconhecido: {fmt}")
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/ExportTo"
+    body: dict = {"format": fmt}
+    if page_names:
+        body["powerBIReportConfiguration"] = {"pages": [{"pageName": name} for name in page_names]}
+    response = _http.post(url, headers=_headers(connection), json=body)
+    if response.status_code not in (200, 202):
+        raise PowerBIError(f"Falha ao iniciar a exportacao do relatorio: {_error_detail(response)}")
+    return response.json()["id"]
+
+
+def get_export_status(connection: PowerBIConnection, workspace_id: str, report_id: str, export_id: str) -> dict:
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/exports/{export_id}"
+    response = _http.get(url, headers=_headers(connection))
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao consultar a exportacao: {_error_detail(response)}")
+    return response.json()
+
+
+def download_export(connection: PowerBIConnection, workspace_id: str, report_id: str, export_id: str) -> bytes:
+    """Baixa o arquivo pronto, parando se passar do limite de tamanho (sem carregar tudo na memoria)."""
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/exports/{export_id}/file"
+    chunks: list[bytes] = []
+    total = 0
+    with _http.stream("GET", url, headers=_headers(connection)) as response:
+        if response.status_code != 200:
+            response.read()
+            raise PowerBIError(f"Falha ao baixar o arquivo exportado: {_error_detail(response)}")
+        for chunk in response.iter_bytes():
+            total += len(chunk)
+            if total > MAX_EXPORT_BYTES:
+                raise PowerBIError("O arquivo exportado passa de 20 MB, acima do que um e-mail costuma aceitar.")
+            chunks.append(chunk)
+    return b"".join(chunks)
+
+
+def export_report(
+    connection: PowerBIConnection,
+    workspace_id: str,
+    report_id: str,
+    fmt: str = "PDF",
+    page_names: Optional[list[str]] = None,
+    timeout_seconds: float = EXPORT_TIMEOUT_SECONDS,
+    poll_seconds: float = EXPORT_POLL_SECONDS,
+    on_progress: Optional[Callable[[int], None]] = None,
+    sleep: Callable[[float], None] = time.sleep,
+    clock: Callable[[], float] = time.monotonic,
+) -> bytes:
+    """Exporta o relatorio e devolve o arquivo. Espera o Power BI terminar (a exportacao leva de
+    segundos a minutos) e para com erro se falhar ou passar de `timeout_seconds`."""
+    export_id = start_export(connection, workspace_id, report_id, fmt, page_names)
+    deadline = clock() + timeout_seconds
+    while True:
+        status = get_export_status(connection, workspace_id, report_id, export_id)
+        state = status.get("status")
+        if on_progress is not None:
+            on_progress(int(status.get("percentComplete") or 0))
+        if state == "Succeeded":
+            return download_export(connection, workspace_id, report_id, export_id)
+        if state == "Failed":
+            raise PowerBIError("O Power BI nao conseguiu exportar o relatorio (a exportacao falhou).")
+        if clock() >= deadline:
+            raise PowerBIError("A exportacao demorou demais e foi interrompida.")
+        sleep(poll_seconds)
 
 
 _WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"]
