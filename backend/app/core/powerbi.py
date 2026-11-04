@@ -241,10 +241,18 @@ def get_refresh_schedule(connection: PowerBIConnection, workspace_id: str, datas
 
 def get_refresh_info(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> dict:
     """Combina ultima atualizacao (historico) e proxima (agendamento) num unico resultado --
-    qualquer uma que nao estiver disponivel vem como None em vez de dar erro."""
+    qualquer uma que nao estiver disponivel vem como None em vez de dar erro.
+
+    `last_refresh` e o fim da ultima atualizacao CONCLUIDA; `last_status` e o status da tentativa
+    mais recente (Completed, Failed, Unknown = em andamento, Disabled...). Quando a ultima tentativa
+    falhou, os dois divergem: a data e a do ultimo sucesso e o status mostra a falha. O historico
+    vem do mais recente para o mais antigo; 5 entradas bastam pra achar o ultimo sucesso."""
     last_refresh = None
+    last_status = None
     try:
-        history = get_refresh_history(connection, workspace_id, dataset_id, top=1)
+        history = get_refresh_history(connection, workspace_id, dataset_id, top=5)
+        if history:
+            last_status = history[0].get("status")
         completed = [h for h in history if h.get("status") == "Completed" and h.get("endTime")]
         if completed:
             last_refresh = completed[0]["endTime"]
@@ -258,4 +266,4 @@ def get_refresh_info(connection: PowerBIConnection, workspace_id: str, dataset_i
         if next_dt:
             next_refresh = next_dt.isoformat()
 
-    return {"last_refresh": last_refresh, "next_refresh": next_refresh}
+    return {"last_refresh": last_refresh, "next_refresh": next_refresh, "last_status": last_status}

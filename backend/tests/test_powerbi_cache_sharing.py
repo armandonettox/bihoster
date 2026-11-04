@@ -133,7 +133,7 @@ class TestInfoDeAtualizacaoEmLote:
         assert corpo[str(reports[0]["id"])]["last_refresh"] == "ultima-ds-1"
         assert corpo[str(reports[1]["id"])]["last_refresh"] == "ultima-ds-1"
         assert corpo[str(reports[2]["id"])]["last_refresh"] == "ultima-ds-2"
-        assert corpo[str(reports[3]["id"])] == {"last_refresh": None, "next_refresh": None}
+        assert corpo[str(reports[3]["id"])] == {"last_refresh": None, "next_refresh": None, "last_status": None}
         assert info.call_count == 2
 
     def test_segunda_chamada_vem_do_cache(self, client):
@@ -157,7 +157,7 @@ class TestInfoDeAtualizacaoEmLote:
 
         assert resp.status_code == 200
         assert resp.json()[str(a["id"])]["last_refresh"] == "ok"
-        assert resp.json()[str(b["id"])] == {"last_refresh": None, "next_refresh": None}
+        assert resp.json()[str(b["id"])] == {"last_refresh": None, "next_refresh": None, "last_status": None}
         # O que falhou nao ficou guardado: a proxima chamada tenta de novo
         recupera = MagicMock(return_value={"last_refresh": "agora", "next_refresh": None})
         resp = self._chama(client, admin, workspace, recupera)

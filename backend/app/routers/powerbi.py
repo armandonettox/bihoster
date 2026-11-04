@@ -60,7 +60,7 @@ def _parse_token_expiration(raw: Optional[str]) -> datetime:
 # dataset, nao do relatorio.
 _REFRESH_INFO_CACHE_TTL = timedelta(minutes=5)
 _refresh_info_cache: dict[tuple[int, str], tuple[datetime, dict]] = {}
-_EMPTY_REFRESH_INFO = {"last_refresh": None, "next_refresh": None}
+_EMPTY_REFRESH_INFO = {"last_refresh": None, "next_refresh": None, "last_status": None}
 # Quantos datasets sao consultados ao mesmo tempo na rota em lote
 _REFRESH_INFO_WORKERS = 8
 
