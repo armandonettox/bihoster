@@ -171,6 +171,66 @@ class TestErros:
         with pytest.raises(EmailError, match=trecho):
             email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
 
+    @pytest.mark.parametrize(
+        "metodo, etapa",
+        [
+            ("ehlo", "iniciar a conversa"),
+            ("starttls", "STARTTLS"),
+            ("login", "fazer o login"),
+            ("send_message", "enviar a mensagem"),
+        ],
+    )
+    def test_conexao_fechada_pelo_servidor_diz_em_que_etapa_aconteceu(self, smtp_falso, metodo, etapa):
+        getattr(smtp_falso.servidor, metodo).side_effect = smtplib.SMTPServerDisconnected("Connection unexpectedly closed")
+
+        with pytest.raises(EmailError, match=f"fechou a conexao ao .*{etapa}"):
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+    def test_resposta_do_servidor_aparece_com_o_codigo(self, smtp_falso):
+        smtp_falso.servidor.send_message.side_effect = smtplib.SMTPDataError(
+            550, b"5.7.1 Message rejected due to\n local policy"
+        )
+
+        with pytest.raises(EmailError) as erro:
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert "(550)" in str(erro.value)
+        assert "5.7.1 Message rejected due to local policy" in str(erro.value)  # varias linhas viram uma
+        assert "enviar a mensagem" in str(erro.value)
+
+    def test_servidor_sem_o_recurso_pedido(self, smtp_falso):
+        smtp_falso.servidor.starttls.side_effect = smtplib.SMTPNotSupportedError("STARTTLS extension not supported by server.")
+
+        with pytest.raises(EmailError, match="nao oferece o recurso .*STARTTLS"):
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+    def test_a_resposta_do_servidor_e_limitada(self, smtp_falso):
+        smtp_falso.servidor.send_message.side_effect = smtplib.SMTPDataError(554, b"x" * 5000)
+
+        with pytest.raises(EmailError) as erro:
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert len(str(erro.value)) < 400
+
+    def test_o_log_registra_a_etapa_e_nunca_a_senha(self, smtp_falso, caplog):
+        smtp_falso.servidor.send_message.side_effect = smtplib.SMTPServerDisconnected("caiu")
+
+        with caplog.at_level("WARNING", logger="app.core.email_sender"):
+            with pytest.raises(EmailError):
+                email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        texto = " ".join(r.getMessage() for r in caplog.records)
+        assert "enviar a mensagem" in texto
+        assert "segredo-smtp" not in texto
+
+    def test_erro_de_login_continua_com_mensagem_fixa_sem_repetir_o_texto_do_servidor(self, smtp_falso):
+        smtp_falso.servidor.login.side_effect = smtplib.SMTPAuthenticationError(534, b"5.7.9 Application-specific password required")
+
+        with pytest.raises(EmailError) as erro:
+            email_sender.send_email(_config(), ["a@x.test"], "Oi", "corpo")
+
+        assert str(erro.value) == "O servidor recusou o usuario ou a senha do SMTP."
+
     def test_falha_de_conexao_tambem_e_traduzida(self):
         with patch.object(email_sender.smtplib, "SMTP", side_effect=socket.gaierror("nao resolve")):
             with pytest.raises(EmailError, match="conectar a smtp.exemplo.test:587"):

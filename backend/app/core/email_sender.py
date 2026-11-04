@@ -71,6 +71,13 @@ def disallowed_recipients(settings_row, recipients: Sequence[str]) -> list[str]:
     return [r for r in recipients if r.rsplit("@", 1)[-1].lower() not in domains]
 
 
+def _short(value) -> str:
+    """Texto curto e de uma linha so, pra mensagem e log (a resposta do servidor pode ter varias linhas)."""
+    if isinstance(value, bytes):
+        value = value.decode("utf-8", errors="replace")
+    return " ".join(str(value).split())[:200]
+
+
 def _clean_header(value: str) -> str:
     """Cabecalho de e-mail nao pode ter quebra de linha (injecao de cabecalho)."""
     return " ".join(value.replace("\r", " ").replace("\n", " ").split())
@@ -110,17 +117,24 @@ def send_email(
     message = build_message(config, to, subject, body, attachments)
     context = ssl.create_default_context()
     server: Optional[smtplib.SMTP] = None
+    # Etapa em andamento: entra na mensagem de erro, porque "o servidor fechou a conexao" so ajuda
+    # quando diz em que momento (nas configuracoes, no login ou no envio da mensagem)
+    stage = "conectar ao servidor"
     try:
         if config.security == "ssl":
             server = smtplib.SMTP_SSL(config.host, config.port, timeout=SMTP_TIMEOUT_SECONDS, context=context)
         else:
             server = smtplib.SMTP(config.host, config.port, timeout=SMTP_TIMEOUT_SECONDS)
+            stage = "iniciar a conversa com o servidor"
             server.ehlo()
             if config.security == "starttls":
+                stage = "ativar a criptografia (STARTTLS)"
                 server.starttls(context=context)
                 server.ehlo()
         if config.username:
+            stage = "fazer o login"
             server.login(config.username, config.password or "")
+        stage = "enviar a mensagem"
         server.send_message(message)
     except smtplib.SMTPAuthenticationError:
         raise EmailError("O servidor recusou o usuario ou a senha do SMTP.") from None
@@ -132,9 +146,26 @@ def send_email(
         raise EmailError("Falha na conexao segura (TLS). Confira o tipo de seguranca e a porta.") from None
     except (socket.gaierror, ConnectionError, TimeoutError, socket.timeout, smtplib.SMTPConnectError):
         raise EmailError(f"Nao foi possivel conectar a {config.host}:{config.port}.") from None
+    except smtplib.SMTPServerDisconnected as exc:
+        logger.warning("SMTP: conexao fechada ao %s: %s", stage, _short(exc))
+        raise EmailError(
+            f"O servidor fechou a conexao ao {stage}. Confira o usuario, a senha e o e-mail de origem, "
+            "e se a conta tem permissao para enviar por SMTP."
+        ) from None
+    except smtplib.SMTPNotSupportedError as exc:
+        logger.warning("SMTP: recurso nao oferecido ao %s: %s", stage, _short(exc))
+        raise EmailError(
+            f"O servidor nao oferece o recurso necessario para {stage}. Confira o tipo de seguranca e a porta."
+        ) from None
+    except smtplib.SMTPResponseException as exc:
+        # O codigo e o texto que o servidor devolveu (ex: "550 5.7.1 ...") dizem o motivo real. Nunca
+        # contem a senha: o erro de login tem o proprio tratamento acima, com mensagem fixa.
+        detail = _short(exc.smtp_error)
+        logger.warning("SMTP: resposta %s ao %s: %s", exc.smtp_code, stage, detail)
+        raise EmailError(f"O servidor recusou o envio ao {stage} ({exc.smtp_code}): {detail}") from None
     except smtplib.SMTPException as exc:
-        logger.warning("falha SMTP: %s", type(exc).__name__)
-        raise EmailError("O servidor de e-mail recusou o envio.") from None
+        logger.warning("SMTP: %s ao %s: %s", type(exc).__name__, stage, _short(exc))
+        raise EmailError(f"O servidor de e-mail recusou o envio ao {stage}.") from None
     finally:
         if server is not None:
             try:
