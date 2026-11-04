@@ -135,30 +135,70 @@ describe("CollectionHome - carga e secoes", () => {
   });
 });
 
-describe("CollectionHome - ultima atualizacao", () => {
-  it("busca a info de atualizacao da colecao inteira numa requisicao so, nao uma por card", async () => {
-    await renderLoaded();
+// O primeiro "Mais opcoes" da pagina e o menu da colecao (vem antes dos menus dos cards)
+function abrirMenuDaColecao() {
+  fireEvent.click(screen.getAllByLabelText("Mais opcoes")[0]);
+}
 
-    await waitFor(() => expect(getCollectionRefreshInfo).toHaveBeenCalledTimes(1));
-    expect(getCollectionRefreshInfo).toHaveBeenCalledWith(3);
-  });
-
-  it("mostra a ultima atualizacao no card do relatorio que tem a info", async () => {
+describe("CollectionHome - atualizacoes dos relatorios", () => {
+  it("nao busca nem mostra a atualizacao nos cards: so a janela do menu mostra", async () => {
     getCollectionRefreshInfo.mockResolvedValue({
-      "1": { last_refresh: "2026-11-03T12:00:00Z", next_refresh: null },
+      "1": { last_refresh: "2026-11-03T12:00:00Z", next_refresh: null, last_status: "Completed" },
     });
     await renderLoaded();
 
-    expect(await screen.findByText(/Ultima atualizacao/)).toBeTruthy();
-    expect(screen.getAllByText(/Ultima atualizacao/)).toHaveLength(1);
+    expect(getCollectionRefreshInfo).not.toHaveBeenCalled();
+    expect(screen.queryByText(/Ultima atualizacao:/)).toBeNull();
   });
 
-  it("segue funcionando quando a info de atualizacao falha", async () => {
-    getCollectionRefreshInfo.mockRejectedValue(new Error("502"));
+  it("o menu da colecao abre a tabela de atualizacoes com os relatorios", async () => {
+    getCollectionRefreshInfo.mockResolvedValue({
+      "1": { last_refresh: "2026-11-03T12:00:00Z", next_refresh: null, last_status: "Failed" },
+    });
     await renderLoaded();
 
-    await waitFor(() => expect(getCollectionRefreshInfo).toHaveBeenCalled());
-    expect(screen.queryByText(/Ultima atualizacao/)).toBeNull();
+    abrirMenuDaColecao();
+    fireEvent.click(screen.getByRole("button", { name: "Atualizacoes" }));
+
+    expect(await screen.findByRole("table")).toBeTruthy();
+    expect(getCollectionRefreshInfo).toHaveBeenCalledTimes(1);
+    expect(getCollectionRefreshInfo).toHaveBeenCalledWith(3);
+    // Uma linha por relatorio da colecao, sem o filtro da pagina
+    expect(screen.getAllByRole("row")).toHaveLength(REPORTS.length + 1);
+    expect(screen.getByText("Falhou")).toBeTruthy();
+  });
+
+  it("quem so le tambem ve o item Atualizacoes, mas nao os de edicao", async () => {
+    comRole("viewer");
+    await renderLoaded();
+
+    abrirMenuDaColecao();
+
+    expect(screen.getByRole("button", { name: "Atualizacoes" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "+ Adicionar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Editar colecao" })).toBeNull();
+  });
+
+  it("a tabela mostra todos os relatorios mesmo com a pagina filtrada", async () => {
+    await renderLoaded();
+    digitarFiltro("Estoque");
+
+    abrirMenuDaColecao();
+    fireEvent.click(screen.getByRole("button", { name: "Atualizacoes" }));
+
+    await screen.findByRole("table");
+    expect(screen.getAllByRole("row")).toHaveLength(REPORTS.length + 1);
+  });
+
+  it("fecha a janela e volta para a colecao", async () => {
+    await renderLoaded();
+    abrirMenuDaColecao();
+    fireEvent.click(screen.getByRole("button", { name: "Atualizacoes" }));
+    await screen.findByRole("table");
+
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+
+    expect(screen.queryByRole("table")).toBeNull();
     expect(screen.getByRole("heading", { name: "Colecao Vendas" })).toBeTruthy();
   });
 });

@@ -1,18 +1,14 @@
 import type { ReactNode } from "react";
-import type { RefreshInfo, Report } from "../api/reports";
+import type { Report } from "../api/reports";
 import LazyMount from "./LazyMount";
-import ReportRefreshInfo from "./ReportRefreshInfo";
 import ReportThumbnail from "./ReportThumbnail";
 
 export default function ReportIconGrid({
   reports,
-  refreshInfo,
   onOpenFullscreen,
   renderActions,
 }: {
   reports: Report[];
-  /** Ultima/proxima atualizacao por id de relatorio (como texto) */
-  refreshInfo: Record<string, RefreshInfo>;
   onOpenFullscreen: (reportId: number) => void;
   renderActions: (report: Report, sectionReports: Report[]) => ReactNode;
 }) {
@@ -47,7 +43,6 @@ export default function ReportIconGrid({
                 {renderActions(report, reports)}
               </div>
             </div>
-            <ReportRefreshInfo info={refreshInfo[String(report.id)]} />
           </div>
         </div>
       ))}

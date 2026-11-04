@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import type { RefreshInfo, Report } from "../api/reports";
+import type { Report } from "../api/reports";
 import ReportEmbed from "./ReportEmbed";
 import ReportIconGrid from "./ReportIconGrid";
-import ReportRefreshInfo from "./ReportRefreshInfo";
 import ViewModeToggle, { type ViewMode } from "./ViewModeToggle";
 
 // Estilo unico compartilhado por relatorio/painel/apresentacao: card expansivel com botao
@@ -10,7 +9,6 @@ import ViewModeToggle, { type ViewMode } from "./ViewModeToggle";
 export default function ReportSection({
   title,
   reports,
-  refreshInfo,
   viewMode,
   onViewModeChange,
   headerAction,
@@ -22,8 +20,6 @@ export default function ReportSection({
 }: {
   title: string;
   reports: Report[];
-  /** Ultima/proxima atualizacao por id de relatorio (como texto) */
-  refreshInfo: Record<string, RefreshInfo>;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
   headerAction?: ReactNode;
@@ -47,7 +43,6 @@ export default function ReportSection({
         <div key="icon" className="view-mode-fade">
           <ReportIconGrid
             reports={reports}
-            refreshInfo={refreshInfo}
             onOpenFullscreen={onOpenFullscreen}
             renderActions={renderActions}
           />
@@ -80,9 +75,6 @@ export default function ReportSection({
                     borderTop: "1px solid var(--color-border)",
                   }}
                 >
-                  <div style={{ marginBottom: 8 }}>
-                    <ReportRefreshInfo info={refreshInfo[String(report.id)]} />
-                  </div>
                   <ReportEmbed reportId={report.id} height={360} />
                 </div>
               )}

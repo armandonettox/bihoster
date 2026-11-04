@@ -715,6 +715,10 @@ table.table tr:last-child td {
   overflow-y: auto;
 }
 
+.modal-panel-wide {
+  max-width: 920px;
+}
+
 .modal-overlay-enter {
   animation: modal-overlay-in 0.15s ease;
 }

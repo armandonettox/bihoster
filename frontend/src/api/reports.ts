@@ -68,8 +68,11 @@ export async function getEmbedConfig(workspaceId: number, reportId: number): Pro
 }
 
 export interface RefreshInfo {
+  /** Fim da ultima atualizacao concluida */
   last_refresh: string | null;
   next_refresh: string | null;
+  /** Status da tentativa mais recente: Completed, Failed, Unknown (em andamento), Disabled... */
+  last_status?: string | null;
 }
 
 /** Ultima e proxima atualizacao de todos os relatorios da colecao, numa chamada so. A chave do

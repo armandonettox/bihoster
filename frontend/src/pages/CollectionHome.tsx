@@ -7,6 +7,7 @@ import NewReportForm from "../components/NewReportForm";
 import FullscreenReportView from "../components/FullscreenReportView";
 import FullscreenSingleReport from "../components/FullscreenSingleReport";
 import EditCollectionModal from "../components/EditCollectionModal";
+import RefreshDetailsModal from "../components/RefreshDetailsModal";
 import KebabMenu from "../components/KebabMenu";
 import ReorderButtons from "../components/ReorderButtons";
 import ReportActionsMenu from "../components/ReportActionsMenu";
@@ -21,7 +22,6 @@ import { useToast } from "../context/ToastContext";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { safeStorage } from "../utils/safeStorage";
 import { useCollectionReports } from "../hooks/useCollectionReports";
-import { useCollectionRefreshInfo } from "../hooks/useCollectionRefreshInfo";
 import { useTvInterval } from "../hooks/useTvInterval";
 
 const SECTION_TITLES: Record<DisplayType, string> = {
@@ -54,15 +54,12 @@ export default function CollectionHome() {
     movingReportId,
     moveReport,
   } = useCollectionReports(workspaceId);
-  const refreshInfo = useCollectionRefreshInfo(
-    workspaceId,
-    reports.map((r) => r.id),
-  );
   const tvInterval = useTvInterval(currentWorkspace, reloadWorkspaces);
 
   const [creatingReport, setCreatingReport] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingCollection, setEditingCollection] = useState(false);
+  const [showingRefreshDetails, setShowingRefreshDetails] = useState(false);
   const [confirmingDeleteReportId, setConfirmingDeleteReportId] = useState<number | null>(null);
   const [fullscreenSection, setFullscreenSection] = useState<"apresentacao" | "tv" | null>(null);
   const [fullscreenReportId, setFullscreenReportId] = useState<number | null>(null);
@@ -80,9 +77,10 @@ export default function CollectionHome() {
   const canWrite = role === "admin" || role === "editor";
   const isAdmin = role === "admin";
 
-  // O filtro e a tela cheia sao da colecao aberta: ao trocar de colecao, comecam limpos
+  // O filtro, a tela cheia e a janela de atualizacoes sao da colecao aberta: ao trocar, comecam limpos
   useEffect(() => {
     setFilter("");
+    setShowingRefreshDetails(false);
     setFullscreenSection(null);
     setFullscreenReportId(null);
   }, [workspaceId]);
@@ -180,7 +178,6 @@ export default function CollectionHome() {
       <ReportSection
         title={SECTION_TITLES[type]}
         reports={sectionReports}
-        refreshInfo={refreshInfo}
         viewMode={viewMode}
         onViewModeChange={changeViewMode}
         headerAction={headerAction}
@@ -202,36 +199,43 @@ export default function CollectionHome() {
             <p style={{ fontSize: 13, color: "var(--color-text-muted)", marginTop: 6 }}>{currentWorkspace.description}</p>
           )}
         </div>
-        {(canWrite || isAdmin) && (
-          <KebabMenu>
-            {(close) => (
-              <>
-                {canWrite && (
-                  <button
-                    className="kebab-menu-item"
-                    onClick={() => {
-                      close();
-                      setCreatingReport(true);
-                    }}
-                  >
-                    + Adicionar
-                  </button>
-                )}
-                {isAdmin && (
-                  <button
-                    className="kebab-menu-item"
-                    onClick={() => {
-                      close();
-                      setEditingCollection(true);
-                    }}
-                  >
-                    Editar colecao
-                  </button>
-                )}
-              </>
-            )}
-          </KebabMenu>
-        )}
+        <KebabMenu>
+          {(close) => (
+            <>
+              {canWrite && (
+                <button
+                  className="kebab-menu-item"
+                  onClick={() => {
+                    close();
+                    setCreatingReport(true);
+                  }}
+                >
+                  + Adicionar
+                </button>
+              )}
+              {isAdmin && (
+                <button
+                  className="kebab-menu-item"
+                  onClick={() => {
+                    close();
+                    setEditingCollection(true);
+                  }}
+                >
+                  Editar colecao
+                </button>
+              )}
+              <button
+                className="kebab-menu-item"
+                onClick={() => {
+                  close();
+                  setShowingRefreshDetails(true);
+                }}
+              >
+                Atualizacoes
+              </button>
+            </>
+          )}
+        </KebabMenu>
       </div>
 
       {loading ? (
@@ -275,7 +279,6 @@ export default function CollectionHome() {
               />
               <ReportIconGrid
                 reports={shownTv}
-                refreshInfo={refreshInfo}
                 onOpenFullscreen={setFullscreenReportId}
                 renderActions={renderActions}
               />
@@ -303,6 +306,14 @@ export default function CollectionHome() {
             showToast("Relatorio atualizado.");
           }}
           onClose={() => setEditingReport(null)}
+        />
+      )}
+
+      {showingRefreshDetails && (
+        <RefreshDetailsModal
+          reports={reports}
+          workspaceId={currentWorkspace.id}
+          onClose={() => setShowingRefreshDetails(false)}
         />
       )}
 

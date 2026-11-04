@@ -7,10 +7,13 @@ export default function Modal({
   title,
   onClose,
   children,
+  wide = false,
 }: {
   title: string;
   onClose: () => void;
   children: ReactNode;
+  /** Janela mais larga, pra conteudo em tabela (o padrao de 560 px aperta varias colunas) */
+  wide?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
@@ -69,7 +72,7 @@ export default function Modal({
     <div className="modal-overlay modal-overlay-enter" onClick={onClose} role="presentation">
       <div
         ref={panelRef}
-        className="modal-panel modal-panel-enter"
+        className={`modal-panel modal-panel-enter${wide ? " modal-panel-wide" : ""}`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
