@@ -4,6 +4,8 @@
 - cabecalho Server-Timing e aviso de requisicao lenta."""
 
 import logging
+import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
@@ -122,6 +124,22 @@ class TestClienteHttpCompartilhado:
         assert get.call_count == 2
         assert post.call_count == 1  # o token da Azure e pedido uma vez e reaproveitado
         powerbi_core.invalidate_token_cache(900)
+
+    def test_varias_threads_com_token_vencido_pedem_o_token_da_azure_uma_vez_so(self):
+        powerbi_core._cached_tokens.clear()
+        conexao = SimpleNamespace(id=901, tenant_id="t", client_id="c", client_secret="s")
+
+        def resposta_lenta(*args, **kwargs):
+            time.sleep(0.2)  # tempo pra as outras threads chegarem enquanto a primeira ainda pede
+            return MagicMock(status_code=200, json=MagicMock(return_value={"access_token": "tok", "expires_in": 3600}))
+
+        with patch.object(powerbi_core._http, "post", side_effect=resposta_lenta) as post:
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                tokens = list(pool.map(lambda _: powerbi_core._get_aad_token(conexao), range(8)))
+
+        assert set(tokens) == {"tok"}
+        assert post.call_count == 1
+        powerbi_core.invalidate_token_cache(901)
 
     def test_cliente_reaproveita_conexoes_abertas(self):
         assert isinstance(powerbi_core._http, httpx.Client)

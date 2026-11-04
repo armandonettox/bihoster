@@ -44,6 +44,11 @@ class Settings(BaseSettings):
     # estiver exposto direto na internet sem proxy na frente -- qualquer cliente poderia forjar
     # o header e enganar essa checagem.
     trust_proxy_headers: bool = False
+    # Enche os caches do Power BI em segundo plano logo depois que o backend sobe e os renova antes de
+    # vencerem (ver app/core/cache_warmup.py). Desligue se nao quiser chamadas ao Power BI sem
+    # ninguem usando o portal.
+    cache_warmup_enabled: bool = True
+    cache_warmup_interval_seconds: int = 240
 
     class Config:
         env_file = ".env"

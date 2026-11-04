@@ -23,6 +23,7 @@ def _invalidate_connection_caches(db: Session, connection_id: int) -> None:
     pros relatorios que usam a conta, embed token e info de atualizacao."""
     powerbi.invalidate_token_cache(connection_id)
     invalidate_catalog_cache(connection_id)
+    embed_router.invalidate_refresh_info_for_connection(connection_id)
     for report in db.query(Report).filter(Report.powerbi_connection_id == connection_id).all():
         embed_router.invalidate_embed_cache(report.collection_id, report.id)
 

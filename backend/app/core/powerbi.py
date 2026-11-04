@@ -1,3 +1,4 @@
+import threading
 from datetime import datetime, timedelta, timezone
 from typing import Optional, TypeVar
 
@@ -36,6 +37,10 @@ _http = httpx.Client(
 # Cache simples em memoria do token de cada conta Power BI (Service Principal), por connection_id --
 # guarda tambem o client_id usado pra nao servir um token velho apos a conta ser reconfigurada.
 _cached_tokens: dict[int, tuple[str, str, datetime]] = {}  # connection_id -> (token, client_id, expires_at)
+# Varias requisicoes ao mesmo tempo (busca em paralelo, aquecimento de cache) com o token vencido
+# pediriam o mesmo token a Azure AD cada uma. O trinco faz so a primeira pedir; as outras esperam e
+# reaproveitam o resultado.
+_aad_lock = threading.Lock()
 
 
 class PowerBIError(Exception):
@@ -58,13 +63,28 @@ def _error_detail(response: httpx.Response) -> str:
     return f"HTTP {response.status_code} -- {detail or 'sem detalhes na resposta'}"
 
 
-def _get_aad_token(connection: PowerBIConnection) -> str:
+def _valid_cached_token(connection: PowerBIConnection) -> Optional[str]:
     cached = _cached_tokens.get(connection.id)
     if cached:
         token, client_id, expires_at = cached
         if client_id == connection.client_id and datetime.now(timezone.utc) < expires_at:
             return token
+    return None
 
+
+def _get_aad_token(connection: PowerBIConnection) -> str:
+    token = _valid_cached_token(connection)
+    if token:
+        return token
+    with _aad_lock:
+        # Quem esperou o trinco pode encontrar o token ja renovado por outra thread
+        token = _valid_cached_token(connection)
+        if token:
+            return token
+        return _request_aad_token(connection)
+
+
+def _request_aad_token(connection: PowerBIConnection) -> str:
     url = AAD_TOKEN_URL.format(tenant_id=connection.tenant_id)
     data = {
         "grant_type": "client_credentials",

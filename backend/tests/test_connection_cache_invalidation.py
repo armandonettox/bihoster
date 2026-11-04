@@ -35,7 +35,11 @@ def _seed_caches(connection_id: int, other_connection_id: int, workspace_id: int
     # Cache de OUTRA conta: nao pode ser tocado
     powerbi_catalog._workspaces_cache[other_connection_id] = (_future(), ["ws-outra-conta"])
     embed_router._embed_cache[(workspace_id, report_id, 1)] = (_future(), object())
-    embed_router._refresh_info_cache[(workspace_id, report_id)] = (_future(), {"x": 1})
+    # Token compartilhado (relatorio sem RLS): tambem precisa sair junto com a conta
+    embed_router._embed_cache[(workspace_id, report_id, None)] = (_future(), object())
+    # A info de atualizacao e guardada por (conta, dataset)
+    embed_router._refresh_info_cache[(connection_id, "dataset-1")] = (_future(), {"x": 1})
+    embed_router._refresh_info_cache[(other_connection_id, "dataset-2")] = (_future(), {"x": 2})
 
 
 def _setup(client):
@@ -76,9 +80,11 @@ def test_editar_conta_limpa_catalogo_embed_e_info_de_atualizacao(client):
     assert (conn["id"], "pbi-ws") not in powerbi_catalog._reports_cache
     assert (conn["id"], "pbi-ws", "pbi-rel") not in powerbi_catalog._pages_cache
     assert (workspace["id"], report["id"], 1) not in embed_router._embed_cache
-    assert (workspace["id"], report["id"]) not in embed_router._refresh_info_cache
+    assert (workspace["id"], report["id"], None) not in embed_router._embed_cache
+    assert (conn["id"], "dataset-1") not in embed_router._refresh_info_cache
     # A outra conta continua com o cache dela
     assert other["id"] in powerbi_catalog._workspaces_cache
+    assert (other["id"], "dataset-2") in embed_router._refresh_info_cache
     _clear_caches()
 
 

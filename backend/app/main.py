@@ -1,5 +1,6 @@
 import logging
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, Request
@@ -10,6 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
+from app.core import cache_warmup
 from app.core import powerbi as core_powerbi
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
@@ -60,7 +62,18 @@ if not settings.encryption_key or settings.encryption_key == _INSECURE_DEFAULT:
         "aplicacao. Ela cifra os secrets do Power BI/Google guardados no banco."
     )
 
-app = FastAPI(title="BIHoster Python")
+@asynccontextmanager
+async def _lifespan(_: FastAPI):
+    """Liga o aquecimento dos caches do Power BI ao subir e para ao desligar. Nos testes o
+    TestClient sem `with` nao executa o lifespan, entao a tarefa nao roda la."""
+    cache_warmup.start()
+    try:
+        yield
+    finally:
+        cache_warmup.stop()
+
+
+app = FastAPI(title="BIHoster Python", lifespan=_lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
