@@ -8,6 +8,7 @@ export default function ReportActionsMenu({
   onToggleFavorite,
   onEdit,
   onDelete,
+  onSendByEmail,
 }: {
   report: Report;
   canWrite: boolean;
@@ -15,6 +16,8 @@ export default function ReportActionsMenu({
   onToggleFavorite: (report: Report) => void;
   onEdit: (report: Report) => void;
   onDelete: (reportId: number) => void;
+  /** Sem isso o item "Enviar por e-mail" nao aparece (so quem pode e com o e-mail configurado) */
+  onSendByEmail?: (report: Report) => void;
 }) {
   return (
     <KebabMenu>
@@ -29,6 +32,17 @@ export default function ReportActionsMenu({
           >
             {isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
           </button>
+          {onSendByEmail && (
+            <button
+              className="kebab-menu-item"
+              onClick={() => {
+                close();
+                onSendByEmail(report);
+              }}
+            >
+              Enviar por e-mail
+            </button>
+          )}
           {canWrite && (
             <button
               className="kebab-menu-item"

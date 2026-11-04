@@ -22,6 +22,9 @@ import { useToast } from "../context/ToastContext";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { safeStorage } from "../utils/safeStorage";
 import { useCollectionReports } from "../hooks/useCollectionReports";
+import { useCanSendByEmail } from "../hooks/useCanSendByEmail";
+import { useAuth } from "../context/AuthContext";
+import SendReportEmailModal from "../components/SendReportEmailModal";
 import { useTvInterval } from "../hooks/useTvInterval";
 import { preloadPowerBi } from "../utils/powerbiService";
 
@@ -59,6 +62,9 @@ export default function CollectionHome() {
   const [creatingReport, setCreatingReport] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingCollection, setEditingCollection] = useState(false);
+  const canSendByEmail = useCanSendByEmail();
+  const { user } = useAuth();
+  const [emailingReport, setEmailingReport] = useState<Report | null>(null);
   const [showingRefreshDetails, setShowingRefreshDetails] = useState(false);
   const [confirmingDeleteReportId, setConfirmingDeleteReportId] = useState<number | null>(null);
   const navigate = useNavigate();
@@ -86,6 +92,7 @@ export default function CollectionHome() {
   useEffect(() => {
     setFilter("");
     setShowingRefreshDetails(false);
+    setEmailingReport(null);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -166,6 +173,7 @@ export default function CollectionHome() {
           onToggleFavorite={(r) => toggleFavorite(r.id, r)}
           onEdit={setEditingReport}
           onDelete={setConfirmingDeleteReportId}
+          onSendByEmail={canSendByEmail ? setEmailingReport : undefined}
         />
       </>
     );
@@ -303,6 +311,16 @@ export default function CollectionHome() {
             showToast("Relatorio atualizado.");
           }}
           onClose={() => setEditingReport(null)}
+        />
+      )}
+
+      {emailingReport && (
+        <SendReportEmailModal
+          key={emailingReport.id}
+          report={emailingReport}
+          workspaceId={currentWorkspace.id}
+          defaultEmail={user?.email ?? ""}
+          onClose={() => setEmailingReport(null)}
         />
       )}
 

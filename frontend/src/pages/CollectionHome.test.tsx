@@ -16,12 +16,23 @@ const mocks = vi.hoisted(() => ({
   reload: vi.fn(),
   showToast: vi.fn(),
   toggleFavorite: vi.fn(),
+  podeEnviarPorEmail: false,
 }));
 
 vi.mock("../context/WorkspaceContext", () => ({
   useWorkspace: () => ({ currentWorkspace: mocks.workspace, reload: mocks.reload }),
 }));
 vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
+vi.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { id: 1, name: "Admin", email: "admin@empresa.com" } }) }));
+vi.mock("../hooks/useCanSendByEmail", () => ({ useCanSendByEmail: () => mocks.podeEnviarPorEmail }));
+vi.mock("../components/SendReportEmailModal", () => ({
+  default: ({ report, workspaceId, defaultEmail, onClose }: { report: Report; workspaceId: number; defaultEmail: string; onClose: () => void }) => (
+    <div data-testid="modal-email">
+      <span>{`${report.name}|${workspaceId}|${defaultEmail}`}</span>
+      <button onClick={onClose}>fechar email</button>
+    </div>
+  ),
+}));
 vi.mock("../context/FavoritesContext", () => ({
   useFavorites: () => ({ favoriteIds: new Set<number>(), toggleFavorite: mocks.toggleFavorite }),
 }));
@@ -105,6 +116,7 @@ function digitarFiltro(texto: string) {
 beforeEach(() => {
   window.localStorage.clear();
   comRole("admin");
+  mocks.podeEnviarPorEmail = false;
   mocks.reload.mockReset();
   mocks.reload.mockResolvedValue(undefined);
   mocks.showToast.mockClear();
@@ -186,6 +198,42 @@ describe("CollectionHome - carregar menos coisas ao mesmo tempo", () => {
     fireEvent.click(screen.getByText("Vendas Mensal"));
 
     expect(screen.queryByTestId("embed-1")).toBeNull();
+  });
+});
+
+describe("CollectionHome - enviar relatorio por e-mail", () => {
+  // O menu do primeiro cartao (Vendas Mensal): vem depois do menu da colecao
+  function abrirMenuDoPrimeiroCartao() {
+    fireEvent.click(screen.getAllByLabelText("Mais opcoes")[1]);
+  }
+
+  it("sem permissao ou sem e-mail configurado o item nao aparece", async () => {
+    await renderLoaded();
+
+    abrirMenuDoPrimeiroCartao();
+
+    expect(screen.queryByRole("button", { name: "Enviar por e-mail" })).toBeNull();
+  });
+
+  it("com permissao e e-mail configurado o item aparece e abre a janela com o relatorio e o e-mail de quem esta logado", async () => {
+    mocks.podeEnviarPorEmail = true;
+    await renderLoaded();
+
+    abrirMenuDoPrimeiroCartao();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar por e-mail" }));
+
+    expect(screen.getByTestId("modal-email").textContent).toContain("Vendas Mensal|3|admin@empresa.com");
+  });
+
+  it("fechar a janela volta para a colecao", async () => {
+    mocks.podeEnviarPorEmail = true;
+    await renderLoaded();
+    abrirMenuDoPrimeiroCartao();
+    fireEvent.click(screen.getByRole("button", { name: "Enviar por e-mail" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "fechar email" }));
+
+    expect(screen.queryByTestId("modal-email")).toBeNull();
   });
 });
 
