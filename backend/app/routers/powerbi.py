@@ -157,6 +157,7 @@ def _generate_embed_config(
         expires_at=expires_at,
         show_filter_pane=bool(report.show_filter_pane),
         show_page_nav=bool(report.show_page_nav),
+        show_visual_header=bool(report.show_visual_header),
     )
     return config, needs_identity
 

@@ -18,6 +18,7 @@ class EmbedConfig(BaseModel):
     # bool() no router ja garante que NULL do banco nunca chega aqui como None.
     show_filter_pane: bool = False
     show_page_nav: bool = False
+    show_visual_header: bool = False
 
 
 class RefreshHistoryItem(BaseModel):

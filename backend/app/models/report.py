@@ -29,6 +29,8 @@ class Report(Base):
     # colunas nulaveis). False/NULL = oculto; True = visivel.
     show_filter_pane = Column(Boolean, default=False, nullable=True)
     show_page_nav = Column(Boolean, default=False, nullable=True)
+    # Habilita o cabecalho nativo dos visuais (menu "..." com exportar, focar, classificar etc.)
+    show_visual_header = Column(Boolean, default=False, nullable=True)
     # Secao da colecao onde o relatorio aparece: relatorio, painel, apresentacao ou tv
     display_type = Column(String, default="relatorio", nullable=False)
     # Ordem dentro da secao (colecao + display_type), do menor pro maior. Nulo = ainda nao

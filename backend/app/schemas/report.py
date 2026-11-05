@@ -53,6 +53,7 @@ class ReportCreate(BaseModel):
     display_type: DisplayType = "relatorio"
     show_filter_pane: bool = False
     show_page_nav: bool = False
+    show_visual_header: bool = False
 
     @field_validator(*_REPORT_TEXT_FIELDS)
     @classmethod
@@ -73,6 +74,7 @@ class ReportUpdate(BaseModel):
     display_type: Optional[DisplayType] = None
     show_filter_pane: Optional[bool] = None
     show_page_nav: Optional[bool] = None
+    show_visual_header: Optional[bool] = None
 
     @field_validator(*_REPORT_TEXT_FIELDS)
     @classmethod
@@ -106,8 +108,9 @@ class ReportOut(BaseModel):
     # NULL no banco (registros anteriores a esta coluna) vira False -- mesmo padrao do settings.
     show_filter_pane: bool = False
     show_page_nav: bool = False
+    show_visual_header: bool = False
 
-    @field_validator("show_filter_pane", "show_page_nav", mode="before")
+    @field_validator("show_filter_pane", "show_page_nav", "show_visual_header", mode="before")
     @classmethod
     def coerce_nullable_bool(cls, v: object) -> bool:
         return bool(v)
