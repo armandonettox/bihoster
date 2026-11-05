@@ -12,8 +12,9 @@ import EmailTab from "./settings/EmailTab";
 import AuditTab from "./settings/AuditTab";
 import UpdatesTab from "./settings/UpdatesTab";
 import AccountTab from "./settings/AccountTab";
+import SubscriptionsTab from "./settings/SubscriptionsTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "audit" | "updates" | "account";
+type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "subscriptions" | "audit" | "updates" | "account";
 
 // Abas de administracao: so quem administra alguma colecao. O servidor protege cada rota de
 // qualquer jeito; aqui e so o que a pessoa ve.
@@ -25,6 +26,7 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: "groups", label: "Grupos" },
   { key: "auth", label: "Autenticacao" },
   { key: "email", label: "E-mail" },
+  { key: "subscriptions", label: "Assinaturas" },
   { key: "audit", label: "Auditoria" },
   { key: "updates", label: "Atualizacoes" },
 ];
@@ -107,6 +109,7 @@ export default function Settings() {
         {tab === "groups" && <GroupsTab />}
         {tab === "auth" && <AuthTab />}
         {tab === "email" && <EmailTab />}
+        {tab === "subscriptions" && <SubscriptionsTab />}
         {tab === "audit" && <AuditTab />}
         {tab === "updates" && <UpdatesTab />}
         {tab === "account" && <AccountTab />}

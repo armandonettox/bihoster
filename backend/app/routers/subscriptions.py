@@ -292,4 +292,10 @@ def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get
 @admin_router.get("/", response_model=list[SubscriptionOut])
 def list_all_subscriptions(db: Session = Depends(get_db), _: User = Depends(require_platform_admin)):
     """Visao do administrador: todas as assinaturas do sistema, de todas as colecoes."""
-    return [_out(db, s) for s in db.query(ReportSubscription).order_by(ReportSubscription.id).all()]
+    return [
+        _out(db, s)
+        for s in db.query(ReportSubscription)
+        .join(Report, Report.id == ReportSubscription.report_id)
+        .order_by(Report.collection_id, ReportSubscription.report_id, ReportSubscription.id)
+        .all()
+    ]

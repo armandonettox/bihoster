@@ -131,6 +131,7 @@ describe("ReportSubscriptionsModal - criar", () => {
       format: "PNG",
       days: [0, 1, 2, 3, 6],
       times: ["07:00", "09:30"],
+      timezone: null,
       start_date: null,
       end_date: null,
       subject: "Vendas",

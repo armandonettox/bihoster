@@ -1,5 +1,49 @@
 import { useState, type FormEvent } from "react";
 import type { Subscription, SubscriptionFormat, SubscriptionInput } from "../api/subscriptions";
+import { getUtcOffsetLabel, getUtcOffsetMinutes } from "../utils/datetime";
+
+const TIMEZONE_OPTIONS: { tz: string; label: string }[] = [
+  { tz: "Pacific/Midway", label: "Midway, Samoa" },
+  { tz: "Pacific/Honolulu", label: "Havai" },
+  { tz: "America/Anchorage", label: "Anchorage" },
+  { tz: "America/Los_Angeles", label: "Los Angeles, Vancouver" },
+  { tz: "America/Denver", label: "Denver, Phoenix" },
+  { tz: "America/Mexico_City", label: "Cidade do Mexico" },
+  { tz: "America/Chicago", label: "Chicago, Dallas" },
+  { tz: "America/Bogota", label: "Bogota, Lima" },
+  { tz: "America/New_York", label: "Nova York, Toronto" },
+  { tz: "America/Manaus", label: "Manaus" },
+  { tz: "America/Rio_Branco", label: "Rio Branco" },
+  { tz: "America/Halifax", label: "Halifax" },
+  { tz: "America/Sao_Paulo", label: "Brasilia, Sao Paulo" },
+  { tz: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
+  { tz: "America/Noronha", label: "Fernando de Noronha" },
+  { tz: "Atlantic/Azores", label: "Acores" },
+  { tz: "UTC", label: "UTC" },
+  { tz: "Europe/Lisbon", label: "Lisboa" },
+  { tz: "Europe/London", label: "Londres, Dublin" },
+  { tz: "Europe/Paris", label: "Paris, Madri, Berlim, Roma" },
+  { tz: "Europe/Athens", label: "Atenas, Helsinque" },
+  { tz: "Europe/Moscow", label: "Moscou" },
+  { tz: "Asia/Dubai", label: "Dubai" },
+  { tz: "Asia/Karachi", label: "Carachi" },
+  { tz: "Asia/Kolkata", label: "Nova Deli, Mumbai" },
+  { tz: "Asia/Dhaka", label: "Daca" },
+  { tz: "Asia/Bangkok", label: "Bangcoc, Jacarta" },
+  { tz: "Asia/Shanghai", label: "Pequim, Xangai, Hong Kong" },
+  { tz: "Asia/Tokyo", label: "Toquio, Seul" },
+  { tz: "Australia/Sydney", label: "Sydney, Melbourne" },
+  { tz: "Pacific/Auckland", label: "Auckland" },
+];
+
+function listTimezones(current: string) {
+  const known = !current || TIMEZONE_OPTIONS.some((o) => o.tz === current)
+    ? TIMEZONE_OPTIONS
+    : [...TIMEZONE_OPTIONS, { tz: current, label: current }];
+  return known
+    .map((o) => ({ ...o, offset: getUtcOffsetMinutes(o.tz) }))
+    .sort((a, b) => a.offset - b.offset || a.label.localeCompare(b.label));
+}
 
 const WEEK_DAYS = [
   { value: 0, label: "Seg" },
@@ -39,6 +83,7 @@ export default function SubscriptionForm({
   const [format, setFormat] = useState<SubscriptionFormat>(initial?.format ?? "PDF");
   const [days, setDays] = useState<number[]>(initial?.days ?? [0, 1, 2, 3, 4]);
   const [times, setTimes] = useState<string[]>(initial?.times ?? ["08:00"]);
+  const [timezone, setTimezone] = useState(initial?.timezone ?? "");
   const [startDate, setStartDate] = useState(initial?.start_date ?? "");
   const [endDate, setEndDate] = useState(initial?.end_date ?? "");
   const [subject, setSubject] = useState(initial?.subject ?? "");
@@ -65,6 +110,7 @@ export default function SubscriptionForm({
       format,
       days,
       times: filledTimes,
+      timezone: timezone || null,
       start_date: startDate || null,
       end_date: endDate || null,
       subject: subject.trim() || null,
@@ -151,6 +197,23 @@ export default function SubscriptionForm({
           </button>
         )}
       </fieldset>
+
+      <label className="field" style={{ marginTop: 12 }}>
+        Fuso horario
+        <select className="input" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
+          <option value="">Usar fuso das Configuracoes</option>
+          {listTimezones(timezone).map((o) => (
+            <option key={o.tz} value={o.tz}>
+              {getUtcOffsetLabel(o.tz)} -- {o.label}
+            </option>
+          ))}
+        </select>
+        {timezone && (
+          <span style={{ fontWeight: 400, fontSize: 12 }}>
+            Os horarios acima valem neste fuso ({getUtcOffsetLabel(timezone)}).
+          </span>
+        )}
+      </label>
 
       <div style={{ display: "flex", gap: 12, marginTop: 12 }}>
         <label className="field" style={{ flex: 1 }}>

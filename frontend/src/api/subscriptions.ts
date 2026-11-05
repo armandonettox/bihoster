@@ -36,6 +36,7 @@ export interface SubscriptionInput {
   format: SubscriptionFormat;
   days: number[];
   times: string[];
+  /** Fuso IANA. Null ou omitido usa o fuso global das Configuracoes. */
   timezone?: string | null;
   start_date?: string | null;
   end_date?: string | null;
@@ -92,5 +93,11 @@ export async function runSubscriptionNow(workspaceId: number, subscriptionId: nu
 
 export async function listSubscriptionRuns(workspaceId: number, subscriptionId: number): Promise<SubscriptionRun[]> {
   const { data } = await api.get(`/workspaces/${workspaceId}/subscriptions/${subscriptionId}/runs`);
+  return data;
+}
+
+/** Visao do admin da plataforma: todas as assinaturas de todas as colecoes. */
+export async function listAllSubscriptions(): Promise<Subscription[]> {
+  const { data } = await api.get("/subscriptions/");
   return data;
 }
