@@ -80,6 +80,7 @@ export default function AccountMenu() {
               navigate("/settings?tab=account");
             }}
           >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">manage_accounts</span>
             Minha conta
           </button>
           {isAnyAdmin && (
@@ -90,7 +91,8 @@ export default function AccountMenu() {
                 navigate("/settings");
               }}
             >
-              Configuracoes
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">admin_panel_settings</span>
+              Administracao
             </button>
           )}
           <button
@@ -100,6 +102,7 @@ export default function AccountMenu() {
               logout();
             }}
           >
+            <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">logout</span>
             Sair
           </button>
         </div>

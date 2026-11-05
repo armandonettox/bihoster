@@ -36,21 +36,21 @@ describe("AccountMenu", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/settings?tab=account");
   });
 
-  it("quem nao administra nada nao ve o item Configuracoes", () => {
+  it("quem nao administra nada nao ve o item Administracao", () => {
     mocks.workspaces = [{ id: 1, role: "editor" }];
     render(<AccountMenu />);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Configuracoes" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
     expect(screen.getByRole("button", { name: "Minha conta" })).toBeTruthy();
   });
 
-  it("administrador ve Configuracoes alem de Minha conta", () => {
+  it("administrador ve Administracao alem de Minha conta", () => {
     mocks.workspaces = [{ id: 1, role: "admin" }];
     render(<AccountMenu />);
     openMenu();
 
-    fireEvent.click(screen.getByRole("button", { name: "Configuracoes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Administracao" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/settings");
     expect(screen.queryByRole("button", { name: "Minha conta" })).toBeNull(); // menu fechou ao navegar
