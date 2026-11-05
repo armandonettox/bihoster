@@ -161,20 +161,27 @@ def execute_dax_query(connection: PowerBIConnection, workspace_id: str, dataset_
 
 
 def list_measures(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> list[dict]:
-    """Lista as medidas do dataset via GET /datasets/{id}/tables (nao requer executeQueries).
+    """Lista as medidas do dataset via INFO.MEASURES() (requer executeQueries habilitado no tenant).
     Devolve lista de dicts com 'measure_name' e 'table_name'."""
-    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}/tables"
-    response = _http.get(url, headers=_headers(connection))
-    if response.status_code != 200:
-        raise PowerBIError(f"Falha ao listar tabelas do dataset: {_error_detail(response)}")
-    tables = response.json().get("value", [])
+    rows = execute_dax_query(
+        connection,
+        workspace_id,
+        dataset_id,
+        "EVALUATE SELECTCOLUMNS(INFO.MEASURES(), \"Name\", [Name], \"TableID\", [TableID])",
+    )
+    table_rows = execute_dax_query(
+        connection,
+        workspace_id,
+        dataset_id,
+        "EVALUATE SELECTCOLUMNS(INFO.TABLES(), \"ID\", [ID], \"Name\", [Name])",
+    )
+    table_map = {r.get("[ID]"): r.get("[Name]", "") for r in table_rows}
     measures = []
-    for table in tables:
-        table_name = table.get("name", "")
-        for measure in table.get("measures", []):
-            name = measure.get("name")
-            if name:
-                measures.append({"measure_name": name, "table_name": table_name})
+    for row in rows:
+        name = row.get("[Name]") or row.get("Name")
+        table_id = row.get("[TableID]") or row.get("TableID")
+        if name:
+            measures.append({"measure_name": name, "table_name": table_map.get(table_id, "")})
     return sorted(measures, key=lambda m: (m["table_name"], m["measure_name"]))
 
 
