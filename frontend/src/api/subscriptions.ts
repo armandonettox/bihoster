@@ -20,6 +20,7 @@ export interface Subscription {
   end_date: string | null;
   subject: string | null;
   message: string | null;
+  page_names: string[];
   enabled: boolean;
   next_run_at: string | null;
   last_run_at: string | null;
@@ -42,6 +43,8 @@ export interface SubscriptionInput {
   end_date?: string | null;
   subject?: string | null;
   message?: string | null;
+  /** Paginas a incluir. Vazio = todas as do relatorio. */
+  page_names?: string[];
   enabled?: boolean;
 }
 

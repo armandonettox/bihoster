@@ -83,6 +83,8 @@ class SubscriptionCreate(_SubscriptionFields):
     subject: Optional[str] = Field(default=None, max_length=150)
     message: Optional[str] = Field(default=None, max_length=1000)
     enabled: bool = True
+    # Paginas a incluir. Vazio/null = todas as do relatorio
+    page_names: Optional[list[str]] = None
 
 
 class SubscriptionUpdate(_SubscriptionFields):
@@ -97,6 +99,7 @@ class SubscriptionUpdate(_SubscriptionFields):
     subject: Optional[str] = Field(default=None, max_length=150)
     message: Optional[str] = Field(default=None, max_length=1000)
     enabled: Optional[bool] = None
+    page_names: Optional[list[str]] = None
 
     @model_validator(mode="after")
     def not_null_when_sent(self):
@@ -124,6 +127,7 @@ class SubscriptionOut(BaseModel):
     end_date: Optional[date]
     subject: Optional[str]
     message: Optional[str]
+    page_names: list[str]
     enabled: bool
     next_run_at: Optional[UtcDatetime]
     last_run_at: Optional[UtcDatetime]

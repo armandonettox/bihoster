@@ -161,7 +161,7 @@ def _prepare(session_factory: Callable, sub_id: int) -> Optional[_Plan]:
             recipients=sub.recipients,
             subject=sub.subject or f"{company} - {report.name}",
             body=f"{body}\n\n{footer}",
-            page_names=report.pbi_page_names,
+            page_names=sub.page_names if sub.page_names else report.pbi_page_names,
             pbi_workspace_id=report.pbi_workspace_id,
             pbi_report_id=report.pbi_report_id,
             smtp=load_smtp_config(row),

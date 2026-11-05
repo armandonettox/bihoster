@@ -29,6 +29,8 @@ class ReportSubscription(Base):
 
     subject = Column(String, nullable=True)
     message = Column(Text, nullable=True)
+    # Paginas especificas a enviar. Vazio/null = todas as paginas do relatorio
+    page_names_json = Column(Text, nullable=True)
 
     enabled = Column(Boolean, nullable=False, default=True)
     # Proximo envio (UTC). E gravado ANTES de enviar: assim um horario nunca dispara duas vezes.
@@ -40,6 +42,14 @@ class ReportSubscription(Base):
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+    @property
+    def page_names(self) -> list[str]:
+        return json.loads(self.page_names_json or "[]")
+
+    @page_names.setter
+    def page_names(self, value: list[str]) -> None:
+        self.page_names_json = json.dumps(list(value)) if value else None
 
     @property
     def recipients(self) -> list[str]:

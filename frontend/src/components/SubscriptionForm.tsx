@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import type { Subscription, SubscriptionFormat, SubscriptionInput } from "../api/subscriptions";
 import { getUtcOffsetLabel, getUtcOffsetMinutes } from "../utils/datetime";
+import MultiSelectDropdown from "./MultiSelectDropdown";
 
 const TIMEZONE_OPTIONS: { tz: string; label: string }[] = [
   { tz: "Pacific/Midway", label: "Midway, Samoa" },
@@ -66,6 +67,7 @@ function parseRecipients(text: string): string[] {
 export default function SubscriptionForm({
   initial,
   allowedDomains,
+  availablePages,
   saving,
   error,
   onSubmit,
@@ -73,6 +75,8 @@ export default function SubscriptionForm({
 }: {
   initial: Subscription | null;
   allowedDomains: string[];
+  /** Paginas do relatorio no Power BI. Vazio = relatorio sem paginas distintas ou nao carregado. */
+  availablePages: { name: string; display_name: string }[];
   saving: boolean;
   error: string | null;
   onSubmit: (input: SubscriptionInput) => void;
@@ -88,6 +92,7 @@ export default function SubscriptionForm({
   const [endDate, setEndDate] = useState(initial?.end_date ?? "");
   const [subject, setSubject] = useState(initial?.subject ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
+  const [pageNames, setPageNames] = useState<string[]>(initial?.page_names ?? []);
   const [localError, setLocalError] = useState<string | null>(null);
 
   function toggleDay(day: number) {
@@ -115,6 +120,7 @@ export default function SubscriptionForm({
       end_date: endDate || null,
       subject: subject.trim() || null,
       message: message.trim() || null,
+      page_names: pageNames,
     });
   }
 
@@ -150,6 +156,22 @@ export default function SubscriptionForm({
           <option value="PNG">Imagem (PNG)</option>
         </select>
       </label>
+
+      {availablePages.length > 0 && (
+        <div className="field" style={{ marginTop: 12 }}>
+          Paginas a enviar
+          <MultiSelectDropdown
+            ariaLabel="Paginas a enviar"
+            options={availablePages.map((p) => ({ value: p.name, label: p.display_name }))}
+            selected={pageNames}
+            onChange={setPageNames}
+            placeholder="Todas as paginas"
+          />
+          <span style={{ fontWeight: 400, fontSize: 12 }}>
+            Sem selecao, todas as paginas do relatorio sao enviadas.
+          </span>
+        </div>
+      )}
 
       <fieldset style={{ border: 0, padding: 0, margin: "12px 0 0" }}>
         <legend style={{ fontSize: 13, fontWeight: 500, color: "var(--color-text-muted)", marginBottom: 6 }}>

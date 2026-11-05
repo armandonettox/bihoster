@@ -64,6 +64,7 @@ def _out(db: Session, sub: ReportSubscription) -> SubscriptionOut:
         end_date=sub.end_date,
         subject=sub.subject,
         message=sub.message,
+        page_names=sub.page_names,
         enabled=bool(sub.enabled),
         next_run_at=sub.next_run_at,
         last_run_at=sub.last_run_at,
@@ -172,6 +173,8 @@ def create_subscription(
         consecutive_failures=0,
     )
     sub.recipients, sub.days, sub.times = data.recipients, data.days, data.times
+    if data.page_names is not None:
+        sub.page_names = data.page_names
     _apply_schedule(sub)
     db.add(sub)
     db.commit()
@@ -213,6 +216,8 @@ def update_subscription(
         sub.times = changes["times"]
     if "format" in changes:
         sub.fmt = changes["format"]
+    if "page_names" in changes:
+        sub.page_names = changes["page_names"] or []
     for field in ("name", "timezone", "start_date", "end_date", "subject", "message", "enabled"):
         if field in changes:
             setattr(sub, field, changes[field])

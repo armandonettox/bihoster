@@ -36,6 +36,7 @@ function assinatura(extra: Partial<Subscription> = {}): Subscription {
     end_date: null,
     subject: null,
     message: null,
+    page_names: [],
     enabled: true,
     next_run_at: "2026-11-05T11:00:00Z",
     last_run_at: null,

@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { extractErrorMessage } from "../api/client";
 import * as deliveryApi from "../api/reportDelivery";
+import * as powerbiApi from "../api/powerbi";
+import type { PowerBIPage } from "../api/powerbi";
 import type { Report } from "../api/reports";
 import * as api from "../api/subscriptions";
 import type { Subscription, SubscriptionInput, SubscriptionRun } from "../api/subscriptions";
@@ -89,6 +91,7 @@ export default function ReportSubscriptionsModal({
   const [items, setItems] = useState<Subscription[] | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [editing, setEditing] = useState<Subscription | "new" | null>(null);
+  const [availablePages, setAvailablePages] = useState<PowerBIPage[]>([]);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<Subscription | null>(null);
@@ -108,6 +111,14 @@ export default function ReportSubscriptionsModal({
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    if (!report.powerbi_connection_id) return;
+    powerbiApi
+      .listPowerBIPages(report.powerbi_connection_id, report.pbi_workspace_id, report.pbi_report_id)
+      .then(setAvailablePages)
+      .catch(() => setAvailablePages([]));
+  }, [report.powerbi_connection_id, report.pbi_workspace_id, report.pbi_report_id]);
 
   async function handleSave(input: SubscriptionInput) {
     setSaving(true);
@@ -149,6 +160,7 @@ export default function ReportSubscriptionsModal({
         <SubscriptionForm
           initial={editing === "new" ? null : editing}
           allowedDomains={allowedDomains}
+          availablePages={availablePages}
           saving={saving}
           error={formError}
           onSubmit={handleSave}
