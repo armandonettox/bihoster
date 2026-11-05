@@ -162,6 +162,7 @@ def _prepare(session_factory: Callable, sub_id: int) -> Optional[_Plan]:
             subject=sub.subject or f"{company} - {report.name}",
             body=f"{body}\n\n{footer}",
             page_names=sub.page_names if sub.page_names else report.pbi_page_names,
+            page_display_names={},
             pbi_workspace_id=report.pbi_workspace_id,
             pbi_report_id=report.pbi_report_id,
             smtp=load_smtp_config(row),
@@ -180,6 +181,12 @@ def _prepare(session_factory: Callable, sub_id: int) -> Optional[_Plan]:
             plan.permanent = True
             return plan
         plan.connection = embed_router._connection_snapshot(connection)
+        # Mapeamento nome interno -> nome de exibicao para nomear os arquivos gerados
+        try:
+            pages = powerbi.list_pages(plan.connection, report.pbi_workspace_id, report.pbi_report_id)
+            plan.page_display_names = {p["name"]: p["displayName"] for p in pages}
+        except Exception:  # noqa: BLE001 -- nomeacao e um extra; nao pode derrubar o envio
+            plan.page_display_names = {}
         try:
             static = embed_router.get_report_static_fresh(plan.connection, report.collection_id, report)
         except powerbi.PowerBIError as exc:
@@ -285,6 +292,7 @@ def run_subscription(
                     recipients=plan.recipients,
                     subject=plan.subject,
                     body=plan.body,
+                    page_display_names=plan.page_display_names,
                 )
                 if attempt_job.status == "done":
                     ok, message = True, attempt_job.message

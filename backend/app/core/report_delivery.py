@@ -7,11 +7,13 @@ para as assinaturas agendadas.
 Os trabalhos ficam so na memoria do processo (o backend roda com um unico worker): sao um
 acompanhamento de curta duracao, nao um historico. O historico de verdade vai pra auditoria."""
 
+import io
 import logging
 import re
 import threading
 import time
 import uuid
+import zipfile
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Sequence
 
@@ -79,6 +81,28 @@ def safe_filename(name: str, extension: str) -> str:
     return f"{(cleaned or 'relatorio')[:80]}{extension}"
 
 
+def _rename_zip_pages(data: bytes, display_names: dict[str, str]) -> bytes:
+    """Renomeia as imagens dentro do ZIP usando os nomes de exibicao das paginas.
+
+    O Power BI nomeia cada arquivo com o nome interno da pagina (ex: ReportSection1a2b).
+    Se houver mapeamento disponivel, troca pelo nome de exibicao legivel."""
+    if not display_names:
+        return data
+    src = io.BytesIO(data)
+    dst = io.BytesIO()
+    with zipfile.ZipFile(src, "r") as zin, zipfile.ZipFile(dst, "w", zipfile.ZIP_DEFLATED) as zout:
+        for entry in zin.infolist():
+            content = zin.read(entry.filename)
+            if "." in entry.filename:
+                stem, ext = entry.filename.rsplit(".", 1)
+                display = display_names.get(stem)
+                new_name = safe_filename(display, f".{ext}") if display else entry.filename
+            else:
+                new_name = entry.filename
+            zout.writestr(new_name, content)
+    return dst.getvalue()
+
+
 def run_delivery(
     job: DeliveryJob,
     *,
@@ -92,10 +116,14 @@ def run_delivery(
     recipients: Sequence[str],
     subject: str,
     body: str,
+    page_display_names: Optional[dict[str, str]] = None,
     on_finish: Optional[Callable[[bool, str], None]] = None,
 ) -> None:
-    """Exporta e envia. Nunca levanta: o resultado vai para o trabalho (e para `on_finish`)."""
+    """Exporta e envia. Nunca levanta: o resultado vai para o trabalho (e para `on_finish`).
+
+    `page_display_names` mapeia nome interno -> nome de exibicao para nomear os arquivos gerados."""
     ok = False
+    display = page_display_names or {}
     try:
         job.status, job.message = "queued", "Esperando vaga para exportar."
         with _export_slots:
@@ -109,15 +137,22 @@ def run_delivery(
             )
         job.status, job.message = "sending", "Enviando o e-mail..."
         mimetype, extension = powerbi.EXPORT_FORMATS[fmt]
-        if fmt == "PNG" and data[:4] == b"PK":
+        if fmt == "PNG" and data[:2] == b"PK":
             # Relatorio com varias paginas: o Power BI entrega um zip com uma imagem por pagina
             mimetype, extension = "application/zip", ".zip"
+            data = _rename_zip_pages(data, display)
+            attachment_name = safe_filename(report_name, ".zip")
+        elif fmt == "PNG" and len(page_names) == 1 and page_names[0] in display:
+            # Pagina unica selecionada: nomeia pelo nome de exibicao da pagina
+            attachment_name = safe_filename(display[page_names[0]], ".png")
+        else:
+            attachment_name = safe_filename(report_name, extension)
         send_email(
             smtp,
             list(recipients),
             subject,
             body,
-            [Attachment(safe_filename(report_name, extension), data, mimetype)],
+            [Attachment(attachment_name, data, mimetype)],
         )
         job.status, job.message, job.progress = "done", "E-mail enviado.", 100
         ok = True

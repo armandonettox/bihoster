@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from app.core import report_delivery
+from app.core import powerbi, report_delivery
 from app.core.audit import log_action
 from app.core.database import SessionLocal, get_db
 from app.core.email_sender import disallowed_recipients, load_smtp_config
@@ -87,10 +87,18 @@ def export_and_email(
     user_id, user_name = current_user.id, current_user.name
     job = report_delivery.create_job(user_id)
     company = settings_row.company_name if settings_row else "BIHoster"
+    conn_snapshot = embed_router._connection_snapshot(connection)
+    # Mapeamento nome interno -> nome de exibicao para nomear os arquivos gerados
+    page_display_names: dict[str, str] = {}
+    try:
+        pages = powerbi.list_pages(conn_snapshot, report.pbi_workspace_id, report.pbi_report_id)
+        page_display_names = {p["name"]: p["displayName"] for p in pages}
+    except Exception:  # noqa: BLE001 -- nomeacao e um extra; nao pode derrubar o envio
+        pass
     # Tudo que a thread usa e copiado agora: ela nao pode tocar na sessao do banco desta requisicao
     report_delivery.start_in_background(
         job=job,
-        connection=embed_router._connection_snapshot(connection),
+        connection=conn_snapshot,
         pbi_workspace_id=report.pbi_workspace_id,
         pbi_report_id=report.pbi_report_id,
         page_names=report.pbi_page_names,
@@ -103,6 +111,7 @@ def export_and_email(
             f"Segue em anexo o relatorio {report.name}.\n\n"
             f"Enviado por {user_name} pelo {company}."
         ),
+        page_display_names=page_display_names,
         on_finish=lambda ok, message: _audit_result(user_id, workspace_id, report_id, data.format, ok, message),
     )
     log_action(
