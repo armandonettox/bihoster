@@ -1,10 +1,28 @@
-import { useEffect, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as pbi from "powerbi-client";
 import * as reportsApi from "../api/reports";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { extractErrorMessage } from "../api/client";
 import { createEmbedTimer } from "../utils/embedTiming";
 import { getPowerBiService, isPreloadStarted } from "../utils/powerbiService";
+
+export interface ReportEmbedHandle {
+  exportTableData: () => Promise<void>;
+}
+
+const TABLE_VISUAL_TYPES = ["tableEx", "pivotTable"];
+
+function downloadCsv(data: string, filename: string) {
+  const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+}
 
 // O backend so entrega um token novo depois que o do cache vence (5 min antes da expiracao real),
 // entao renova um pouco depois desse ponto, ainda com folga antes de o token vencer de verdade.
@@ -26,21 +44,47 @@ interface PageTab {
   displayName: string;
 }
 
-export default function ReportEmbed({
-  reportId,
-  height = 600,
-  workspaceId,
-}: {
+const ReportEmbed = forwardRef<ReportEmbedHandle, {
   reportId: number;
   height?: number | string;
   /** Sobrescreve a colecao atual do contexto -- necessario para exibir relatorios de
    * outras colecoes, como na playlist do modo TV. */
   workspaceId?: number;
-}) {
+}>(function ReportEmbed({ reportId, height = 600, workspaceId }, ref) {
   const { currentWorkspace } = useWorkspace();
   const effectiveWorkspaceId = workspaceId ?? currentWorkspace?.id;
   const containerRef = useRef<HTMLDivElement>(null);
   const embeddedRef = useRef<pbi.Report | null>(null);
+
+  useImperativeHandle(ref, () => ({
+    exportTableData: async () => {
+      const report = embeddedRef.current;
+      if (!report) throw new Error("Relatorio nao carregado ainda.");
+
+      const page = await report.getActivePage();
+      const visuals = await page.getVisuals();
+      const tableVisuals = visuals.filter((v) => TABLE_VISUAL_TYPES.includes(v.type));
+
+      if (tableVisuals.length === 0) {
+        throw new Error("Nenhum visual de tabela encontrado na pagina atual.");
+      }
+
+      const errors: string[] = [];
+      for (const visual of tableVisuals) {
+        try {
+          const result = await visual.exportData(pbi.models.ExportDataType.Summarized);
+          const name = visual.title || visual.name || "tabela";
+          downloadCsv(result.data, `${name}.csv`);
+        } catch {
+          errors.push(visual.title || visual.name || "tabela");
+        }
+      }
+
+      if (errors.length > 0 && errors.length === tableVisuals.length) {
+        throw new Error("Nao foi possivel exportar os dados. Verifique as permissoes do relatorio.");
+      }
+    },
+  }));
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   // Barra de abas propria: so existe quando mais de uma aba foi escolhida pro relatorio
@@ -234,4 +278,6 @@ export default function ReportEmbed({
       />
     </div>
   );
-}
+});
+
+export default ReportEmbed;

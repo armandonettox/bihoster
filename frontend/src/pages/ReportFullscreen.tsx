@@ -1,10 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
 import { extractErrorMessage } from "../api/client";
 import FullscreenHeader from "../components/FullscreenHeader";
-import ReportEmbed from "../components/ReportEmbed";
+import ReportEmbed, { type ReportEmbedHandle } from "../components/ReportEmbed";
 import ReportSubscriptionsModal from "../components/ReportSubscriptionsModal";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
@@ -28,7 +28,22 @@ export default function ReportFullscreen() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(invalid ? "Endereco do relatorio invalido." : null);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const embedRef = useRef<ReportEmbedHandle>(null);
   const { canSubscribe, allowedDomains } = useSubscriptionAccess(workspaces.find((w) => w.id === wsId)?.role);
+
+  async function handleExport() {
+    setExportError(null);
+    setExporting(true);
+    try {
+      await embedRef.current?.exportTableData();
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Erro ao exportar os dados.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   useEffect(() => {
     if (invalid) return;
@@ -76,26 +91,47 @@ export default function ReportFullscreen() {
         title={report?.name ?? ""}
         onExit={exit}
         actions={
-          canSubscribe && report ? (
-            <button
-              type="button"
-              className="fullscreen-action"
-              onClick={() => setSubscriptionsOpen(true)}
-              title="Assinaturas: envio recorrente por e-mail"
-            >
-              <span className="material-symbols-outlined" aria-hidden="true">
-                mail
-              </span>
-              <span>Assinar</span>
-            </button>
+          report ? (
+            <>
+              <button
+                type="button"
+                className="fullscreen-action"
+                onClick={handleExport}
+                disabled={exporting}
+                title="Exportar dados de tabela como CSV"
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  download
+                </span>
+                <span>{exporting ? "Exportando..." : "Exportar CSV"}</span>
+              </button>
+              {canSubscribe && (
+                <button
+                  type="button"
+                  className="fullscreen-action"
+                  onClick={() => setSubscriptionsOpen(true)}
+                  title="Assinaturas: envio recorrente por e-mail"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    mail
+                  </span>
+                  <span>Assinar</span>
+                </button>
+              )}
+            </>
           ) : undefined
         }
       />
       <div className="fullscreen-view-body">
+        {exportError && (
+          <p role="alert" style={{ padding: "4px 8px", color: "var(--color-danger)", fontSize: 13 }}>
+            {exportError}
+          </p>
+        )}
         {error ? (
           <p style={{ padding: 8, color: "var(--color-danger)" }}>{error}</p>
         ) : report ? (
-          <ReportEmbed key={report.id} reportId={report.id} workspaceId={wsId} height="100%" />
+          <ReportEmbed ref={embedRef} key={report.id} reportId={report.id} workspaceId={wsId} height="100%" />
         ) : (
           <p style={{ padding: 8, color: "var(--color-text-muted)" }}>Carregando relatorio...</p>
         )}
