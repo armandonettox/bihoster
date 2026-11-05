@@ -63,11 +63,37 @@ function parseRecipients(text: string): string[] {
   return Array.from(new Set(text.split(/[\s,;]+/).map((e) => e.trim().toLowerCase()).filter(Boolean)));
 }
 
+/** Calcula o nome do arquivo anexo replicando a logica do backend. */
+function computeAttachmentName(
+  fmt: string,
+  reportName: string,
+  pageNames: string[],
+  availablePages: { name: string; display_name: string }[],
+): string {
+  const safe = (s: string) =>
+    s
+      .replace(/\s+/g, " ")
+      .replace(/[^\w\- ]+/gu, "")
+      .trim()
+      .slice(0, 80) || "relatorio";
+  if (fmt === "PDF") return `${safe(reportName)}.pdf`;
+  if (fmt === "PNG") {
+    if (pageNames.length === 1) {
+      const page = availablePages.find((p) => p.name === pageNames[0]);
+      return page ? `${safe(page.display_name)}.png` : `${safe(reportName)}.png`;
+    }
+    // 0 paginas (todas) ou mais de uma → Power BI entrega ZIP
+    return `${safe(reportName)}.zip`;
+  }
+  return `${safe(reportName)}.pdf`;
+}
+
 /** Formulario de criar ou editar uma assinatura. Valida o basico aqui; o servidor valida de novo. */
 export default function SubscriptionForm({
   initial,
   allowedDomains,
   availablePages,
+  reportName,
   saving,
   error,
   onSubmit,
@@ -77,6 +103,7 @@ export default function SubscriptionForm({
   allowedDomains: string[];
   /** Paginas do relatorio no Power BI. Vazio = relatorio sem paginas distintas ou nao carregado. */
   availablePages: { name: string; display_name: string }[];
+  reportName: string;
   saving: boolean;
   error: string | null;
   onSubmit: (input: SubscriptionInput) => void;
@@ -93,6 +120,7 @@ export default function SubscriptionForm({
   const [subject, setSubject] = useState(initial?.subject ?? "");
   const [message, setMessage] = useState(initial?.message ?? "");
   const [pageNames, setPageNames] = useState<string[]>(initial?.page_names ?? []);
+  const [showPreview, setShowPreview] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   function toggleDay(day: number) {
@@ -268,6 +296,56 @@ export default function SubscriptionForm({
           {shownError}
         </p>
       )}
+      <div style={{ marginTop: 16 }}>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          aria-expanded={showPreview}
+          onClick={() => setShowPreview((v) => !v)}
+        >
+          {showPreview ? "Ocultar preview" : "Visualizar e-mail"}
+        </button>
+      </div>
+
+      {showPreview && (
+        <div
+          style={{
+            marginTop: 10,
+            padding: "12px 14px",
+            borderRadius: 6,
+            border: "1px solid var(--color-border)",
+            background: "var(--color-bg-alt, var(--color-bg))",
+            fontSize: 13,
+          }}
+        >
+          <p style={{ margin: "0 0 6px", fontWeight: 600 }}>Preview do e-mail</p>
+          <p style={{ margin: "0 0 4px", color: "var(--color-text-muted)" }}>
+            <strong>Assunto:</strong>{" "}
+            {subject.trim() || reportName}
+          </p>
+          <p style={{ margin: "0 0 4px", color: "var(--color-text-muted)" }}>
+            <strong>Anexo:</strong>{" "}
+            {computeAttachmentName(format, reportName, pageNames, availablePages)}
+          </p>
+          <div
+            style={{
+              marginTop: 8,
+              padding: "8px 10px",
+              borderRadius: 4,
+              border: "1px solid var(--color-border)",
+              background: "var(--color-bg)",
+              whiteSpace: "pre-wrap",
+              color: "var(--color-text-muted)",
+              lineHeight: 1.5,
+            }}
+          >
+            {`Segue em anexo o relatorio ${reportName}.`}
+            {message.trim() ? `\n\n${message.trim()}` : ""}
+            {`\n\nEnvio automatico programado por voce. Para alterar ou parar de receber, fale com essa pessoa.`}
+          </div>
+        </div>
+      )}
+
       <div style={{ display: "flex", gap: 8, marginTop: 16 }}>
         <button type="submit" className="btn btn-primary" disabled={saving}>
           {saving ? "Salvando..." : initial ? "Salvar" : "Criar assinatura"}

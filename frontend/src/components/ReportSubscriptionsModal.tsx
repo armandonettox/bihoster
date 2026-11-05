@@ -161,6 +161,7 @@ export default function ReportSubscriptionsModal({
           initial={editing === "new" ? null : editing}
           allowedDomains={allowedDomains}
           availablePages={availablePages}
+          reportName={report.name}
           saving={saving}
           error={formError}
           onSubmit={handleSave}
