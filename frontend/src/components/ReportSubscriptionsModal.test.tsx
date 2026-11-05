@@ -137,6 +137,7 @@ describe("ReportSubscriptionsModal - criar", () => {
       end_date: null,
       subject: "Vendas",
       message: null,
+      page_names: [],
     });
     // volta para a lista, recarregada
     await waitFor(() => expect(listar).toHaveBeenCalledTimes(2));
