@@ -5,6 +5,7 @@ import type { Report } from "../api/reports";
 import { extractErrorMessage } from "../api/client";
 import FullscreenHeader from "../components/FullscreenHeader";
 import ReportEmbed, { type ReportEmbedHandle, type TableVisualInfo } from "../components/ReportEmbed";
+import ReportAlertsModal from "../components/ReportAlertsModal";
 import ReportSubscriptionsModal from "../components/ReportSubscriptionsModal";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
@@ -28,6 +29,7 @@ export default function ReportFullscreen() {
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(invalid ? "Endereco do relatorio invalido." : null);
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
+  const [alertsOpen, setAlertsOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
   const [visualList, setVisualList] = useState<TableVisualInfo[] | null>(null);
@@ -149,17 +151,30 @@ export default function ReportFullscreen() {
                 </button>
               )}
               {canSubscribe && (
-                <button
-                  type="button"
-                  className="fullscreen-action"
-                  onClick={() => setSubscriptionsOpen(true)}
-                  title="Assinaturas: envio recorrente por e-mail"
-                >
-                  <span className="material-symbols-outlined" aria-hidden="true">
-                    mail
-                  </span>
-                  <span>Assinar</span>
-                </button>
+                <>
+                  <button
+                    type="button"
+                    className="fullscreen-action"
+                    onClick={() => setSubscriptionsOpen(true)}
+                    title="Assinaturas: envio recorrente por e-mail"
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      mail
+                    </span>
+                    <span>Assinar</span>
+                  </button>
+                  <button
+                    type="button"
+                    className="fullscreen-action"
+                    onClick={() => setAlertsOpen(true)}
+                    title="Alertas: notificacao quando uma medida atingir um limite"
+                  >
+                    <span className="material-symbols-outlined" aria-hidden="true">
+                      notifications
+                    </span>
+                    <span>Alertas</span>
+                  </button>
+                </>
               )}
             </>
           ) : undefined
@@ -185,6 +200,13 @@ export default function ReportFullscreen() {
           workspaceId={wsId}
           allowedDomains={allowedDomains}
           onClose={() => setSubscriptionsOpen(false)}
+        />
+      )}
+      {alertsOpen && report && (
+        <ReportAlertsModal
+          report={report}
+          workspaceId={wsId}
+          onClose={() => setAlertsOpen(false)}
         />
       )}
     </div>

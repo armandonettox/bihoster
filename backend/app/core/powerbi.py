@@ -145,6 +145,63 @@ def list_pages(connection: PowerBIConnection, workspace_id: str, report_id: str)
     return response.json().get("value", [])
 
 
+def execute_dax_query(connection: PowerBIConnection, workspace_id: str, dataset_id: str, dax: str) -> list[dict]:
+    """Executa uma query DAX contra um dataset e devolve as linhas como lista de dicts.
+    Usa a API executeQueries do Power BI (requer capacidade dedicada ou Fabric)."""
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
+    body = {"queries": [{"query": dax}], "serializerSettings": {"includeNulls": True}}
+    response = _http.post(url, headers=_headers(connection), json=body)
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao executar query DAX: {_error_detail(response)}")
+    results = response.json().get("results", [])
+    if not results:
+        return []
+    tables = results[0].get("tables", [])
+    return tables[0].get("rows", []) if tables else []
+
+
+def list_measures(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> list[dict]:
+    """Lista as medidas do dataset via INFO.MEASURES(). Devolve lista de dicts com
+    'measure_name' e 'table_name' para cada medida encontrada."""
+    rows = execute_dax_query(
+        connection,
+        workspace_id,
+        dataset_id,
+        "EVALUATE SELECTCOLUMNS(INFO.MEASURES(), \"Name\", [Name], \"TableID\", [TableID])",
+    )
+    # INFO.MEASURES() retorna TableID (numero); para o nome da tabela precisamos de INFO.TABLES()
+    table_rows = execute_dax_query(
+        connection,
+        workspace_id,
+        dataset_id,
+        "EVALUATE SELECTCOLUMNS(INFO.TABLES(), \"ID\", [ID], \"Name\", [Name])",
+    )
+    table_map = {r.get("[ID]"): r.get("[Name]", "") for r in table_rows}
+    measures = []
+    for row in rows:
+        name = row.get("[Name]") or row.get("Name")
+        table_id = row.get("[TableID]") or row.get("TableID")
+        if name:
+            measures.append({"measure_name": name, "table_name": table_map.get(table_id, "")})
+    return sorted(measures, key=lambda m: (m["table_name"], m["measure_name"]))
+
+
+def query_measure_value(
+    connection: PowerBIConnection, workspace_id: str, dataset_id: str, dax_expression: str
+) -> Optional[float]:
+    """Avalia uma expressao DAX e devolve o resultado numerico (ou None se nulo/invalido)."""
+    rows = execute_dax_query(
+        connection, workspace_id, dataset_id, f"EVALUATE ROW(\"v\", {dax_expression})"
+    )
+    if not rows:
+        return None
+    value = next(iter(rows[0].values()), None)
+    try:
+        return float(value) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def dataset_requires_effective_identity(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> bool:
     """So dataset com RLS configurado aceita (e exige) identidade efetiva no GenerateToken --
     mandar identidade para um dataset sem RLS faz a API rejeitar a chamada."""
