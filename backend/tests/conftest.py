@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 # Precisa importar todos os modelos antes do create_all -- mesmo padrao usado em app/main.py --
 # senao tabelas referenciadas so por FK (sem import direto aqui) nao sao criadas.
-from app.models import audit_log, favorite, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import audit_log, favorite, invite, password_reset, permission, powerbi_connection, report, subscription, user, workspace  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 
 
