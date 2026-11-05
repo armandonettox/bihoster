@@ -10,12 +10,14 @@ import AccountMenu from "../components/AccountMenu";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import { assetUrl } from "../api/client";
 import { safeStorage } from "../utils/safeStorage";
+import { useTheme } from "../context/ThemeContext";
 
 const SIDEBAR_COLLAPSED_KEY = "sidebar_collapsed";
 
 export default function Layout() {
   const { settings } = useBranding();
   const { currentWorkspace, workspaces, selectWorkspace } = useWorkspace();
+  const { theme, toggleTheme } = useTheme();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -81,6 +83,16 @@ export default function Layout() {
           <SearchBar />
         </div>
         <div className="flex-row gap-sm">
+          <button
+            className="btn btn-ghost"
+            onClick={toggleTheme}
+            title={theme === "dark" ? "Mudar para modo claro" : "Mudar para modo escuro"}
+            aria-label={theme === "dark" ? "Mudar para modo claro" : "Mudar para modo escuro"}
+          >
+            <span className="material-symbols-outlined" style={{ fontSize: 20 }}>
+              {theme === "dark" ? "light_mode" : "dark_mode"}
+            </span>
+          </button>
           <AccountMenu />
         </div>
       </header>

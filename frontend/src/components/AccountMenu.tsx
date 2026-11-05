@@ -2,14 +2,12 @@ import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace } from "../context/WorkspaceContext";
-import { useTheme } from "../context/ThemeContext";
 
 export default function AccountMenu() {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { user, logout } = useAuth();
   const { workspaces } = useWorkspace();
-  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
@@ -72,12 +70,6 @@ export default function AccountMenu() {
               <div className="account-menu-email">{user?.email}</div>
             </div>
           </div>
-
-          <div className="topbar-menu-divider" />
-
-          <button className="topbar-menu-item" onClick={toggleTheme}>
-            {theme === "dark" ? "Modo claro" : "Modo escuro"}
-          </button>
 
           <div className="topbar-menu-divider" />
 
