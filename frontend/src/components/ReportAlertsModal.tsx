@@ -52,12 +52,15 @@ export default function ReportAlertsModal({
     load();
   }, [load]);
 
+  const [measuresError, setMeasuresError] = useState<string | null>(null);
+
   useEffect(() => {
     setLoadingMeasures(true);
+    setMeasuresError(null);
     alertsApi
       .listReportMeasures(workspaceId, report.id)
-      .then(setMeasures)
-      .catch(() => setMeasures([]))
+      .then((data) => { setMeasures(data); if (data.length === 0) setMeasuresError("Nenhuma medida encontrada no dataset."); })
+      .catch((err) => { setMeasures([]); setMeasuresError(extractErrorMessage(err) || "Erro ao carregar medidas."); })
       .finally(() => setLoadingMeasures(false));
   }, [workspaceId, report.id]);
 
@@ -115,6 +118,7 @@ export default function ReportAlertsModal({
         atingir a condicao configurada.
       </p>
       {loadError && <p className="auth-error">{loadError}</p>}
+      {measuresError && <p className="auth-error">{measuresError}</p>}
       {actionError && (
         <p className="auth-error" role="alert">
           {actionError}
