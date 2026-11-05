@@ -6,8 +6,14 @@ import { extractErrorMessage } from "../api/client";
 import { createEmbedTimer } from "../utils/embedTiming";
 import { getPowerBiService, isPreloadStarted } from "../utils/powerbiService";
 
+export interface TableVisualInfo {
+  name: string;
+  title: string;
+}
+
 export interface ReportEmbedHandle {
-  exportTableData: () => Promise<void>;
+  getTableVisuals: () => Promise<TableVisualInfo[]>;
+  exportTableData: (visualName?: string) => Promise<void>;
 }
 
 const TABLE_VISUAL_TYPES = ["tableEx", "pivotTable"];
@@ -57,7 +63,16 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   const embeddedRef = useRef<pbi.Report | null>(null);
 
   useImperativeHandle(ref, () => ({
-    exportTableData: async () => {
+    getTableVisuals: async () => {
+      const report = embeddedRef.current;
+      if (!report) throw new Error("Relatorio nao carregado ainda.");
+      const page = await report.getActivePage();
+      const visuals = await page.getVisuals();
+      return visuals
+        .filter((v) => TABLE_VISUAL_TYPES.includes(v.type))
+        .map((v) => ({ name: v.name, title: v.title || v.name }));
+    },
+    exportTableData: async (visualName?: string) => {
       const report = embeddedRef.current;
       if (!report) throw new Error("Relatorio nao carregado ainda.");
 
@@ -69,18 +84,26 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         throw new Error("Nenhum visual de tabela encontrado na pagina atual.");
       }
 
+      const targets = visualName
+        ? tableVisuals.filter((v) => v.name === visualName)
+        : tableVisuals;
+
+      if (targets.length === 0) {
+        throw new Error("Visual nao encontrado na pagina atual.");
+      }
+
       const errors: string[] = [];
-      for (const visual of tableVisuals) {
+      for (const visual of targets) {
         try {
           const result = await visual.exportData(pbi.models.ExportDataType.Summarized);
-          const name = visual.title || visual.name || "tabela";
-          downloadCsv(result.data, `${name}.csv`);
+          const label = visual.title || visual.name || "tabela";
+          downloadCsv(result.data, `${label}.csv`);
         } catch {
           errors.push(visual.title || visual.name || "tabela");
         }
       }
 
-      if (errors.length > 0 && errors.length === tableVisuals.length) {
+      if (errors.length > 0 && errors.length === targets.length) {
         throw new Error("Nao foi possivel exportar os dados. Verifique as permissoes do relatorio.");
       }
     },
@@ -157,6 +180,11 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
               pageNavigation: {
                 visible: config.show_page_nav ?? (selectedPages.length === 0),
               },
+            },
+            // Cabecalho do visual (menu "..."): so visivel quando habilitado no relatorio.
+            // Expoe os botoes nativos: exportar dados, mostrar como tabela, modo foco, classificar.
+            visualSettings: {
+              visualHeaders: [{ settings: { visible: config.show_visual_header ?? false } }],
             },
           },
         }) as pbi.Report;

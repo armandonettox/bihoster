@@ -23,6 +23,7 @@ function report(id: number, name = `Relatorio ${id}`): Report {
     display_type: "relatorio",
     show_filter_pane: false,
     show_page_nav: false,
+    show_visual_header: false,
   };
 }
 

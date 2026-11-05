@@ -4,7 +4,7 @@ import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
 import { extractErrorMessage } from "../api/client";
 import FullscreenHeader from "../components/FullscreenHeader";
-import ReportEmbed, { type ReportEmbedHandle } from "../components/ReportEmbed";
+import ReportEmbed, { type ReportEmbedHandle, type TableVisualInfo } from "../components/ReportEmbed";
 import ReportSubscriptionsModal from "../components/ReportSubscriptionsModal";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
@@ -30,18 +30,38 @@ export default function ReportFullscreen() {
   const [subscriptionsOpen, setSubscriptionsOpen] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [visualList, setVisualList] = useState<TableVisualInfo[] | null>(null);
   const embedRef = useRef<ReportEmbedHandle>(null);
   const { canSubscribe, allowedDomains } = useSubscriptionAccess(workspaces.find((w) => w.id === wsId)?.role);
 
   async function handleExport() {
     setExportError(null);
+    setVisualList(null);
     setExporting(true);
     try {
-      await embedRef.current?.exportTableData();
+      const visuals = await embedRef.current?.getTableVisuals();
+      if (!visuals || visuals.length === 0) {
+        throw new Error("Nenhum visual de tabela encontrado na pagina atual.");
+      }
+      if (visuals.length === 1) {
+        await embedRef.current?.exportTableData(visuals[0].name);
+      } else {
+        setVisualList(visuals);
+      }
     } catch (e) {
       setExportError(e instanceof Error ? e.message : "Erro ao exportar os dados.");
     } finally {
       setExporting(false);
+    }
+  }
+
+  async function handleExportVisual(visualName: string) {
+    setVisualList(null);
+    setExportError(null);
+    try {
+      await embedRef.current?.exportTableData(visualName);
+    } catch (e) {
+      setExportError(e instanceof Error ? e.message : "Erro ao exportar os dados.");
     }
   }
 
@@ -93,18 +113,41 @@ export default function ReportFullscreen() {
         actions={
           report ? (
             <>
-              <button
-                type="button"
-                className="fullscreen-action"
-                onClick={handleExport}
-                disabled={exporting}
-                title="Exportar dados de tabela como CSV"
-              >
-                <span className="material-symbols-outlined" aria-hidden="true">
-                  download
-                </span>
-                <span>{exporting ? "Exportando..." : "Exportar CSV"}</span>
-              </button>
+              {visualList ? (
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Qual tabela?</span>
+                  {visualList.map((v) => (
+                    <button
+                      key={v.name}
+                      type="button"
+                      className="fullscreen-action"
+                      onClick={() => handleExportVisual(v.name)}
+                    >
+                      {v.title}
+                    </button>
+                  ))}
+                  <button
+                    type="button"
+                    className="fullscreen-action"
+                    onClick={() => setVisualList(null)}
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  className="fullscreen-action"
+                  onClick={handleExport}
+                  disabled={exporting}
+                  title="Exportar dados de tabela como CSV"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    download
+                  </span>
+                  <span>{exporting ? "Exportando..." : "Exportar CSV"}</span>
+                </button>
+              )}
               {canSubscribe && (
                 <button
                   type="button"

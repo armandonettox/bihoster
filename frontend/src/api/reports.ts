@@ -16,7 +16,9 @@ export interface Report {
   display_type: DisplayType;
   show_filter_pane: boolean;
   show_page_nav: boolean;
+  show_visual_header: boolean;
 }
+
 
 export interface ReportInput {
   name: string;
@@ -28,6 +30,7 @@ export interface ReportInput {
   display_type?: DisplayType;
   show_filter_pane?: boolean;
   show_page_nav?: boolean;
+  show_visual_header?: boolean;
 }
 
 export async function listReports(workspaceId: number): Promise<Report[]> {
@@ -65,6 +68,7 @@ export interface EmbedConfig {
   expires_at?: string | null;
   show_filter_pane: boolean;
   show_page_nav: boolean;
+  show_visual_header?: boolean;
 }
 
 export async function getEmbedConfig(workspaceId: number, reportId: number): Promise<EmbedConfig> {

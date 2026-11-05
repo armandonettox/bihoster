@@ -40,6 +40,7 @@ export default function NewReportForm({
   const [displayType, setDisplayType] = useState<DisplayType>(editingReport?.display_type || "relatorio");
   const [showFilterPane, setShowFilterPane] = useState(editingReport?.show_filter_pane ?? false);
   const [showPageNav, setShowPageNav] = useState(editingReport?.show_page_nav ?? false);
+  const [showVisualHeader, setShowVisualHeader] = useState(editingReport?.show_visual_header ?? false);
   const [loadingConnections, setLoadingConnections] = useState(true);
   const [loadingWorkspaces, setLoadingWorkspaces] = useState(false);
   const [loadingReports, setLoadingReports] = useState(false);
@@ -156,6 +157,7 @@ export default function NewReportForm({
         display_type: displayType,
         show_filter_pane: showFilterPane,
         show_page_nav: showPageNav,
+        show_visual_header: showVisualHeader,
       };
       if (editingReport) {
         await reportsApi.updateReport(currentWorkspace.id, editingReport.id, input);
@@ -310,6 +312,14 @@ export default function NewReportForm({
               onChange={(e) => setShowPageNav(e.target.checked)}
             />
             Mostrar barra de navegacao de paginas
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: 8, fontWeight: 400, cursor: "pointer" }}>
+            <input
+              type="checkbox"
+              checked={showVisualHeader}
+              onChange={(e) => setShowVisualHeader(e.target.checked)}
+            />
+            Habilitar menu dos visuais (exportar dados, modo foco, classificar, mostrar como tabela)
           </label>
         </div>
 

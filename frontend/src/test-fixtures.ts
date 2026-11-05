@@ -16,6 +16,7 @@ export function makeReport(id: number, extra: Partial<Report> = {}): Report {
     display_type: "relatorio",
     show_filter_pane: false,
     show_page_nav: false,
+    show_visual_header: false,
     ...extra,
   };
 }
