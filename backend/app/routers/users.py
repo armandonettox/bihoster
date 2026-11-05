@@ -50,6 +50,7 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_platform_admin))
             email=u.email,
             groups=groups_by_user.get(u.id, []),
             last_login=last_login_by_user.get(u.id),
+            permission_level_id=u.permission_level_id,
         )
         for u in users
     ]

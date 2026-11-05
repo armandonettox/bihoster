@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Enum, DateTime, func
+from sqlalchemy import Column, ForeignKey, Integer, String, Enum, DateTime, func
 
 from app.core.database import Base
 
@@ -25,3 +25,5 @@ class User(Base):
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # Nivel de permissao funcional (nao e papel de colecao; e o nivel global de funcionalidades)
+    permission_level_id = Column(Integer, ForeignKey("permission_levels.id", ondelete="SET NULL"), nullable=True)

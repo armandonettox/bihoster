@@ -18,6 +18,7 @@ class UserDirectoryOut(BaseModel):
     email: str
     groups: list[UserGroupOut]
     last_login: Optional[UtcDatetime]
+    permission_level_id: Optional[int] = None
 
 
 class PendingInviteOut(BaseModel):

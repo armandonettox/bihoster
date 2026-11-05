@@ -18,6 +18,7 @@ from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
 from app.models import audit_log, favorite, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import permission as permission_model  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
     audit,
@@ -26,6 +27,7 @@ from app.routers import (  # noqa: F401
     favorites,
     groups,
     home,
+    permissions,
     powerbi,
     powerbi_catalog,
     powerbi_connections,
@@ -41,6 +43,15 @@ from app.routers import workspaces
 
 Base.metadata.create_all(bind=engine)
 ensure_schema_up_to_date(engine, Base)
+
+# Seed dos niveis do sistema (idempotente -- nao recria o que ja existe)
+from app.core.permissions import seed_permission_levels
+from app.core.database import SessionLocal as _SessionLocal
+_seed_db = _SessionLocal()
+try:
+    seed_permission_levels(_seed_db)
+finally:
+    _seed_db.close()
 
 # Mesma string usada como default em Settings.jwt_secret/encryption_key (core/config.py) --
 # centralizada aqui pra essas duas checagens nao dessincronizarem se o default mudar um dia.
@@ -167,6 +178,7 @@ _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 app.include_router(auth.router)
+app.include_router(permissions.router)
 app.include_router(workspaces.router)
 app.include_router(groups.router)
 app.include_router(reports.router)
