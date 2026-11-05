@@ -25,6 +25,7 @@ vi.mock("./settings/SubscriptionsTab", async () => (await import("../test-stubs"
 vi.mock("./settings/AuditTab", async () => (await import("../test-stubs")).tabStub("tab:audit"));
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
 vi.mock("./settings/AccountTab", async () => (await import("../test-stubs")).tabStub("tab:account"));
+vi.mock("./settings/PermissoesTab", async () => (await import("../test-stubs")).tabStub("tab:permissoes"));
 
 function renderAt(url: string) {
   return render(
@@ -91,7 +92,7 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(labels).toContain("Minha conta");
     expect(labels).toContain("Membros");
     expect(labels).toContain("E-mail");
-    expect(labels).toHaveLength(11);
+    expect(labels).toHaveLength(12);
   });
 
   it("?tab=email abre a aba de e-mail", () => {
