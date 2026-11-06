@@ -70,6 +70,8 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   const effectiveWorkspaceId = workspaceId ?? currentWorkspace?.id;
   const containerRef = useRef<HTMLDivElement>(null);
   const embeddedRef = useRef<pbi.Report | null>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
 
   useImperativeHandle(ref, () => ({
     getTableVisuals: async () => {
@@ -256,6 +258,9 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
 
         embeddedReport.on("loaded", async () => {
           timer.mark("loaded");
+          if (zoomRef.current !== 1) {
+            embeddedReport.setZoom(zoomRef.current).catch(() => {});
+          }
           if (selectedPages.length > 1) {
             try {
               const pages = await embeddedReport.getPages();
@@ -304,6 +309,12 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
     };
   }, [reportId, effectiveWorkspaceId]);
 
+  useEffect(() => {
+    const report = embeddedRef.current;
+    if (!report) return;
+    report.setZoom(zoom).catch(() => {});
+  }, [zoom]);
+
   if (error) {
     return (
       <div className="embed-error">
@@ -350,11 +361,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       <div
         ref={containerRef}
         className="report-embed-frame"
-        style={{
-          height,
-          flex: height === "100%" ? 1 : undefined,
-          zoom: zoom !== 1 ? zoom : undefined,
-        }}
+        style={{ height, flex: height === "100%" ? 1 : undefined }}
       />
     </div>
   );
