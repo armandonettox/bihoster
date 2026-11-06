@@ -188,9 +188,12 @@ def list_measures(connection: PowerBIConnection, workspace_id: str, dataset_id: 
 def query_measure_value(
     connection: PowerBIConnection, workspace_id: str, dataset_id: str, dax_expression: str
 ) -> Optional[float]:
-    """Avalia uma expressao DAX e devolve o resultado numerico (ou None se nulo/invalido)."""
+    """Avalia uma expressao DAX e devolve o resultado numerico (ou None se nulo/invalido).
+
+    Usa EVALUATE { expr } em vez de EVALUATE ROW(): a forma de tabela literal e mais
+    tolerada pelo endpoint executeQueries para referencias a medidas simples."""
     rows = execute_dax_query(
-        connection, workspace_id, dataset_id, f"EVALUATE ROW(\"v\", {dax_expression})"
+        connection, workspace_id, dataset_id, f"EVALUATE {{{dax_expression}}}"
     )
     if not rows:
         return None
