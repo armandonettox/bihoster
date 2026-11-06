@@ -1812,6 +1812,49 @@ table.table tr:last-child td {
   to   { opacity: 0; }
 }
 
+/* --- Toggle da barra superior no relatorio em tela cheia --- */
+
+.fullscreen-header-wrap {
+  overflow: hidden;
+  transition: max-height 0.25s ease, opacity 0.25s ease;
+  max-height: 80px;
+  opacity: 1;
+}
+
+.fullscreen-header-wrap--hidden {
+  max-height: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.fullscreen-header-toggle {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1001;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--color-text-muted);
+  opacity: 0.25;
+  transition: opacity 0.2s, top 0.25s ease;
+  padding: 2px 10px;
+  line-height: 1;
+}
+
+.fullscreen-header-toggle:hover {
+  opacity: 0.9;
+}
+
+.fullscreen-header-toggle--open {
+  top: 48px;
+}
+
+.fullscreen-header-toggle .material-symbols-outlined {
+  font-size: 20px;
+}
+
 /* --- Upload de imagem --- */
 
 .image-upload {

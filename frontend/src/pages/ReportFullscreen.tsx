@@ -36,6 +36,7 @@ export default function ReportFullscreen() {
   const embedRef = useRef<ReportEmbedHandle>(null);
   const [zoom, setZoom] = useState(1.0);
   const [showZoomHint, setShowZoomHint] = useState(true);
+  const [headerVisible, setHeaderVisible] = useState(false);
   const { canSubscribe, allowedDomains } = useSubscriptionAccess(workspaces.find((w) => w.id === wsId)?.role);
 
   const ZOOM_MIN = 0.5;
@@ -131,9 +132,10 @@ export default function ReportFullscreen() {
 
   return (
     <div className="fullscreen-view">
-      <FullscreenHeader
-        title={report?.name ?? ""}
-        onExit={exit}
+      <div className={`fullscreen-header-wrap${headerVisible ? "" : " fullscreen-header-wrap--hidden"}`}>
+        <FullscreenHeader
+          title={report?.name ?? ""}
+          onExit={exit}
         actions={
           report ? (
             <>
@@ -236,7 +238,19 @@ export default function ReportFullscreen() {
             </>
           ) : undefined
         }
-      />
+        />
+      </div>
+      <button
+        type="button"
+        className={`fullscreen-header-toggle${headerVisible ? " fullscreen-header-toggle--open" : ""}`}
+        onClick={() => setHeaderVisible((v) => !v)}
+        title={headerVisible ? "Ocultar barra" : "Mostrar barra"}
+        aria-label={headerVisible ? "Ocultar barra superior" : "Mostrar barra superior"}
+      >
+        <span className="material-symbols-outlined">
+          {headerVisible ? "keyboard_arrow_up" : "keyboard_arrow_down"}
+        </span>
+      </button>
       <div className="fullscreen-view-body" style={{ position: "relative" }}>
         {showZoomHint && report && (
           <div className={`zoom-hint${showZoomHint ? "" : " zoom-hint--hidden"}`} aria-hidden="true">
