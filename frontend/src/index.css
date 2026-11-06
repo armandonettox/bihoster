@@ -1837,9 +1837,9 @@ table.table tr:last-child td {
   border: none;
   cursor: pointer;
   color: var(--color-text-muted);
-  opacity: 0.25;
+  opacity: 0.45;
   transition: opacity 0.2s, top 0.25s ease;
-  padding: 2px 10px;
+  padding: 2px 16px;
   line-height: 1;
 }
 
@@ -1852,7 +1852,7 @@ table.table tr:last-child td {
 }
 
 .fullscreen-header-toggle .material-symbols-outlined {
-  font-size: 20px;
+  font-size: 60px;
 }
 
 /* --- Upload de imagem --- */
