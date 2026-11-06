@@ -39,6 +39,8 @@ class SettingsUpdate(BaseModel):
     google_client_id: Optional[str] = None
     google_client_secret: Optional[str] = None
     google_allowed_domains: Optional[str] = None
+    cache_warmup_enabled: Optional[bool] = None
+    cache_warmup_interval_seconds: Optional[int] = Field(default=None, ge=30, le=3600)
 
     @field_validator("google_allowed_domains")
     @classmethod
@@ -95,6 +97,8 @@ class SettingsOut(BaseModel):
     google_client_id: Optional[str]
     google_client_secret_configured: bool = False
     google_allowed_domains: Optional[str]
+    cache_warmup_enabled: bool = True
+    cache_warmup_interval_seconds: int = 240
 
     class Config:
         from_attributes = True

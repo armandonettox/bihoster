@@ -62,6 +62,8 @@ def _to_out(settings_row: AppSettings) -> SettingsOut:
         google_client_id=settings_row.google_client_id,
         google_client_secret_configured=bool(settings_row.google_client_secret),
         google_allowed_domains=settings_row.google_allowed_domains,
+        cache_warmup_enabled=bool(settings_row.cache_warmup_enabled) if settings_row.cache_warmup_enabled is not None else True,
+        cache_warmup_interval_seconds=settings_row.cache_warmup_interval_seconds if settings_row.cache_warmup_interval_seconds is not None else 240,
     )
 
 
@@ -104,10 +106,16 @@ def update_settings(
     if default_workspace_id is not None and not db.query(Workspace).get(default_workspace_id):
         raise HTTPException(status_code=400, detail="A colecao padrao escolhida nao existe")
 
+    cache_fields_changed = {"cache_warmup_enabled", "cache_warmup_interval_seconds"} & changed_fields.keys()
+
     for field, value in changed_fields.items():
         setattr(settings_row, field, value)
     db.commit()
     db.refresh(settings_row)
+
+    if cache_fields_changed:
+        from app.core import cache_warmup
+        cache_warmup.restart()
 
     sensitive_changed = SECURITY_SENSITIVE_FIELDS & changed_fields.keys()
     if sensitive_changed:
@@ -120,6 +128,21 @@ def update_settings(
         )
 
     return _to_out(settings_row)
+
+
+@router.get("/cache/stats")
+def get_cache_stats(_: User = Depends(require_platform_admin)):
+    """Tamanho atual dos caches de embed e resultado do ultimo ciclo de aquecimento."""
+    from app.core import cache_warmup
+    return cache_warmup.get_stats()
+
+
+@router.delete("/cache")
+def reset_cache(_: User = Depends(require_platform_admin)):
+    """Limpa todos os caches de embed. O proximo acesso a cada relatorio gera um token novo."""
+    from app.core import cache_warmup
+    cache_warmup.clear_all()
+    return cache_warmup.get_stats()
 
 
 def _save_upload(file: UploadFile) -> str:

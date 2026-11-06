@@ -21,6 +21,35 @@ export interface AppSettings {
   google_client_id: string | null;
   google_client_secret_configured: boolean;
   google_allowed_domains: string | null;
+  cache_warmup_enabled: boolean;
+  cache_warmup_interval_seconds: number;
+}
+
+export interface CacheStats {
+  warmup_enabled: boolean;
+  warmup_interval_seconds: number;
+  warmup_running: boolean;
+  last_run_at: string | null;
+  last_run_stats: {
+    relatorios?: number;
+    tokens_novos?: number;
+    datasets?: number;
+    erros?: number;
+  };
+  embed_tokens: number;
+  report_static: number;
+  refresh_info: number;
+  total_entries: number;
+}
+
+export async function getCacheStats(): Promise<CacheStats> {
+  const { data } = await api.get("/settings/cache/stats");
+  return data;
+}
+
+export async function resetCache(): Promise<CacheStats> {
+  const { data } = await api.delete("/settings/cache");
+  return data;
 }
 
 export interface AppSettingsUpdate extends Partial<Omit<AppSettings, "google_client_secret_configured">> {

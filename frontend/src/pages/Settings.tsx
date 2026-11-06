@@ -14,8 +14,9 @@ import UpdatesTab from "./settings/UpdatesTab";
 import AccountTab from "./settings/AccountTab";
 import SubscriptionsTab from "./settings/SubscriptionsTab";
 import PermissoesTab from "./settings/PermissoesTab";
+import CacheTab from "./settings/CacheTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "subscriptions" | "audit" | "updates" | "account" | "permissoes";
+type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "subscriptions" | "audit" | "updates" | "account" | "permissoes" | "cache";
 
 // Abas de administracao: so quem administra alguma colecao. O servidor protege cada rota de
 // qualquer jeito; aqui e so o que a pessoa ve.
@@ -31,6 +32,7 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: "permissoes", label: "Permissoes" },
   { key: "audit", label: "Auditoria" },
   { key: "updates", label: "Atualizacoes" },
+  { key: "cache", label: "Cache" },
 ];
 
 // Todo usuario tem a sua conta, administre ou nao
@@ -115,6 +117,7 @@ export default function Settings() {
         {tab === "permissoes" && <PermissoesTab />}
         {tab === "audit" && <AuditTab />}
         {tab === "updates" && <UpdatesTab />}
+        {tab === "cache" && <CacheTab />}
         {tab === "account" && <AccountTab />}
       </div>
     </div>
