@@ -26,6 +26,7 @@ vi.mock("./settings/AuditTab", async () => (await import("../test-stubs")).tabSt
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
 vi.mock("./settings/AccountTab", async () => (await import("../test-stubs")).tabStub("tab:account"));
 vi.mock("./settings/PermissoesTab", async () => (await import("../test-stubs")).tabStub("tab:permissoes"));
+vi.mock("./settings/CacheTab", async () => (await import("../test-stubs")).tabStub("tab:cache"));
 
 function renderAt(url: string) {
   return render(
@@ -92,7 +93,7 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(labels).toContain("Minha conta");
     expect(labels).toContain("Membros");
     expect(labels).toContain("E-mail");
-    expect(labels).toHaveLength(12);
+    expect(labels).toHaveLength(13);
   });
 
   it("?tab=email abre a aba de e-mail", () => {
@@ -112,7 +113,7 @@ describe("Settings - quem administra alguma colecao", () => {
   });
 
   it("as setas do teclado percorrem inclusive Minha conta", () => {
-    renderAt("/settings?tab=updates");
+    renderAt("/settings?tab=cache");
     fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
     expect(content()).toBe("tab:account");
     // E volta pro comeco depois da ultima
