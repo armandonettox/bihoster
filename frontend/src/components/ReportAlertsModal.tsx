@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { type RefObject, useCallback, useEffect, useState } from "react";
 import { extractErrorMessage } from "../api/client";
 import * as alertsApi from "../api/alerts";
 import type { Alert, AlertInput, Measure } from "../api/alerts";
 import type { Report } from "../api/reports";
 import { formatDateTime } from "../utils/datetime";
+import type { ReportEmbedHandle } from "./ReportEmbed";
 import AlertForm from "./AlertForm";
 import ConfirmDialog from "./ConfirmDialog";
 import Modal from "./Modal";
@@ -23,10 +24,12 @@ const STATUS_LABEL: Record<string, string> = {
 export default function ReportAlertsModal({
   report,
   workspaceId,
+  embedRef,
   onClose,
 }: {
   report: Report;
   workspaceId: number;
+  embedRef: RefObject<ReportEmbedHandle | null>;
   onClose: () => void;
 }) {
   const [items, setItems] = useState<Alert[] | null>(null);
@@ -55,14 +58,20 @@ export default function ReportAlertsModal({
   const [measuresError, setMeasuresError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!embedRef.current) return;
     setLoadingMeasures(true);
     setMeasuresError(null);
-    alertsApi
-      .listReportMeasures(workspaceId, report.id)
-      .then((data) => { setMeasures(data); if (data.length === 0) setMeasuresError("Nenhuma medida encontrada no dataset."); })
-      .catch((err) => { setMeasures([]); setMeasuresError(extractErrorMessage(err) || "Erro ao carregar medidas."); })
+    embedRef.current
+      .getPageMeasures()
+      .then((data) => {
+        const asMeasures: Measure[] = data.map((m) => ({ measure_name: m.measure_name, table_name: m.table_name }));
+        setMeasures(asMeasures);
+        if (asMeasures.length === 0) setMeasuresError("Nenhum campo encontrado na pagina atual. Navegue ate uma pagina com visuais e tente novamente.");
+      })
+      .catch(() => setMeasuresError("Nao foi possivel ler os campos do relatorio. O relatorio precisa estar carregado."))
       .finally(() => setLoadingMeasures(false));
-  }, [workspaceId, report.id]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   async function handleSave(input: AlertInput) {
     setSaving(true);

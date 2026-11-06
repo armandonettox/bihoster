@@ -206,6 +206,7 @@ export default function ReportFullscreen() {
         <ReportAlertsModal
           report={report}
           workspaceId={wsId}
+          embedRef={embedRef}
           onClose={() => setAlertsOpen(false)}
         />
       )}

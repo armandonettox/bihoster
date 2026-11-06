@@ -11,9 +11,16 @@ export interface TableVisualInfo {
   title: string;
 }
 
+export interface VisualMeasure {
+  measure_name: string;
+  table_name: string;
+  visual_title: string;
+}
+
 export interface ReportEmbedHandle {
   getTableVisuals: () => Promise<TableVisualInfo[]>;
   exportTableData: (visualName?: string) => Promise<void>;
+  getPageMeasures: () => Promise<VisualMeasure[]>;
 }
 
 const TABLE_VISUAL_TYPES = ["tableEx", "pivotTable"];
@@ -71,6 +78,45 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       return visuals
         .filter((v) => TABLE_VISUAL_TYPES.includes(v.type))
         .map((v) => ({ name: v.name, title: v.title || v.name }));
+    },
+    getPageMeasures: async (): Promise<VisualMeasure[]> => {
+      const report = embeddedRef.current;
+      if (!report) throw new Error("Relatorio nao carregado ainda.");
+      const page = await report.getActivePage();
+      const visuals = await page.getVisuals();
+      const measures: VisualMeasure[] = [];
+      for (const visual of visuals) {
+        try {
+          // Exporta so os cabecalhos (1 linha) para inferir os campos do visual
+          const result = await visual.exportData(pbi.models.ExportDataType.Summarized);
+          if (!result.data) continue;
+          const firstLine = result.data.split("\n")[0] ?? "";
+          const headers = firstLine.split(",").map((h) => h.trim().replace(/^"|"$/g, ""));
+          const visualTitle = visual.title || visual.name;
+          for (const header of headers) {
+            if (!header) continue;
+            // Formato "Tabela[Medida]" ou so "Medida"
+            const match = header.match(/^(.+)\[(.+)\]$/) ?? header.match(/^\[(.+)\]$/);
+            if (match && match.length === 3) {
+              measures.push({ table_name: match[1], measure_name: match[2], visual_title: visualTitle });
+            } else if (match && match.length === 2) {
+              measures.push({ table_name: "", measure_name: match[1], visual_title: visualTitle });
+            } else {
+              measures.push({ table_name: "", measure_name: header, visual_title: visualTitle });
+            }
+          }
+        } catch {
+          // Visual sem dados ou sem permissao de exportar -- ignorar
+        }
+      }
+      // Deduplicar por measure_name + table_name
+      const seen = new Set<string>();
+      return measures.filter((m) => {
+        const key = `${m.table_name}|${m.measure_name}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      });
     },
     exportTableData: async (visualName?: string) => {
       const report = embeddedRef.current;
