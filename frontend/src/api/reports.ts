@@ -17,6 +17,12 @@ export interface Report {
   show_filter_pane: boolean;
   show_page_nav: boolean;
   show_visual_header: boolean;
+  thumbnail_url?: string | null;
+}
+
+export interface ReportPage {
+  name: string;
+  display_name: string;
 }
 
 
@@ -88,6 +94,21 @@ export interface RefreshInfo {
  * resultado e o id do relatorio (como texto). */
 export async function getCollectionRefreshInfo(workspaceId: number): Promise<Record<string, RefreshInfo>> {
   const { data } = await api.get(`/workspaces/${workspaceId}/powerbi/refresh-info`);
+  return data;
+}
+
+export async function getReportPages(workspaceId: number, reportId: number): Promise<ReportPage[]> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/reports/${reportId}/pages`);
+  return data;
+}
+
+export async function refreshThumbnail(workspaceId: number, reportId: number, pageName?: string | null): Promise<Report> {
+  const { data } = await api.post(`/workspaces/${workspaceId}/reports/${reportId}/thumbnail`, { page_name: pageName ?? null });
+  return data;
+}
+
+export async function clearThumbnail(workspaceId: number, reportId: number): Promise<Report> {
+  const { data } = await api.delete(`/workspaces/${workspaceId}/reports/${reportId}/thumbnail`);
   return data;
 }
 

@@ -1,6 +1,11 @@
+import uuid
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core import powerbi
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.workspace_deps import require_workspace_member, require_workspace_role
@@ -11,6 +16,9 @@ from app.models.subscription import delete_subscriptions_of_reports
 from app.models.user import User, UserRole
 from app.routers.powerbi import invalidate_embed_cache
 from app.schemas.report import ReportCreate, ReportMove, ReportOut, ReportUpdate, resolve_page_names
+
+UPLOAD_DIR = Path(__file__).resolve().parent.parent.parent / "static" / "uploads"
+UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 router = APIRouter(prefix="/workspaces/{workspace_id}/reports", tags=["reports"])
 
@@ -130,6 +138,94 @@ def move_report(
 
     db.commit()
     return _ordered_reports(db, workspace_id)
+
+
+class ThumbnailRefresh(BaseModel):
+    page_name: str | None = None
+
+
+def _get_connection(db: Session, report: Report) -> PowerBIConnection:
+    if not report.powerbi_connection_id:
+        raise HTTPException(status_code=400, detail="Relatorio nao tem conta Power BI configurada")
+    conn = db.query(PowerBIConnection).get(report.powerbi_connection_id)
+    if not conn:
+        raise HTTPException(status_code=400, detail="Conta Power BI do relatorio nao encontrada")
+    return conn
+
+
+def _delete_thumbnail_file(thumbnail_url: str | None) -> None:
+    if not thumbnail_url:
+        return
+    filename = thumbnail_url.rsplit("/", 1)[-1]
+    old_path = UPLOAD_DIR / filename
+    old_path.unlink(missing_ok=True)
+
+
+@router.get("/{report_id}/pages")
+def list_report_pages(
+    workspace_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_workspace_member),
+):
+    """Paginas (abas) publicadas no relatorio -- usado para escolher de qual pagina gerar o thumbnail."""
+    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    conn = _get_connection(db, report)
+    try:
+        pages = powerbi.list_pages(conn, report.pbi_workspace_id, report.pbi_report_id)
+    except powerbi.PowerBIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    return [{"name": p["name"], "display_name": p.get("displayName") or p["name"]} for p in pages]
+
+
+@router.post("/{report_id}/thumbnail", response_model=ReportOut)
+def refresh_thumbnail(
+    workspace_id: int,
+    report_id: int,
+    data: ThumbnailRefresh,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+):
+    """Busca o thumbnail do relatorio na API do Power BI e salva como imagem estatica."""
+    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    conn = _get_connection(db, report)
+    try:
+        png_bytes = powerbi.get_report_thumbnail(conn, report.pbi_workspace_id, report.pbi_report_id, data.page_name)
+    except powerbi.PowerBIError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+
+    filename = f"{uuid.uuid4()}.png"
+    (UPLOAD_DIR / filename).write_bytes(png_bytes)
+
+    _delete_thumbnail_file(report.thumbnail_url)
+    report.thumbnail_url = f"/static/uploads/{filename}"
+    db.commit()
+    db.refresh(report)
+
+    log_action(db, action="update", entity="report", user_id=current_user.id, workspace_id=workspace_id, entity_id=report.id, details=f"thumbnail:{report.name}")
+    return report
+
+
+@router.delete("/{report_id}/thumbnail", response_model=ReportOut)
+def clear_thumbnail(
+    workspace_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+):
+    """Remove o thumbnail estatico do relatorio (volta a mostrar o embed ao vivo)."""
+    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    _delete_thumbnail_file(report.thumbnail_url)
+    report.thumbnail_url = None
+    db.commit()
+    db.refresh(report)
+    return report
 
 
 @router.delete("/{report_id}", status_code=status.HTTP_204_NO_CONTENT)

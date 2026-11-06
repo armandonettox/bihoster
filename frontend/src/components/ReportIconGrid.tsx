@@ -30,7 +30,7 @@ export default function ReportIconGrid({
         >
           <div className="report-icon-card-preview">
             <LazyMount unmountWhenHidden placeholder={<div className="skeleton report-icon-card-preview-skeleton" />}>
-              <ReportThumbnail reportId={report.id} />
+              <ReportThumbnail reportId={report.id} thumbnailUrl={report.thumbnail_url} />
             </LazyMount>
             <div className="report-icon-card-overlay">
               <span className="material-symbols-outlined">fullscreen</span>

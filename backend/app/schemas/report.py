@@ -109,6 +109,7 @@ class ReportOut(BaseModel):
     show_filter_pane: bool = False
     show_page_nav: bool = False
     show_visual_header: bool = False
+    thumbnail_url: Optional[str] = None
 
     @field_validator("show_filter_pane", "show_page_nav", "show_visual_header", mode="before")
     @classmethod

@@ -9,6 +9,7 @@ export default function ReportActionsMenu({
   onEdit,
   onDelete,
   onSendByEmail,
+  onRefreshThumbnail,
 }: {
   report: Report;
   canWrite: boolean;
@@ -18,6 +19,8 @@ export default function ReportActionsMenu({
   onDelete: (reportId: number) => void;
   /** Sem isso o item "Enviar por e-mail" nao aparece (so quem pode e com o e-mail configurado) */
   onSendByEmail?: (report: Report) => void;
+  /** Sem isso o item "Atualizar miniatura" nao aparece (so admin/editor) */
+  onRefreshThumbnail?: (report: Report) => void;
 }) {
   return (
     <KebabMenu>
@@ -41,6 +44,17 @@ export default function ReportActionsMenu({
               }}
             >
               Enviar por e-mail
+            </button>
+          )}
+          {canWrite && onRefreshThumbnail && (
+            <button
+              className="kebab-menu-item"
+              onClick={() => {
+                close();
+                onRefreshThumbnail(report);
+              }}
+            >
+              Atualizar miniatura
             </button>
           )}
           {canWrite && (

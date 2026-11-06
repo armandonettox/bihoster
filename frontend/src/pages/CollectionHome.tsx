@@ -25,6 +25,7 @@ import { useCollectionReports } from "../hooks/useCollectionReports";
 import { useCanSendByEmail } from "../hooks/useCanSendByEmail";
 import { useAuth } from "../context/AuthContext";
 import SendReportEmailModal from "../components/SendReportEmailModal";
+import ThumbnailPickerModal from "../components/ThumbnailPickerModal";
 import { useTvInterval } from "../hooks/useTvInterval";
 import { preloadPowerBi } from "../utils/powerbiService";
 
@@ -67,6 +68,7 @@ export default function CollectionHome() {
   const [emailingReport, setEmailingReport] = useState<Report | null>(null);
   const [showingRefreshDetails, setShowingRefreshDetails] = useState(false);
   const [confirmingDeleteReportId, setConfirmingDeleteReportId] = useState<number | null>(null);
+  const [thumbnailPickerReport, setThumbnailPickerReport] = useState<Report | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
   // A tela cheia da Apresentacao e do Modo TV fica no historico do navegador (state da navegacao):
@@ -93,6 +95,7 @@ export default function CollectionHome() {
     setFilter("");
     setShowingRefreshDetails(false);
     setEmailingReport(null);
+    setThumbnailPickerReport(null);
   }, [workspaceId]);
 
   useEffect(() => {
@@ -174,6 +177,7 @@ export default function CollectionHome() {
           onEdit={setEditingReport}
           onDelete={setConfirmingDeleteReportId}
           onSendByEmail={canSendByEmail ? setEmailingReport : undefined}
+          onRefreshThumbnail={canWrite ? setThumbnailPickerReport : undefined}
         />
       </>
     );
@@ -337,6 +341,20 @@ export default function CollectionHome() {
           workspace={currentWorkspace}
           onSaved={reloadWorkspaces}
           onClose={() => setEditingCollection(false)}
+        />
+      )}
+
+      {thumbnailPickerReport && currentWorkspace && (
+        <ThumbnailPickerModal
+          key={thumbnailPickerReport.id}
+          report={thumbnailPickerReport}
+          workspaceId={currentWorkspace.id}
+          onDone={() => {
+            setThumbnailPickerReport(null);
+            refreshReports();
+            showToast("Miniatura atualizada.");
+          }}
+          onClose={() => setThumbnailPickerReport(null)}
         />
       )}
 

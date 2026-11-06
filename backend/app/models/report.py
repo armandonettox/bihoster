@@ -37,6 +37,9 @@ class Report(Base):
     # reordenado: fica depois dos que tem posicao, na ordem de criacao. Coluna nulavel de
     # proposito (a migracao automatica do boot so adiciona colunas nulaveis).
     position = Column(Integer, nullable=True)
+    # URL do thumbnail estatico gerado a partir da API do Power BI (PNG em /static/uploads/).
+    # Nulavel de proposito -- migracao automatica do boot so adiciona colunas nulaveis.
+    thumbnail_url = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     @property

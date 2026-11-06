@@ -135,6 +135,19 @@ def get_report_details(connection: PowerBIConnection, workspace_id: str, report_
     return response.json()
 
 
+def get_report_thumbnail(
+    connection: PowerBIConnection, workspace_id: str, report_id: str, page_name: Optional[str] = None
+) -> bytes:
+    """Busca o thumbnail (PNG) de uma pagina do relatorio publicado. `page_name` e o nome tecnico
+    da pagina; sem ele o Power BI usa a primeira pagina publicada."""
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/thumbnail"
+    params = {"pageName": page_name} if page_name else {}
+    response = _http.get(url, headers=_headers(connection), params=params)
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao buscar thumbnail do relatorio: {_error_detail(response)}")
+    return response.content
+
+
 def list_pages(connection: PowerBIConnection, workspace_id: str, report_id: str) -> list[dict]:
     """Lista as paginas (abas) publicadas dentro de um relatorio -- usado pra deixar escolher
     so uma aba especifica em vez do relatorio inteiro ao adicionar numa colecao."""
