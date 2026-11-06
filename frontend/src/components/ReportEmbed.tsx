@@ -223,6 +223,8 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
           // Abre direto na primeira aba escolhida
           pageName: selectedPages[0],
           settings: {
+            background: pbi.models.BackgroundType.Transparent,
+            bars: { actionBar: { visible: false } },
             panes: {
               filters: { visible: config.show_filter_pane ?? false },
               // Com abas escolhidas e show_page_nav desativado, a navegacao nativa some:

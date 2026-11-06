@@ -20,7 +20,7 @@ const mocks = vi.hoisted(() => {
   return { handlers, embedded, service };
 });
 
-vi.mock("powerbi-client", () => ({ models: { TokenType: { Embed: 1 } } }));
+vi.mock("powerbi-client", () => ({ models: { TokenType: { Embed: 1 }, BackgroundType: { Transparent: 0 } } }));
 vi.mock("../utils/powerbiService", () => ({
   getPowerBiService: () => mocks.service,
   isPreloadStarted: () => true,
