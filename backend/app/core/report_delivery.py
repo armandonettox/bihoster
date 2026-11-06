@@ -15,6 +15,7 @@ import time
 import uuid
 import zipfile
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from app.core import powerbi
@@ -171,5 +172,72 @@ def run_delivery(
 
 def start_in_background(**kwargs) -> threading.Thread:
     thread = threading.Thread(target=run_delivery, kwargs=kwargs, name="report-delivery", daemon=True)
+    thread.start()
+    return thread
+
+
+def run_thumbnail_save(
+    job: DeliveryJob,
+    *,
+    connection,
+    pbi_workspace_id: str,
+    pbi_report_id: str,
+    page_name: Optional[str],
+    report_id: int,
+    upload_dir: Path,
+    old_thumbnail_url: Optional[str],
+) -> None:
+    """Exporta uma pagina do relatorio como PNG e salva como thumbnail estatico.
+    Roda em thread separada -- nunca levanta, o resultado vai para o job."""
+    try:
+        job.status, job.message = "queued", "Esperando vaga para exportar."
+        with _export_slots:
+            job.status, job.message = "exporting", "Exportando imagem no Power BI..."
+
+            def progress(percent: int) -> None:
+                job.progress = percent
+
+            page_names = [page_name] if page_name else None
+            data = powerbi.export_report(
+                connection, pbi_workspace_id, pbi_report_id, "PNG", page_names, on_progress=progress
+            )
+
+        # PBI retorna ZIP quando exporta multiplas paginas; para pagina unica extrai o primeiro PNG
+        if data[:2] == b"PK":
+            with zipfile.ZipFile(io.BytesIO(data)) as zf:
+                png_names = [n for n in zf.namelist() if n.lower().endswith(".png")]
+                if png_names:
+                    data = zf.read(png_names[0])
+
+        job.status, job.message = "saving", "Salvando miniatura..."
+        filename = f"{uuid.uuid4()}.png"
+        (upload_dir / filename).write_bytes(data)
+
+        # Abre sessao propria -- a da requisicao ja fechou quando a thread chega aqui
+        from app.core.database import SessionLocal
+        from app.models.report import Report as ReportModel
+
+        db = SessionLocal()
+        try:
+            report = db.query(ReportModel).filter(ReportModel.id == report_id).first()
+            if report:
+                if old_thumbnail_url:
+                    old_filename = old_thumbnail_url.rsplit("/", 1)[-1]
+                    (upload_dir / old_filename).unlink(missing_ok=True)
+                report.thumbnail_url = f"/static/uploads/{filename}"
+                db.commit()
+        finally:
+            db.close()
+
+        job.status, job.message, job.progress = "done", "Miniatura salva.", 100
+    except powerbi.PowerBIError as exc:
+        job.status, job.message = "error", str(exc)
+    except Exception:  # noqa: BLE001
+        logger.exception("falha inesperada ao gerar thumbnail")
+        job.status, job.message = "error", "Erro inesperado ao gerar a miniatura."
+
+
+def start_thumbnail_in_background(**kwargs) -> threading.Thread:
+    thread = threading.Thread(target=run_thumbnail_save, kwargs=kwargs, name="thumbnail-export", daemon=True)
     thread.start()
     return thread

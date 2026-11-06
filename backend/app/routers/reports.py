@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.core import powerbi
+from app.core import powerbi, report_delivery
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.workspace_deps import require_workspace_member, require_workspace_role
@@ -180,7 +180,17 @@ def list_report_pages(
     return [{"name": p["name"], "display_name": p.get("displayName") or p["name"]} for p in pages]
 
 
-@router.post("/{report_id}/thumbnail", response_model=ReportOut)
+class ThumbnailJobOut(BaseModel):
+    job_id: str
+
+
+class ThumbnailJobStatusOut(BaseModel):
+    status: str
+    message: str
+    progress: int
+
+
+@router.post("/{report_id}/thumbnail", response_model=ThumbnailJobOut, status_code=202)
 def refresh_thumbnail(
     workspace_id: int,
     report_id: int,
@@ -188,26 +198,44 @@ def refresh_thumbnail(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
 ):
-    """Busca o thumbnail do relatorio na API do Power BI e salva como imagem estatica."""
+    """Inicia a geracao do thumbnail em background via ExportTo PNG do Power BI. Devolve o job_id."""
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
     conn = _get_connection(db, report)
-    try:
-        png_bytes = powerbi.get_report_thumbnail(conn, report.pbi_workspace_id, report.pbi_report_id, data.page_name)
-    except powerbi.PowerBIError as e:
-        raise HTTPException(status_code=502, detail=str(e)) from e
 
-    filename = f"{uuid.uuid4()}.png"
-    (UPLOAD_DIR / filename).write_bytes(png_bytes)
+    # Snapshot dos valores necessarios -- a sessao fecha apos a resposta
+    from app.routers.powerbi import _connection_snapshot
+    conn_snapshot = _connection_snapshot(conn)
+    old_thumbnail_url = report.thumbnail_url
 
-    _delete_thumbnail_file(report.thumbnail_url)
-    report.thumbnail_url = f"/static/uploads/{filename}"
-    db.commit()
-    db.refresh(report)
+    job = report_delivery.create_job(current_user.id)
+    report_delivery.start_thumbnail_in_background(
+        job=job,
+        connection=conn_snapshot,
+        pbi_workspace_id=report.pbi_workspace_id,
+        pbi_report_id=report.pbi_report_id,
+        page_name=data.page_name,
+        report_id=report_id,
+        upload_dir=UPLOAD_DIR,
+        old_thumbnail_url=old_thumbnail_url,
+    )
+    log_action(db, action="update", entity="report", user_id=current_user.id, workspace_id=workspace_id, entity_id=report.id, details=f"thumbnail_requested:{report.name}")
+    return ThumbnailJobOut(job_id=job.id)
 
-    log_action(db, action="update", entity="report", user_id=current_user.id, workspace_id=workspace_id, entity_id=report.id, details=f"thumbnail:{report.name}")
-    return report
+
+@router.get("/{report_id}/thumbnail/jobs/{job_id}", response_model=ThumbnailJobStatusOut)
+def get_thumbnail_job(
+    workspace_id: int,
+    report_id: int,
+    job_id: str,
+    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+):
+    """Consulta o status de uma geracao de thumbnail em andamento."""
+    job = report_delivery.get_job(job_id, current_user.id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="Job nao encontrado")
+    return ThumbnailJobStatusOut(status=job.status, message=job.message, progress=job.progress)
 
 
 @router.delete("/{report_id}/thumbnail", response_model=ReportOut)

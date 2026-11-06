@@ -102,8 +102,19 @@ export async function getReportPages(workspaceId: number, reportId: number): Pro
   return data;
 }
 
-export async function refreshThumbnail(workspaceId: number, reportId: number, pageName?: string | null): Promise<Report> {
+export interface ThumbnailJobStatus {
+  status: string;
+  message: string;
+  progress: number;
+}
+
+export async function refreshThumbnail(workspaceId: number, reportId: number, pageName?: string | null): Promise<{ job_id: string }> {
   const { data } = await api.post(`/workspaces/${workspaceId}/reports/${reportId}/thumbnail`, { page_name: pageName ?? null });
+  return data;
+}
+
+export async function getThumbnailJobStatus(workspaceId: number, reportId: number, jobId: string): Promise<ThumbnailJobStatus> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/reports/${reportId}/thumbnail/jobs/${jobId}`);
   return data;
 }
 
