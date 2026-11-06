@@ -63,7 +63,9 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   /** Sobrescreve a colecao atual do contexto -- necessario para exibir relatorios de
    * outras colecoes, como na playlist do modo TV. */
   workspaceId?: number;
-}>(function ReportEmbed({ reportId, height = 600, workspaceId }, ref) {
+  /** Nivel de zoom aplicado ao frame (1.0 = normal, 0.8 = menor, 1.5 = maior). */
+  zoom?: number;
+}>(function ReportEmbed({ reportId, height = 600, workspaceId, zoom = 1 }, ref) {
   const { currentWorkspace } = useWorkspace();
   const effectiveWorkspaceId = workspaceId ?? currentWorkspace?.id;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -348,7 +350,11 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       <div
         ref={containerRef}
         className="report-embed-frame"
-        style={{ height, flex: height === "100%" ? 1 : undefined }}
+        style={{
+          height,
+          flex: height === "100%" ? 1 : undefined,
+          zoom: zoom !== 1 ? zoom : undefined,
+        }}
       />
     </div>
   );

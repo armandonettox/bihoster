@@ -34,7 +34,29 @@ export default function ReportFullscreen() {
   const [exportError, setExportError] = useState<string | null>(null);
   const [visualList, setVisualList] = useState<TableVisualInfo[] | null>(null);
   const embedRef = useRef<ReportEmbedHandle>(null);
+  const [zoom, setZoom] = useState(1.0);
+  const [showZoomHint, setShowZoomHint] = useState(true);
   const { canSubscribe, allowedDomains } = useSubscriptionAccess(workspaces.find((w) => w.id === wsId)?.role);
+
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 2.0;
+  const ZOOM_STEP = 0.1;
+
+  function zoomIn() {
+    setZoom((z) => Math.min(ZOOM_MAX, parseFloat((z + ZOOM_STEP).toFixed(1))));
+  }
+  function zoomOut() {
+    setZoom((z) => Math.max(ZOOM_MIN, parseFloat((z - ZOOM_STEP).toFixed(1))));
+  }
+  function zoomReset() {
+    setZoom(1.0);
+  }
+
+  useEffect(() => {
+    if (!showZoomHint) return;
+    const t = setTimeout(() => setShowZoomHint(false), 3500);
+    return () => clearTimeout(t);
+  }, [showZoomHint]);
 
   async function handleExport() {
     setExportError(null);
@@ -115,6 +137,41 @@ export default function ReportFullscreen() {
         actions={
           report ? (
             <>
+              <div className="zoom-controls" role="group" aria-label="Controles de zoom">
+                <button
+                  type="button"
+                  className="fullscreen-action zoom-btn"
+                  onClick={zoomOut}
+                  disabled={zoom <= ZOOM_MIN}
+                  title="Reduzir zoom"
+                  aria-label="Reduzir zoom"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">remove</span>
+                </button>
+                <span className="zoom-level" aria-live="polite" aria-label={`Zoom atual: ${Math.round(zoom * 100)}%`}>
+                  {Math.round(zoom * 100)}%
+                </span>
+                <button
+                  type="button"
+                  className="fullscreen-action zoom-btn"
+                  onClick={zoomIn}
+                  disabled={zoom >= ZOOM_MAX}
+                  title="Aumentar zoom"
+                  aria-label="Aumentar zoom"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">add</span>
+                </button>
+                <button
+                  type="button"
+                  className="fullscreen-action zoom-btn"
+                  onClick={zoomReset}
+                  disabled={zoom === 1.0}
+                  title="Ajustar a tela (100%)"
+                  aria-label="Ajustar a tela"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">fit_screen</span>
+                </button>
+              </div>
               {visualList ? (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>Qual tabela?</span>
@@ -180,7 +237,13 @@ export default function ReportFullscreen() {
           ) : undefined
         }
       />
-      <div className="fullscreen-view-body">
+      <div className="fullscreen-view-body" style={{ position: "relative" }}>
+        {showZoomHint && report && (
+          <div className={`zoom-hint${showZoomHint ? "" : " zoom-hint--hidden"}`} aria-hidden="true">
+            <span className="material-symbols-outlined" style={{ fontSize: 16 }}>zoom_in</span>
+            Use + / - para ajustar o zoom
+          </div>
+        )}
         {exportError && (
           <p role="alert" style={{ padding: "4px 8px", color: "var(--color-danger)", fontSize: 13 }}>
             {exportError}
@@ -189,7 +252,7 @@ export default function ReportFullscreen() {
         {error ? (
           <p style={{ padding: 8, color: "var(--color-danger)" }}>{error}</p>
         ) : report ? (
-          <ReportEmbed ref={embedRef} key={report.id} reportId={report.id} workspaceId={wsId} height="100%" />
+          <ReportEmbed ref={embedRef} key={report.id} reportId={report.id} workspaceId={wsId} height="100%" zoom={zoom} />
         ) : (
           <p style={{ padding: 8, color: "var(--color-text-muted)" }}>Carregando relatorio...</p>
         )}
