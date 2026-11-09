@@ -1,5 +1,6 @@
 import threading
 import time
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional, TypeVar
 
@@ -46,6 +47,12 @@ _aad_lock = threading.Lock()
 
 class PowerBIError(Exception):
     pass
+
+
+class DaxQueryError(PowerBIError):
+    """A consulta DAX em si foi recusada (sintaxe, coluna que nao existe, mais de uma tabela de
+    resultado, limite de linhas). Diferente de uma falha de rede ou de autenticacao: quem escreveu
+    a consulta pode corrigir e tentar de novo."""
 
 
 def invalidate_token_cache(connection_id: int) -> None:
@@ -173,6 +180,45 @@ def execute_dax_query(connection: PowerBIConnection, workspace_id: str, dataset_
     return tables[0].get("rows", []) if tables else []
 
 
+def _format_result_error(error) -> str:
+    """Texto curto do erro que o executeQueries devolve dentro do resultado (com status 200)."""
+    if isinstance(error, dict):
+        message = error.get("message")
+        if message:
+            code = error.get("code")
+            return f"{code}: {message}" if code else str(message)
+    return str(error)[:300]
+
+
+def execute_dax_query_strict(
+    connection: PowerBIConnection, workspace_id: str, dataset_id: str, dax: str, timeout: float = 45.0
+) -> list[dict]:
+    """Igual a execute_dax_query, mas sem engolir erro: o executeQueries responde 200 com um campo
+    `error` quando a consulta pede mais de uma tabela ou passa do limite de linhas, e a funcao
+    antiga devolveria linhas parciais como se fosse tudo. Aqui isso vira DaxQueryError.
+
+    Nao manda `impersonatedUserName`: a documentacao do Power BI diz que Service Principal nao e
+    suportada em dataset com RLS. Quem chama (core/chat_dataset.py) bloqueia esses datasets antes."""
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}/executeQueries"
+    body = {"queries": [{"query": dax}], "serializerSettings": {"includeNulls": True}}
+    response = _http.post(url, headers=_headers(connection), json=body, timeout=timeout)
+    if response.status_code == 400:
+        raise DaxQueryError(f"Falha ao executar query DAX: {_error_detail(response)}")
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao executar query DAX: {_error_detail(response)}")
+
+    results = response.json().get("results") or []
+    if not results:
+        return []
+    result = results[0]
+    tables = result.get("tables") or []
+    table = tables[0] if tables else {}
+    error = result.get("error") or table.get("error")
+    if error:
+        raise DaxQueryError(f"O Power BI recusou ou limitou a consulta: {_format_result_error(error)}")
+    return table.get("rows") or []
+
+
 def list_measures(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> list[dict]:
     """Lista as medidas do dataset via INFO.MEASURES() (requer executeQueries habilitado no tenant).
     Devolve lista de dicts com 'measure_name' e 'table_name'."""
@@ -225,6 +271,36 @@ def dataset_requires_effective_identity(connection: PowerBIConnection, workspace
     if response.status_code != 200:
         raise PowerBIError(f"Falha ao buscar dataset no Power BI: {_error_detail(response)}")
     return bool(response.json().get("isEffectiveIdentityRequired"))
+
+
+@dataclass(frozen=True)
+class DatasetSecurityInfo:
+    """O que o Power BI diz sobre seguranca por linha (RLS) de um dataset.
+
+    `known` e falso quando a resposta nao traz os dois campos: quem so tem permissao de leitura no
+    dataset recebe uma resposta limitada, sem eles. Nesse caso nao da para afirmar que nao ha RLS."""
+
+    known: bool
+    requires_identity: bool  # isEffectiveIdentityRequired
+    has_rls_roles: bool  # isEffectiveIdentityRolesRequired
+
+    @property
+    def has_rls(self) -> bool:
+        return self.requires_identity or self.has_rls_roles
+
+
+def get_dataset_security_info(connection: PowerBIConnection, workspace_id: str, dataset_id: str) -> DatasetSecurityInfo:
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets/{dataset_id}"
+    response = _http.get(url, headers=_headers(connection))
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao buscar dataset no Power BI: {_error_detail(response)}")
+    data = response.json()
+    known = "isEffectiveIdentityRequired" in data and "isEffectiveIdentityRolesRequired" in data
+    return DatasetSecurityInfo(
+        known=known,
+        requires_identity=bool(data.get("isEffectiveIdentityRequired")),
+        has_rls_roles=bool(data.get("isEffectiveIdentityRolesRequired")),
+    )
 
 
 def generate_embed_token(

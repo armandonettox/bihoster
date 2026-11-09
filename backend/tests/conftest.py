@@ -59,8 +59,10 @@ def _limpa_caches_do_powerbi():
     """Os caches do Power BI sao dicionarios em memoria do processo. Cada teste recria o banco do
     zero e reaproveita os mesmos ids (colecao 1, relatorio 1), entao um cache que sobrasse de um
     teste serviria dado de outro."""
+    from app.core import chat_dataset
     from app.routers import powerbi as embed_router
 
+    chat_dataset.clear_caches()
     embed_router._embed_cache.clear()
     embed_router._refresh_info_cache.clear()
     embed_router._report_static_cache.clear()
