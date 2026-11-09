@@ -1,6 +1,7 @@
 import { useRef, type KeyboardEvent } from "react";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useUrlTab } from "../hooks/useUrlTab";
+import { useAiAccess } from "../hooks/useAiAccess";
 import PageLoading from "../components/PageLoading";
 import GeneralTab from "./settings/GeneralTab";
 import CollectionsTab from "./settings/CollectionsTab";
@@ -19,6 +20,9 @@ import AiTab from "./settings/AiTab";
 
 type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "audit" | "updates" | "account" | "permissoes" | "cache";
 
+// A aba de IA aparece para quem tem a permissao "Gerenciar IA" (grupos), administre ou nao alguma colecao
+const AI_TAB: { key: Tab; label: string } = { key: "ai", label: "IA" };
+
 // Abas de administracao: so quem administra alguma colecao. O servidor protege cada rota de
 // qualquer jeito; aqui e so o que a pessoa ve.
 const ADMIN_TABS: { key: Tab; label: string }[] = [
@@ -29,7 +33,7 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: "groups", label: "Grupos" },
   { key: "auth", label: "Autenticacao" },
   { key: "email", label: "E-mail" },
-  { key: "ai", label: "IA" },
+  AI_TAB,
   { key: "subscriptions", label: "Assinaturas" },
   { key: "permissoes", label: "Permissoes" },
   { key: "audit", label: "Auditoria" },
@@ -42,10 +46,13 @@ const ACCOUNT_TAB: { key: Tab; label: string } = { key: "account", label: "Minha
 
 export default function Settings() {
   const { workspaces, loading } = useWorkspace();
+  const { canManage: canManageAi, loading: aiLoading } = useAiAccess();
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
-  const tabs = isAnyAdmin ? [...ADMIN_TABS, ACCOUNT_TAB] : [ACCOUNT_TAB];
+  const adminTabs = ADMIN_TABS.filter((t) => t.key !== AI_TAB.key || canManageAi);
+  const tabs = isAnyAdmin ? [...adminTabs, ACCOUNT_TAB] : canManageAi ? [AI_TAB, ACCOUNT_TAB] : [ACCOUNT_TAB];
+  const showAdminHeader = tabs.length > 1;
 
   // Aba na URL (?tab=): recarregar mantem a aba e da pra compartilhar um link direto; lembra a ultima.
   // Quem nao e admin so tem "account": qualquer outro valor na URL cai nela.
@@ -55,8 +62,8 @@ export default function Settings() {
     { storageKey: "settings_tab" },
   );
 
-  // Sem saber se a pessoa administra alguma colecao, nao da pra decidir quais abas mostrar
-  if (loading) return <PageLoading />;
+  // Sem saber se a pessoa administra alguma colecao nem se gerencia a IA, nao da pra decidir quais abas mostrar
+  if (loading || aiLoading) return <PageLoading />;
 
   function focusTab(key: Tab) {
     setTab(key);
@@ -77,11 +84,13 @@ export default function Settings() {
   return (
     <div className="settings-page">
       <div className="settings-header">
-        <h1>{isAnyAdmin ? "Configuracoes" : "Minha conta"}</h1>
+        <h1>{showAdminHeader ? "Configuracoes" : "Minha conta"}</h1>
         <p>
           {isAnyAdmin
             ? "Gerencie a marca do sistema, colecoes, membros e grupos de acesso."
-            : "Gerencie o seu nome e a sua senha."}
+            : canManageAi
+              ? "Gerencie a IA e a sua conta."
+              : "Gerencie o seu nome e a sua senha."}
         </p>
       </div>
 

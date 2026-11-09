@@ -17,10 +17,11 @@ from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
-from app.models import ai_provider, alert, audit_log, favorite, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import ai_provider, alert, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
 from app.models import permission as permission_model  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
+    ai_access,
     ai_settings,
     alerts,
     audit,
@@ -194,6 +195,7 @@ app.include_router(audit.workspace_router)
 app.include_router(settings_router.router)
 app.include_router(email_settings.router)
 app.include_router(ai_settings.router)
+app.include_router(ai_access.router)
 app.include_router(report_export.router)
 app.include_router(subscriptions.router)
 app.include_router(subscriptions.admin_router)

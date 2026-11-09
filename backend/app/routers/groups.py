@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.ai_access import AI_PERMISSIONS
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.workspace_deps import (
@@ -10,10 +11,12 @@ from app.core.workspace_deps import (
     get_or_create_default_group,
     require_platform_admin,
 )
+from app.models.group_permission import GroupPermission
 from app.models.invite import GroupInvite
 from app.models.user import User
 from app.models.workspace import Group, GroupMember, GroupWorkspaceAccess
 from app.routers.auth import get_current_user
+from app.schemas.group_permission import GroupPermissionsOut, GroupPermissionsUpdate
 from app.schemas.workspace import GroupCreate, GroupInviteOut, GroupMemberAdd, GroupMemberOut, GroupOut, GroupUpdate
 
 router = APIRouter(prefix="/groups", tags=["groups"])
@@ -76,10 +79,63 @@ def delete_group(
         raise HTTPException(status_code=400, detail="Esse grupo padrao nao pode ser excluido")
 
     db.query(GroupWorkspaceAccess).filter(GroupWorkspaceAccess.group_id == group_id).delete()
+    db.query(GroupPermission).filter(GroupPermission.group_id == group_id).delete()
     db.query(GroupMember).filter(GroupMember.group_id == group_id).delete()
     db.query(GroupInvite).filter(GroupInvite.group_id == group_id).delete()
     db.delete(group)
     db.commit()
+
+
+@router.get("/{group_id}/permissions", response_model=GroupPermissionsOut)
+def get_group_permissions(
+    group_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_platform_admin),
+):
+    group = db.query(Group).get(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupo nao encontrado")
+    if group.is_admin_group:
+        return GroupPermissionsOut(permissions=list(AI_PERMISSIONS), editable=False)
+
+    rows = (
+        db.query(GroupPermission.permission_key)
+        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS))
+        .all()
+    )
+    return GroupPermissionsOut(permissions=sorted(row.permission_key for row in rows), editable=True)
+
+
+@router.put("/{group_id}/permissions", response_model=GroupPermissionsOut)
+def set_group_permissions(
+    group_id: int,
+    data: GroupPermissionsUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_platform_admin),
+):
+    group = db.query(Group).get(group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="Grupo nao encontrado")
+    if group.is_admin_group:
+        raise HTTPException(status_code=400, detail="O grupo Administradores sempre tem todas as permissoes.")
+
+    # Troca so as chaves de IA: qualquer outra permissao que o grupo venha a ter nao e tocada
+    db.query(GroupPermission).filter(
+        GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS)
+    ).delete(synchronize_session=False)
+    for key in data.permissions:
+        db.add(GroupPermission(group_id=group_id, permission_key=key))
+    db.commit()
+
+    log_action(
+        db,
+        action="set_group_permissions",
+        entity="group",
+        user_id=current_user.id,
+        entity_id=group_id,
+        details=", ".join(data.permissions) or "nenhuma",
+    )
+    return GroupPermissionsOut(permissions=data.permissions, editable=True)
 
 
 @router.get("/{group_id}/members", response_model=list[GroupMemberOut])

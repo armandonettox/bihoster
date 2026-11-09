@@ -4,17 +4,17 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import ai_providers
+from app.core.ai_access import require_ai_manage
 from app.core.ai_providers import PROVIDERS, AIError
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.core.workspace_deps import require_platform_admin
 from app.models.ai_provider import AIProvider
 from app.models.user import User
 from app.schemas.ai_settings import AIProviderOut, AIProviderTestOut, AIProviderUpdate
 
-# Rotas proprias, so pra administradores: a chave de API nunca sai por aqui nem pela rota publica
-# de configuracoes. A etapa seguinte troca o administrador pela permissao "Gerenciar IA" por grupo.
+# Rotas proprias, so para quem tem a permissao "Gerenciar IA" (grupos; administradores sempre tem):
+# a chave de API nunca sai por aqui nem pela rota publica de configuracoes.
 router = APIRouter(prefix="/settings/ai", tags=["ai-settings"])
 
 
@@ -38,7 +38,7 @@ def _to_out(provider: str, row: AIProvider | None) -> AIProviderOut:
 
 
 @router.get("/", response_model=list[AIProviderOut])
-def list_ai_providers(db: Session = Depends(get_db), _: User = Depends(require_platform_admin)):
+def list_ai_providers(db: Session = Depends(get_db), _: User = Depends(require_ai_manage)):
     rows = {row.provider: row for row in db.query(AIProvider).all()}
     return [_to_out(key, rows.get(key)) for key in PROVIDERS]
 
@@ -48,7 +48,7 @@ def update_ai_provider(
     provider: str,
     data: AIProviderUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_ai_manage),
 ):
     _get_provider_or_404(provider)
     row = db.query(AIProvider).filter(AIProvider.provider == provider).first()
@@ -91,7 +91,7 @@ def test_ai_provider(
     request: Request,
     provider: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_ai_manage),
 ):
     _get_provider_or_404(provider)
     row = db.query(AIProvider).filter(AIProvider.provider == provider).first()

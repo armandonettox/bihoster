@@ -24,6 +24,17 @@ export interface AIProviderTest {
   latency_ms: number;
 }
 
+/** O que a pessoa logada pode fazer com a IA. Quem manda de verdade e o servidor, em cada rota. */
+export interface AIAccess {
+  can_manage: boolean;
+  can_use: boolean;
+}
+
+export async function getAIAccess(): Promise<AIAccess> {
+  const { data } = await api.get("/ai/access");
+  return data;
+}
+
 export async function listAIProviders(): Promise<AIProvider[]> {
   const { data } = await api.get("/settings/ai/");
   return data;

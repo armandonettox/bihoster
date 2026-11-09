@@ -6,6 +6,7 @@ import { SkeletonList } from "../../components/Skeleton";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import KebabMenu from "../../components/KebabMenu";
 import AddGroupMemberModal from "../../components/AddGroupMemberModal";
+import GroupAiPermissions from "../../components/GroupAiPermissions";
 import RenameGroupModal from "../../components/RenameGroupModal";
 import { extractErrorMessage } from "../../api/client";
 
@@ -241,6 +242,8 @@ export default function GroupsTab() {
                     ))}
                   </ul>
                 )}
+
+                <GroupAiPermissions group={group} />
 
                 {group.is_default && (
                   <p style={{ fontSize: 12, color: "var(--color-text-muted)", margin: 0 }}>
