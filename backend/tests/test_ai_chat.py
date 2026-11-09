@@ -1,0 +1,279 @@
+"""POST /ai/chat: permissao, validacao do corpo, provedor nao configurado, resposta completa,
+erros e auditoria sem o texto da conversa."""
+
+import json
+from unittest.mock import patch
+
+import pytest
+
+from app.core import ai_providers, chat_dataset, chat_engine
+from app.core.ai_providers import AIError, AIResult
+from app.core.chat_dataset import ChatQueryResult, DatasetSchema, SchemaColumn, SchemaTable
+from app.core.powerbi import PowerBIError
+from app.core.workspace_deps import ensure_default_group_access
+from app.models.audit_log import AuditLog
+from app.models.powerbi_connection import PowerBIConnection
+from app.models.report import Report
+from app.models.workspace import Workspace
+
+PASSWORD = "SenhaForte123"
+ESQUEMA = DatasetSchema(tables=(SchemaTable("Vendas", (SchemaColumn("Valor", "decimal"),), (("Total", None),)),))
+RESULTADO = ChatQueryResult(columns=["[Total]"], rows=[{"[Total]": 99}], total_rows=1, truncated=False)
+
+
+def _headers(client, email: str) -> dict:
+    client.post("/auth/register", json={"name": email.split("@")[0], "email": email, "password": PASSWORD})
+    token = client.post("/auth/login", json={"email": email, "password": PASSWORD}).json()["access_token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def admin(client):
+    return _headers(client, "admin@example.com")  # a primeira conta cadastrada e administradora
+
+
+@pytest.fixture
+def pessoa(client, admin):
+    return _headers(client, "pessoa@example.com")
+
+
+@pytest.fixture
+def relatorio(db_session):
+    colecao = Workspace(name="Comercial", slug="comercial")
+    conexao = PowerBIConnection(name="Conta", tenant_id="t", client_id="c", client_secret="s")
+    db_session.add_all([colecao, conexao])
+    db_session.commit()
+    rel = Report(
+        collection_id=colecao.id,
+        name="Vendas do mes",
+        powerbi_connection_id=conexao.id,
+        pbi_workspace_id="ws",
+        pbi_report_id="rep",
+        pbi_dataset_id="ds",
+    )
+    db_session.add(rel)
+    db_session.commit()
+    return rel
+
+
+@pytest.fixture
+def provedor(client, admin):
+    """Provedor ativo e escolhido para o chat."""
+    client.put("/settings/ai/openrouter", json={"api_key": "chave-x", "model": "modelo-x", "enabled": True, "chat_default": True}, headers=admin)
+
+
+@pytest.fixture
+def ia(monkeypatch):
+    """IA e Power BI simulados: a IA responde o JSON do DAX e depois o texto final."""
+    estado = {"respostas": [json.dumps({"dax": "EVALUATE ROW(\"t\", [Total])"}), "O total foi 99."], "chamadas": 0}
+
+    def fake_complete(provider, api_key, model, messages, max_tokens=1024):
+        estado["chamadas"] += 1
+        resposta = estado["respostas"].pop(0)
+        if isinstance(resposta, Exception):
+            raise resposta
+        return AIResult(resposta, 12, 4)
+
+    monkeypatch.setattr(ai_providers, "complete", fake_complete)
+    monkeypatch.setattr(chat_dataset, "get_dataset_schema", lambda connection, report: ESQUEMA)
+    monkeypatch.setattr(chat_dataset, "run_chat_query", lambda connection, report, dax: RESULTADO)
+    return estado
+
+
+def _chat(client, headers, texto="Qual o total de vendas?", **extra):
+    return client.post("/ai/chat", json={"messages": [{"role": "user", "content": texto}], **extra}, headers=headers)
+
+
+def _liberar_usar(client, admin, email="pessoa@example.com"):
+    grupo = client.post("/groups/", json={"name": "Analistas"}, headers=admin).json()["id"]
+    client.post(f"/groups/{grupo}/members", json={"email": email}, headers=admin)
+    client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
+
+
+class TestPermissao:
+    def test_exige_estar_logado(self, client):
+        assert client.post("/ai/chat", json={"messages": [{"role": "user", "content": "oi"}]}).status_code == 401
+
+    def test_quem_nao_pode_usar_o_chat_recebe_403(self, client, pessoa, relatorio, provedor, ia):
+        resp = _chat(client, pessoa)
+
+        assert resp.status_code == 403
+        assert ia["chamadas"] == 0
+
+    def test_quem_so_gerencia_a_ia_nao_usa_o_chat(self, client, admin, pessoa, relatorio, provedor, ia):
+        grupo = client.post("/groups/", json={"name": "Gestores"}, headers=admin).json()["id"]
+        client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
+        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+
+        assert _chat(client, pessoa).status_code == 403
+
+    def test_quem_tem_ia_usar_e_acesso_a_colecao_conversa(self, client, admin, pessoa, relatorio, provedor, ia, db_session):
+        ensure_default_group_access(db_session, relatorio.collection_id)
+        _liberar_usar(client, admin)
+
+        resp = _chat(client, pessoa)
+
+        assert resp.status_code == 200 and resp.json()["report"]["id"] == relatorio.id
+
+    def test_quem_pode_usar_mas_nao_ve_nenhuma_colecao_nao_acha_relatorio(self, client, admin, pessoa, relatorio, provedor, ia):
+        _liberar_usar(client, admin)  # sem acesso dado a colecao
+
+        corpo = _chat(client, pessoa).json()
+
+        assert corpo["reply"] == chat_engine.REPLY_NO_REPORTS and corpo["report"] is None
+        assert ia["chamadas"] == 0
+
+
+class TestValidacao:
+    @pytest.mark.parametrize(
+        "corpo",
+        [
+            {},
+            {"messages": []},
+            {"messages": [{"role": "user", "content": "   "}]},
+            {"messages": [{"role": "user", "content": ""}]},
+            {"messages": [{"role": "system", "content": "oi"}]},
+            {"messages": [{"role": "assistant", "content": "oi"}]},
+            {"messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]},
+            {"messages": [{"role": "user", "content": "x" * 4001}]},
+            {"messages": [{"role": "user", "content": "oi"}] * 21},
+            {"messages": [{"role": "user", "content": "oi"}], "report_id": "abc"},
+        ],
+    )
+    def test_corpo_invalido_e_recusado_sem_chamar_a_ia(self, client, admin, relatorio, provedor, ia, corpo):
+        assert client.post("/ai/chat", json=corpo, headers=admin).status_code == 422
+        assert ia["chamadas"] == 0
+
+    def test_conversa_no_limite_e_aceita(self, client, admin, relatorio, provedor, ia):
+        mensagens = []
+        for i in range(20):
+            mensagens.append({"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"})
+        mensagens[-1]["role"] = "user"
+
+        assert client.post("/ai/chat", json={"messages": mensagens}, headers=admin).status_code == 200
+
+
+class TestProvedorNaoConfigurado:
+    def test_sem_provedor_responde_503_com_orientacao(self, client, admin, relatorio, ia):
+        resp = _chat(client, admin)
+
+        assert resp.status_code == 503
+        assert "administrador" in resp.json()["detail"]
+        assert ia["chamadas"] == 0
+
+    def test_provedor_ativo_mas_nao_escolhido_com_dois_prontos(self, client, admin, relatorio, ia):
+        for nome in ("openai", "gemini"):
+            client.put(f"/settings/ai/{nome}", json={"api_key": "k", "model": "m", "enabled": True}, headers=admin)
+
+        assert _chat(client, admin).status_code == 503
+
+
+class TestResposta:
+    def test_resposta_completa(self, client, admin, relatorio, provedor, ia):
+        resp = _chat(client, admin)
+
+        assert resp.status_code == 200
+        corpo = resp.json()
+        assert corpo["reply"] == "O total foi 99."
+        assert corpo["report"] == {"id": relatorio.id, "name": "Vendas do mes"}
+        assert corpo["dax"] == 'EVALUATE ROW("t", [Total])'
+        assert corpo["table"] == {"columns": ["[Total]"], "rows": [{"[Total]": 99}], "total_rows": 1, "truncated": False}
+        assert corpo["usage"] == {
+            "provider": "openrouter",
+            "model": "modelo-x",
+            "llm_calls": 2,
+            "input_tokens": 24,
+            "output_tokens": 8,
+        }
+
+    def test_resposta_sem_dados_vem_sem_dax_e_sem_tabela(self, client, admin, relatorio, provedor, ia):
+        ia["respostas"] = [json.dumps({"reply": "So respondo sobre os dados do relatorio."})]
+
+        corpo = _chat(client, admin, "Escreva um poema").json()
+
+        assert corpo["reply"] == "So respondo sobre os dados do relatorio."
+        assert corpo["dax"] is None and corpo["table"] is None
+
+    def test_a_chave_do_provedor_nunca_aparece_na_resposta(self, client, admin, relatorio, provedor, ia):
+        assert "chave-x" not in _chat(client, admin).text
+
+    def test_aceita_o_relatorio_da_conversa_e_o_historico(self, client, admin, relatorio, provedor, ia):
+        corpo = {
+            "messages": [
+                {"role": "user", "content": "Qual o total?"},
+                {"role": "assistant", "content": "99"},
+                {"role": "user", "content": "E por mes?"},
+            ],
+            "report_id": relatorio.id,
+        }
+
+        assert client.post("/ai/chat", json=corpo, headers=admin).status_code == 200
+
+
+class TestErros:
+    def test_falha_do_provedor_de_ia_vira_502_com_mensagem_clara(self, client, admin, relatorio, provedor, ia):
+        ia["respostas"] = [AIError("O provedor recusou a chave de API. Confira se ela esta correta e ativa.")]
+
+        resp = _chat(client, admin)
+
+        assert resp.status_code == 502
+        assert "recusou a chave" in resp.json()["detail"]
+        assert "chave-x" not in resp.text
+
+    def test_resposta_da_ia_fora_do_formato_vira_502(self, client, admin, relatorio, provedor, ia):
+        ia["respostas"] = ["nao sei", "continuo sem saber"]
+
+        resp = _chat(client, admin)
+
+        assert resp.status_code == 502 and "formato esperado" in resp.json()["detail"]
+
+    def test_falha_do_power_bi_vira_502_pelo_tratador_global(self, client, admin, relatorio, provedor, ia, monkeypatch):
+        def quebra(connection, report):
+            raise PowerBIError("Falha ao executar query DAX: HTTP 401")
+
+        monkeypatch.setattr(chat_dataset, "get_dataset_schema", quebra)
+
+        resp = _chat(client, admin)
+
+        assert resp.status_code == 502 and "HTTP 401" in resp.json()["detail"]
+
+    def test_relatorio_com_rls_volta_200_com_o_motivo(self, client, admin, relatorio, provedor, ia, monkeypatch):
+        def bloqueado(connection, report):
+            raise chat_dataset.ChatDataError(chat_dataset.REASON_RLS)
+
+        monkeypatch.setattr(chat_dataset, "get_dataset_schema", bloqueado)
+
+        resp = _chat(client, admin)
+
+        assert resp.status_code == 200
+        assert "seguranca por linha" in resp.json()["reply"] and resp.json()["table"] is None
+        assert ia["chamadas"] == 0
+
+    def test_limite_de_trinta_por_minuto(self, client, admin, relatorio, provedor):
+        from app.core.chat_engine import ChatAnswer
+
+        with patch.object(chat_engine, "answer_question", return_value=ChatAnswer(reply="ok", provider="p", model="m")):
+            codigos = [_chat(client, admin).status_code for _ in range(31)]
+
+        assert codigos == [200] * 30 + [429]
+
+
+class TestAuditoria:
+    def test_registra_so_o_resumo_e_nunca_o_texto_da_conversa(self, client, admin, relatorio, provedor, ia, db_session):
+        _chat(client, admin, "Qual o salario do fulano de tal CPF 123?")
+
+        log = db_session.query(AuditLog).filter(AuditLog.action == "ai_chat").one()
+        assert log.entity == "report" and log.entity_id == str(relatorio.id)
+        assert log.user_email == "admin@example.com"
+        assert "openrouter modelo-x; 2 chamadas; 24 tokens de entrada e 8 de saida" == log.details
+        for texto in ("salario", "fulano", "CPF", "O total foi 99", "EVALUATE"):
+            assert texto not in log.details
+
+    def test_resposta_sem_relatorio_registra_sem_id(self, client, admin, relatorio, provedor, ia, db_session):
+        ia["respostas"] = [json.dumps({"reply": "fora do escopo"})]
+        db_session.query(Report).delete()
+        db_session.commit()
+
+        _chat(client, admin)
+
+        assert db_session.query(AuditLog).filter(AuditLog.action == "ai_chat").one().entity_id is None

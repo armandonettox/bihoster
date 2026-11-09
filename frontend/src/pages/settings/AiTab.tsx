@@ -17,6 +17,10 @@ function ProviderCard({ provider, onSaved }: CardProps) {
   const [clearKey, setClearKey] = useState(false);
   const [model, setModel] = useState(provider.model ?? "");
   const [enabled, setEnabled] = useState(provider.enabled);
+  // So guarda o que a pessoa marcou nesta tela; sem marcacao vale o que o servidor tem. Assim, quando
+  // outro cartao vira o escolhido, este desmarca sozinho. Desativar o provedor tira ele do chat.
+  const [chatChoice, setChatChoice] = useState<boolean | null>(null);
+  const chatDefault = enabled && (chatChoice ?? provider.chat_default);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -33,11 +37,13 @@ function ProviderCard({ provider, onSaved }: CardProps) {
       const saved = await aiApi.updateAIProvider(provider.provider, {
         model: model.trim() || null,
         enabled,
+        chat_default: chatDefault,
         // Sem digitar nada a chave atual e mantida; "apagar" manda texto vazio
         ...(clearKey ? { api_key: "" } : apiKey.trim() ? { api_key: apiKey.trim() } : {}),
       });
       setApiKey("");
       setClearKey(false);
+      setChatChoice(null);
       setModel(saved.model ?? "");
       setEnabled(saved.enabled);
       setTestResult(null);
@@ -113,6 +119,22 @@ function ProviderCard({ provider, onSaved }: CardProps) {
           <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
           Provedor ativo
         </label>
+        <div>
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, marginTop: 8 }}>
+            <input
+              type="checkbox"
+              checked={chatDefault}
+              disabled={!enabled}
+              onChange={(e) => setChatChoice(e.target.checked)}
+            />
+            Usar este provedor no chat
+          </label>
+          {!enabled && (
+            <p className="settings-section-desc" style={{ margin: "4px 0 0" }}>
+              Ative o provedor para poder escolhe-lo para o chat.
+            </p>
+          )}
+        </div>
 
         {error && <p className="auth-error">{error}</p>}
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 16 }}>
@@ -162,7 +184,13 @@ export default function AiTab() {
   }, []);
 
   function handleSaved(saved: AIProvider) {
-    setProviders((current) => current?.map((p) => (p.provider === saved.provider ? saved : p)) ?? current);
+    // So um provedor responde o chat: quando o salvo virou o escolhido, os outros perdem a marca
+    setProviders(
+      (current) =>
+        current?.map((p) =>
+          p.provider === saved.provider ? saved : saved.chat_default ? { ...p, chat_default: false } : p,
+        ) ?? current,
+    );
   }
 
   if (loadError) return <p className="auth-error">Nao foi possivel carregar as configuracoes de IA.</p>;
@@ -174,7 +202,8 @@ export default function AiTab() {
         <h2 className="settings-section-title">Provedores de IA</h2>
         <p className="settings-section-desc">
           Cadastre a chave de API dos provedores que quiser usar. As chaves ficam so no servidor, cifradas, e nunca sao
-          exibidas depois de salvas. Para usar um provedor, informe o modelo e marque como ativo.
+          exibidas depois de salvas. Para usar um provedor, informe o modelo e marque como ativo. Escolha qual provedor ativo
+          responde o chat com a opcao "Usar este provedor no chat": so um por vez.
         </p>
       </div>
       {providers.map((provider) => (

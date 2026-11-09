@@ -34,6 +34,7 @@ def _to_out(provider: str, row: AIProvider | None) -> AIProviderOut:
         api_key_configured=bool(row and row.api_key),
         model=row.model if row else None,
         enabled=bool(row and row.enabled),
+        chat_default=bool(row and row.enabled and row.is_chat_default),
     )
 
 
@@ -70,6 +71,18 @@ def update_ai_provider(
             db.rollback()
             raise HTTPException(status_code=400, detail="Informe a chave e o modelo antes de ativar o provedor.")
         row.enabled = changed["enabled"]
+    if "chat_default" in changed and changed["chat_default"] is not None:
+        if changed["chat_default"]:
+            if not row.enabled:
+                db.rollback()
+                raise HTTPException(status_code=400, detail="Ative o provedor antes de escolhe-lo para o chat.")
+            # So um provedor responde o chat: o escolhido agora tira a marca dos outros
+            db.query(AIProvider).filter(AIProvider.provider != provider).update(
+                {"is_chat_default": False}, synchronize_session=False
+            )
+        row.is_chat_default = changed["chat_default"]
+    if not row.enabled:
+        row.is_chat_default = False  # desativar ou apagar a chave tira o provedor do chat
 
     db.commit()
     db.refresh(row)

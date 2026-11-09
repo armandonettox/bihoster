@@ -25,6 +25,7 @@ function provedor(chave: string, label: string, extra: Partial<AIProvider> = {})
     api_key_configured: false,
     model: null,
     enabled: false,
+    chat_default: false,
     ...extra,
   };
 }
@@ -86,7 +87,12 @@ describe("AiTab - salvar", () => {
     fireEvent.click(c.getByRole("button", { name: "Salvar" }));
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
-    expect(update).toHaveBeenCalledWith("openrouter", { api_key: "chave-123", model: "openai/gpt-4o-mini", enabled: true });
+    expect(update).toHaveBeenCalledWith("openrouter", {
+      api_key: "chave-123",
+      model: "openai/gpt-4o-mini",
+      enabled: true,
+      chat_default: false,
+    });
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("OpenRouter salvo."));
   });
 
@@ -143,6 +149,73 @@ describe("AiTab - salvar", () => {
 
     expect(await cartao("OpenAI (ChatGPT)").findByText("Informe a chave e o modelo antes de ativar o provedor.")).toBeTruthy();
     expect(cartao("OpenRouter").queryByText("Informe a chave e o modelo antes de ativar o provedor.")).toBeNull();
+  });
+});
+
+describe("AiTab - provedor do chat", () => {
+  const ATIVO = (chave: string, label: string, extra: Partial<AIProvider> = {}) =>
+    provedor(chave, label, { api_key_configured: true, model: "m", enabled: true, ...extra });
+
+  const usarNoChat = (nome: string) => cartao(nome).getByLabelText("Usar este provedor no chat") as HTMLInputElement;
+
+  it("a caixa vem travada, com aviso, enquanto o provedor nao esta ativo", async () => {
+    await abrir();
+
+    expect(usarNoChat("OpenAI (ChatGPT)").disabled).toBe(true);
+    expect(cartao("OpenAI (ChatGPT)").getByText("Ative o provedor para poder escolhe-lo para o chat.")).toBeTruthy();
+  });
+
+  it("mostra marcado so o provedor que o servidor diz que responde o chat", async () => {
+    await abrir([ATIVO("openai", "OpenAI (ChatGPT)"), ATIVO("anthropic", "Anthropic (Claude)", { chat_default: true })]);
+
+    expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(false);
+    expect(usarNoChat("Anthropic (Claude)").checked).toBe(true);
+  });
+
+  it("marcar a caixa envia chat_default verdadeiro", async () => {
+    update.mockResolvedValue(ATIVO("openai", "OpenAI (ChatGPT)", { chat_default: true }));
+    await abrir([ATIVO("openai", "OpenAI (ChatGPT)")]);
+
+    fireEvent.click(usarNoChat("OpenAI (ChatGPT)"));
+    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
+    expect(update.mock.calls[0][1].chat_default).toBe(true);
+  });
+
+  it("desativar o provedor desmarca e trava a caixa, e manda chat_default falso", async () => {
+    update.mockResolvedValue(ATIVO("openai", "OpenAI (ChatGPT)", { enabled: false }));
+    await abrir([ATIVO("openai", "OpenAI (ChatGPT)", { chat_default: true })]);
+
+    fireEvent.click(cartao("OpenAI (ChatGPT)").getByLabelText("Provedor ativo"));
+
+    expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(false);
+    expect(usarNoChat("OpenAI (ChatGPT)").disabled).toBe(true);
+    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update.mock.calls[0][1]).toMatchObject({ enabled: false, chat_default: false });
+  });
+
+  it("quando outro provedor vira o escolhido, o antigo desmarca sozinho", async () => {
+    update.mockResolvedValue(ATIVO("anthropic", "Anthropic (Claude)", { chat_default: true }));
+    await abrir([ATIVO("openai", "OpenAI (ChatGPT)", { chat_default: true }), ATIVO("anthropic", "Anthropic (Claude)")]);
+    expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(true);
+
+    fireEvent.click(usarNoChat("Anthropic (Claude)"));
+    fireEvent.click(cartao("Anthropic (Claude)").getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(false));
+    expect(usarNoChat("Anthropic (Claude)").checked).toBe(true);
+  });
+
+  it("mostra o motivo quando o servidor recusa a escolha", async () => {
+    update.mockRejectedValue({ response: { data: { detail: "Ative o provedor antes de escolhe-lo para o chat." } } });
+    await abrir([ATIVO("openai", "OpenAI (ChatGPT)")]);
+
+    fireEvent.click(usarNoChat("OpenAI (ChatGPT)"));
+    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+
+    expect(await cartao("OpenAI (ChatGPT)").findByText("Ative o provedor antes de escolhe-lo para o chat.")).toBeTruthy();
   });
 });
 

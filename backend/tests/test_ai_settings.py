@@ -180,6 +180,88 @@ class TestValidacao:
         assert client.put("/settings/ai/openai", json={"api_key": "a" * 501}, headers=admin).status_code == 422
 
 
+class TestProvedorDoChat:
+    def _padrao(self, client, admin) -> list[str]:
+        return [p["provider"] for p in client.get("/settings/ai/", headers=admin).json() if p["chat_default"]]
+
+    def test_ninguem_e_padrao_no_comeco(self, client, admin):
+        assert self._padrao(client, admin) == []
+
+    def test_escolher_exige_o_provedor_ativo(self, client, admin):
+        _salvar(client, admin)  # com chave e modelo, mas ainda nao ativo
+
+        resp = client.put("/settings/ai/openrouter", json={"chat_default": True}, headers=admin)
+
+        assert resp.status_code == 400
+        assert "Ative o provedor" in resp.json()["detail"]
+        assert self._padrao(client, admin) == []
+
+    def test_ativar_e_escolher_no_mesmo_pedido(self, client, admin):
+        resp = _salvar(client, admin, enabled=True, chat_default=True)
+
+        assert resp.status_code == 200
+        assert (resp.json()["enabled"], resp.json()["chat_default"]) == (True, True)
+
+    def test_escolher_um_tira_a_marca_do_outro(self, client, admin):
+        _salvar(client, admin, "openai", enabled=True, chat_default=True)
+        _salvar(client, admin, "gemini", enabled=True, chat_default=True)
+
+        assert self._padrao(client, admin) == ["gemini"]
+
+    def test_a_recusa_de_escolher_nao_tira_a_marca_de_quem_ja_era(self, client, admin):
+        _salvar(client, admin, "openai", enabled=True, chat_default=True)
+        _salvar(client, admin, "gemini")  # nao ativo
+
+        client.put("/settings/ai/gemini", json={"chat_default": True}, headers=admin)
+
+        assert self._padrao(client, admin) == ["openai"]
+
+    def test_desmarcar(self, client, admin):
+        _salvar(client, admin, enabled=True, chat_default=True)
+
+        resp = client.put("/settings/ai/openrouter", json={"chat_default": False}, headers=admin)
+
+        assert resp.json()["chat_default"] is False and resp.json()["enabled"] is True
+
+    def test_desativar_o_provedor_tira_do_chat(self, client, admin):
+        _salvar(client, admin, enabled=True, chat_default=True)
+
+        resp = client.put("/settings/ai/openrouter", json={"enabled": False}, headers=admin)
+
+        assert (resp.json()["enabled"], resp.json()["chat_default"]) == (False, False)
+
+    def test_apagar_a_chave_tira_do_chat(self, client, admin):
+        _salvar(client, admin, enabled=True, chat_default=True)
+
+        resp = client.put("/settings/ai/openrouter", json={"api_key": ""}, headers=admin)
+
+        assert resp.json()["chat_default"] is False
+
+    def test_reativar_nao_devolve_a_escolha_sozinho(self, client, admin):
+        _salvar(client, admin, enabled=True, chat_default=True)
+        client.put("/settings/ai/openrouter", json={"enabled": False}, headers=admin)
+
+        resp = client.put("/settings/ai/openrouter", json={"enabled": True}, headers=admin)
+
+        assert resp.json()["chat_default"] is False
+
+    def test_salvar_outros_campos_mantem_a_escolha(self, client, admin):
+        _salvar(client, admin, enabled=True, chat_default=True)
+
+        resp = client.put("/settings/ai/openrouter", json={"model": "outro/modelo"}, headers=admin)
+
+        assert resp.json()["chat_default"] is True
+
+    def test_quem_so_gerencia_a_ia_tambem_escolhe(self, client, admin, pessoa):
+        grupo = client.post("/groups/", json={"name": "Gestores"}, headers=admin).json()["id"]
+        client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
+        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+
+        resp = _salvar(client, pessoa, enabled=True, chat_default=True)
+
+        assert resp.status_code == 200 and resp.json()["chat_default"] is True
+
+
 class TestAuditoria:
     def test_alterar_registra_so_os_nomes_dos_campos(self, client, admin, db_session):
         _salvar(client, admin)

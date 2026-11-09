@@ -22,6 +22,7 @@ from app.models import permission as permission_model  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
     ai_access,
+    ai_chat,
     ai_check,
     ai_settings,
     alerts,
@@ -198,6 +199,7 @@ app.include_router(email_settings.router)
 app.include_router(ai_settings.router)
 app.include_router(ai_access.router)
 app.include_router(ai_check.router)
+app.include_router(ai_chat.router)
 app.include_router(report_export.router)
 app.include_router(subscriptions.router)
 app.include_router(subscriptions.admin_router)

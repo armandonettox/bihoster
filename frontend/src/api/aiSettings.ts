@@ -9,6 +9,8 @@ export interface AIProvider {
   api_key_configured: boolean;
   model: string | null;
   enabled: boolean;
+  /** Provedor que responde o chat. Um so por vez, e so entre os ativos. */
+  chat_default: boolean;
 }
 
 /** `api_key`: ausente = manter a atual; texto vazio = apagar; outro texto = trocar. */
@@ -16,6 +18,7 @@ export interface AIProviderUpdate {
   api_key?: string;
   model?: string | null;
   enabled?: boolean;
+  chat_default?: boolean;
 }
 
 export interface AIProviderTest {

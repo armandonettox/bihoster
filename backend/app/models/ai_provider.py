@@ -18,3 +18,6 @@ class AIProvider(Base):
     api_key = Column(EncryptedString, nullable=True)  # cifrada em repouso, nunca devolvida pela API
     model = Column(String, nullable=True)
     enabled = Column(Boolean, default=False, nullable=False)
+    # Provedor que responde o chat. So um por vez e so entre os ativos. Nullable de proposito: a
+    # migracao automatica do boot so adiciona colunas nulaveis (a tabela ja existe em instalacoes).
+    is_chat_default = Column(Boolean, nullable=True)

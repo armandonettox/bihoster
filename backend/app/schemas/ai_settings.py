@@ -13,6 +13,8 @@ class AIProviderUpdate(BaseModel):
     api_key: Optional[str] = Field(default=None, max_length=500)
     model: Optional[str] = Field(default=None, max_length=200)
     enabled: Optional[bool] = None
+    # True escolhe este provedor para o chat (e tira dos outros); False tira dele
+    chat_default: Optional[bool] = None
 
     @field_validator("api_key")
     @classmethod
@@ -39,6 +41,7 @@ class AIProviderOut(BaseModel):
     api_key_configured: bool
     model: Optional[str]
     enabled: bool
+    chat_default: bool
 
 
 class AIProviderTestOut(BaseModel):
