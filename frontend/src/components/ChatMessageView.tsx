@@ -12,6 +12,8 @@ export interface ChatItem {
   error?: boolean;
   /** Veio do historico: la a tabela nao existe, so o texto e a consulta */
   fromHistory?: boolean;
+  /** A imagem da pagina aberta foi enviada ao provedor de IA nesta pergunta */
+  usedImage?: boolean;
 }
 
 /** Uma mensagem da conversa. O texto entra como texto (nada de HTML), e a consulta DAX fica
@@ -33,6 +35,9 @@ export default function ChatMessageView({ item }: { item: ChatItem }) {
             <summary>Ver consulta DAX</summary>
             <pre>{item.dax}</pre>
           </details>
+        )}
+        {item.usedImage && (
+          <p className="chat-hint">A imagem da pagina aberta foi enviada ao provedor de IA nesta pergunta.</p>
         )}
         {item.fromHistory && item.dax && !item.table && (
           <p className="chat-hint">

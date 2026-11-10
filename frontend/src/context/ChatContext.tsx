@@ -1,6 +1,7 @@
-import { createContext, useContext, useRef, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import * as chatApi from "../api/aiChat";
-import type { Conversation } from "../api/aiChat";
+import type { Conversation, OpenPageInfo, PageVisualInfo } from "../api/aiChat";
+import * as aiReportApi from "../api/aiReport";
 import { extractErrorMessage } from "../api/client";
 import { useAiAccess } from "../hooks/useAiAccess";
 import { useToast } from "./ToastContext";
@@ -8,6 +9,27 @@ import type { ChatItem } from "../components/ChatMessageView";
 
 let nextKey = 0;
 const newKey = () => `m${nextKey++}`;
+
+// A imagem fica 15 min no servidor; pedir de novo antes de uns 10 so gastaria exportacao a toa
+const WARM_EVERY_MS = 10 * 60 * 1000;
+// Ler os campos dos graficos nao pode travar a pergunta: passou disso, ela segue sem eles
+const CONTEXT_TIMEOUT_MS = 8000;
+
+/** O relatorio que a pessoa tem aberto em tela cheia. Quem o abre (ReportFullscreen) se registra aqui, e o
+ * chat le a pagina ativa e os campos dos graficos so na hora de perguntar. */
+export interface OpenReport {
+  reportId: number;
+  getPageName: () => Promise<string | null>;
+  getContext: () => Promise<{ page_name: string; page_title: string; visuals: PageVisualInfo[] } | null>;
+}
+
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error("tempo esgotado")), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => clearTimeout(timer));
+}
 
 interface ChatContextValue {
   canUse: boolean;
@@ -20,6 +42,8 @@ interface ChatContextValue {
   sending: boolean;
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
+  /** Registra (ou, com null, tira) o relatorio aberto em tela cheia */
+  setOpenReport: (report: OpenReport | null) => void;
   loadConversations: () => Promise<void>;
   sendMessage: () => Promise<void>;
   newConversation: () => void;
@@ -42,8 +66,46 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [openReport, setOpenReport] = useState<OpenReport | null>(null);
   // Impede dois envios ao mesmo tempo mesmo antes de o estado "sending" chegar a tela
   const sendingRef = useRef(false);
+  const lastWarmRef = useRef<{ key: string; at: number } | null>(null);
+
+  // Pede ao servidor a imagem da pagina aberta, para as proximas perguntas. Nao espera nada e, se falhar
+  // ou o admin nao tiver liberado imagens, a pergunta segue so com texto.
+  async function warmImage() {
+    if (!openReport) return;
+    try {
+      const pageName = await openReport.getPageName();
+      if (!pageName) return;
+      const key = `${openReport.reportId}:${pageName}`;
+      const last = lastWarmRef.current;
+      if (last && last.key === key && Date.now() - last.at < WARM_EVERY_MS) return;
+      lastWarmRef.current = { key, at: Date.now() };
+      await aiReportApi.warmPageImage(openReport.reportId, pageName);
+    } catch {
+      // sem imagem, a pergunta segue por texto
+    }
+  }
+
+  // Chat aberto dentro de um relatorio: ja pede a imagem da pagina, que leva segundos para ficar pronta
+  useEffect(() => {
+    if (panelOpen && canUse && openReport) void warmImage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [panelOpen, canUse, openReport]);
+
+  /** A pagina aberta e os campos dos graficos, se houver relatorio aberto. Falha ou demora so tira os campos:
+   * o relatorio continua sendo informado, que ja ajuda a IA a escolher. */
+  async function readOpenPage(): Promise<OpenPageInfo | undefined> {
+    if (!openReport) return undefined;
+    const base: OpenPageInfo = { report_id: openReport.reportId, page_name: null, page_title: null, visuals: [] };
+    try {
+      const context = await withTimeout(openReport.getContext(), CONTEXT_TIMEOUT_MS);
+      return context ? { ...base, ...context } : base;
+    } catch {
+      return base;
+    }
+  }
 
   async function loadConversations() {
     try {
@@ -62,7 +124,11 @@ export function ChatProvider({ children }: { children: ReactNode }) {
     setSending(true);
     setItems((current) => [...current, { key: newKey(), role: "user", content: message }]);
     try {
-      const response = await chatApi.sendChatMessage(message, activeId ?? undefined);
+      const openPage = await readOpenPage();
+      void warmImage(); // para as proximas perguntas: a desta usa so a imagem que ja estiver pronta
+      const response = openPage
+        ? await chatApi.sendChatMessage(message, activeId ?? undefined, openPage)
+        : await chatApi.sendChatMessage(message, activeId ?? undefined);
       setActiveId(response.conversation_id);
       setItems((current) => [
         ...current,
@@ -73,6 +139,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
           report: response.report,
           dax: response.dax,
           table: response.table,
+          usedImage: response.used_image === true,
         },
       ]);
       await loadConversations();
@@ -154,6 +221,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         sending,
         panelOpen,
         setPanelOpen,
+        setOpenReport,
         loadConversations,
         sendMessage,
         newConversation,

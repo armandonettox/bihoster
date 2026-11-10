@@ -1,7 +1,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import * as pbi from "powerbi-client";
 import * as reportsApi from "../api/reports";
+import type { PageVisualInfo } from "../api/aiChat";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { csvHeaders } from "../utils/csvHeaders";
 import { extractErrorMessage } from "../api/client";
 import { createEmbedTimer } from "../utils/embedTiming";
 import { getPowerBiService, isPreloadStarted } from "../utils/powerbiService";
@@ -17,13 +19,27 @@ export interface VisualMeasure {
   visual_title: string;
 }
 
+/** A pagina ativa e os campos que cada grafico usa: vai para o chat de IA como pista dos nomes */
+export interface PageContextInfo {
+  page_name: string;
+  page_title: string;
+  visuals: PageVisualInfo[];
+}
+
 export interface ReportEmbedHandle {
   getTableVisuals: () => Promise<TableVisualInfo[]>;
   exportTableData: (visualName?: string) => Promise<void>;
   getPageMeasures: () => Promise<VisualMeasure[]>;
+  /** Nome tecnico da pagina ativa, ou null se o relatorio ainda nao carregou */
+  getActivePageName: () => Promise<string | null>;
+  /** Pagina ativa com os campos de cada grafico; null se o relatorio ainda nao carregou */
+  getPageContext: () => Promise<PageContextInfo | null>;
 }
 
 const TABLE_VISUAL_TYPES = ["tableEx", "pivotTable"];
+// Visuais sem dados (texto, imagem, formas e botoes): nao ha campo para ler
+const NO_DATA_VISUAL_TYPES = ["textbox", "image", "shape", "basicShape", "actionButton"];
+const MAX_CONTEXT_VISUALS = 40;
 
 function downloadCsv(data: string, filename: string) {
   const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
@@ -121,6 +137,33 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         seen.add(key);
         return true;
       });
+    },
+    getActivePageName: async () => {
+      const report = embeddedRef.current;
+      if (!report) return null;
+      return (await report.getActivePage()).name;
+    },
+    getPageContext: async (): Promise<PageContextInfo | null> => {
+      const report = embeddedRef.current;
+      if (!report) return null;
+      const page = await report.getActivePage();
+      const visuals = (await page.getVisuals())
+        .filter((v) => !NO_DATA_VISUAL_TYPES.includes(v.type))
+        .slice(0, MAX_CONTEXT_VISUALS);
+      const described = await Promise.all(
+        visuals.map(async (visual): Promise<PageVisualInfo> => {
+          let fields: string[] = [];
+          try {
+            // Uma linha so: o que interessa e o cabecalho, que traz "Tabela[Coluna]" de cada campo do visual
+            const result = await visual.exportData(pbi.models.ExportDataType.Summarized, 1);
+            fields = csvHeaders(result.data);
+          } catch {
+            // Visual sem permissao de exportar ou sem dados: entra so com titulo e tipo
+          }
+          return { title: visual.title || "", type: visual.type, fields };
+        }),
+      );
+      return { page_name: page.name, page_title: page.displayName, visuals: described };
     },
     exportTableData: async (visualName?: string) => {
       const report = embeddedRef.current;

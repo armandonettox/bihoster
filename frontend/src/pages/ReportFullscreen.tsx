@@ -9,6 +9,7 @@ import FullscreenHeader from "../components/FullscreenHeader";
 import ReportEmbed, { type ReportEmbedHandle, type TableVisualInfo } from "../components/ReportEmbed";
 import ReportAlertsModal from "../components/ReportAlertsModal";
 import ReportSubscriptionsModal from "../components/ReportSubscriptionsModal";
+import { useChat } from "../context/ChatContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useEscapeKey } from "../hooks/useEscapeKey";
 import { useSubscriptionAccess } from "../hooks/useSubscriptionAccess";
@@ -27,6 +28,7 @@ export default function ReportFullscreen() {
   const navigate = useNavigate();
   const location = useLocation();
   const { selectWorkspace, workspaces } = useWorkspace();
+  const { setOpenReport } = useChat();
 
   const [report, setReport] = useState<Report | null>(null);
   const [error, setError] = useState<string | null>(invalid ? "Endereco do relatorio invalido." : null);
@@ -107,6 +109,18 @@ export default function ReportFullscreen() {
       cancelled = true;
     };
   }, [wsId, repId, invalid]);
+
+  // Avisa o chat de IA qual relatorio esta aberto: ele le a pagina ativa e os campos dos graficos so na hora de
+  // perguntar, e pede a imagem da pagina se o admin liberou
+  useEffect(() => {
+    if (!report) return;
+    setOpenReport({
+      reportId: report.id,
+      getPageName: async () => (await embedRef.current?.getActivePageName()) ?? null,
+      getContext: async () => (await embedRef.current?.getPageContext()) ?? null,
+    });
+    return () => setOpenReport(null);
+  }, [report, setOpenReport]);
 
   // O nome do relatorio vai pro titulo da aba (o cabecalho mostra so a logo)
   useEffect(() => {

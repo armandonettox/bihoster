@@ -30,6 +30,23 @@ export interface ChatResponse {
   dax: string | null;
   table: ChatTable | null;
   usage: ChatUsage;
+  /** A imagem da pagina foi enviada ao provedor de IA nesta pergunta */
+  used_image?: boolean;
+}
+
+/** Um grafico da pagina aberta e os campos que ele usa, lidos pelo SDK do Power BI */
+export interface PageVisualInfo {
+  title: string;
+  type: string;
+  fields: string[];
+}
+
+/** O relatorio e a pagina que a pessoa tem aberta: ajuda a IA a achar as colunas que os graficos usam */
+export interface OpenPageInfo {
+  report_id: number;
+  page_name: string | null;
+  page_title: string | null;
+  visuals: PageVisualInfo[];
 }
 
 export interface Conversation {
@@ -53,10 +70,15 @@ export interface ConversationDetail extends Conversation {
 }
 
 /** Sem `conversationId` comeca uma conversa nova; com ele, continua uma conversa da propria pessoa. */
-export async function sendChatMessage(message: string, conversationId?: number): Promise<ChatResponse> {
+export async function sendChatMessage(
+  message: string,
+  conversationId?: number,
+  openPage?: OpenPageInfo,
+): Promise<ChatResponse> {
   const { data } = await api.post("/ai/chat", {
     message,
     ...(conversationId !== undefined ? { conversation_id: conversationId } : {}),
+    ...(openPage ? { open_page: openPage } : {}),
   });
   return data;
 }

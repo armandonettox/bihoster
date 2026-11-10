@@ -4,6 +4,7 @@ import type { AIProvider } from "../../api/aiSettings";
 import { SkeletonList } from "../../components/Skeleton";
 import AiOptionsCard from "../../components/AiOptionsCard";
 import AiProviderPanel from "../../components/AiProviderPanel";
+import AiReportCard from "../../components/AiReportCard";
 import AiUsageCard from "../../components/AiUsageCard";
 
 function statusLabel(provider: AIProvider): string {
@@ -95,6 +96,7 @@ export default function AiTab() {
           />
         </div>
       </section>
+      <AiReportCard />
       <AiOptionsCard />
       <AiUsageCard />
     </div>

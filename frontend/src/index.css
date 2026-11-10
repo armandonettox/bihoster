@@ -2794,6 +2794,46 @@ table.table tr:last-child td {
   width: 100%;
 }
 
+/* Aba IA: relatorios e o que a IA enxerga de cada um */
+.ai-report-summary {
+  margin: 0 0 8px;
+}
+
+.ai-report-scroll {
+  max-height: 360px;
+  margin-top: 8px;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.ai-report-table-block {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-report-table-block:last-child {
+  border-bottom: none;
+}
+
+.ai-report-table-block summary {
+  cursor: pointer;
+}
+
+.ai-report-table {
+  width: 100%;
+  margin-top: 8px;
+  font-size: 13px;
+  border-collapse: collapse;
+}
+
+.ai-report-table th,
+.ai-report-table td {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--color-border);
+}
+
 .usage-summary {
   margin: 12px 0;
   padding-left: 18px;
