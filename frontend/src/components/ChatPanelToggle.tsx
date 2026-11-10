@@ -1,9 +1,15 @@
 import { useLocation } from "react-router-dom";
 import { useChat } from "../context/ChatContext";
 
-/** Botao da barra superior que abre e fecha o painel lateral do chat. So aparece para quem pode usar o chat,
- * e nao na pagina /chat, que ja e o chat em tela cheia. */
-export default function ChatPanelToggle() {
+/** Botao que abre e fecha o painel lateral do chat (barra superior do app e barra do relatorio em tela cheia).
+ * So aparece para quem pode usar o chat, e nao na pagina /chat, que ja e o chat em tela cheia. */
+export default function ChatPanelToggle({
+  className = "btn btn-ghost",
+  showLabel = false,
+}: {
+  className?: string;
+  showLabel?: boolean;
+}) {
   const { canUse, panelOpen, setPanelOpen } = useChat();
   const location = useLocation();
   if (!canUse || location.pathname === "/chat") return null;
@@ -12,7 +18,7 @@ export default function ChatPanelToggle() {
   return (
     <button
       type="button"
-      className="btn btn-ghost"
+      className={className}
       onClick={() => setPanelOpen(!panelOpen)}
       aria-pressed={panelOpen}
       title={label}
@@ -21,6 +27,7 @@ export default function ChatPanelToggle() {
       <span className="material-symbols-outlined" style={{ fontSize: 20 }} aria-hidden="true">
         {panelOpen ? "chat_bubble" : "chat"}
       </span>
+      {showLabel && <span>Chat</span>}
     </button>
   );
 }

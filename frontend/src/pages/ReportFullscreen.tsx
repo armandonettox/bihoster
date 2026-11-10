@@ -3,6 +3,8 @@ import { useLocation, useNavigate, useParams } from "react-router-dom";
 import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
 import { extractErrorMessage } from "../api/client";
+import ChatPanel from "../components/ChatPanel";
+import ChatPanelToggle from "../components/ChatPanelToggle";
 import FullscreenHeader from "../components/FullscreenHeader";
 import ReportEmbed, { type ReportEmbedHandle, type TableVisualInfo } from "../components/ReportEmbed";
 import ReportAlertsModal from "../components/ReportAlertsModal";
@@ -131,7 +133,8 @@ export default function ReportFullscreen() {
   useEscapeKey(exit, !subscriptionsOpen);
 
   return (
-    <div className="fullscreen-view">
+    <div className="fullscreen-view fullscreen-view-with-chat">
+      <div className="fullscreen-main">
       <div className={`fullscreen-header-wrap${headerVisible ? "" : " fullscreen-header-wrap--hidden"}`}>
         <FullscreenHeader
           title={report?.name ?? ""}
@@ -235,6 +238,7 @@ export default function ReportFullscreen() {
                   </button>
                 </>
               )}
+              <ChatPanelToggle className="fullscreen-action" showLabel />
             </>
           ) : undefined
         }
@@ -271,6 +275,8 @@ export default function ReportFullscreen() {
           <p style={{ padding: 8, color: "var(--color-text-muted)" }}>Carregando relatorio...</p>
         )}
       </div>
+      </div>
+      <ChatPanel />
       {subscriptionsOpen && report && (
         <ReportSubscriptionsModal
           report={report}

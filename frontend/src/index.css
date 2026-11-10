@@ -1612,6 +1612,21 @@ table.table tr:last-child td {
   flex-direction: column;
 }
 
+/* So o relatorio em tela cheia (ReportFullscreen): o painel do chat, quando aberto, fica ao lado da barra
+   e do relatorio. A TV e a apresentacao seguem em coluna. */
+.fullscreen-view-with-chat {
+  flex-direction: row;
+}
+
+.fullscreen-main {
+  position: relative;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
 .fullscreen-view-header {
   display: flex;
   justify-content: space-between;
@@ -2730,15 +2745,25 @@ table.table tr:last-child td {
   max-height: 160px;
 }
 
-/* Painel lateral do chat: metade da tela ao lado da pagina aberta */
+/* Painel lateral do chat, ao lado da pagina aberta: cerca de um quarto da tela, entre 340 e 460px */
 .chat-panel {
   display: flex;
-  flex: 0 0 50%;
+  flex: 0 0 clamp(340px, 26vw, 460px);
   flex-direction: column;
   min-width: 340px;
   min-height: 0;
   background: var(--color-surface);
   border-left: 1px solid var(--color-border);
+}
+
+/* O item "Chat de IA" do menu e um botao com a cara dos links ao redor */
+.sidebar-home-button {
+  width: 100%;
+  font-family: inherit;
+  text-align: left;
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .chat-panel-title {

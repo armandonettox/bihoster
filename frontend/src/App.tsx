@@ -1,5 +1,5 @@
 import { lazy, Suspense } from "react";
-import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Outlet, useLocation } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { FavoritesProvider } from "./context/FavoritesContext";
 import { BrandingProvider } from "./context/BrandingContext";
@@ -41,10 +41,21 @@ function WorkspaceGate() {
 
   return (
     <FavoritesProvider>
-      <ChatProvider>
-        <Layout />
-      </ChatProvider>
+      <Layout />
     </FavoritesProvider>
+  );
+}
+
+/** Rotas logadas que podem mostrar o painel do chat (o app e o relatorio em tela cheia). O provedor do chat
+ * fica aqui, acima das duas, para a conversa e o painel aberto continuarem ao entrar e sair de um relatorio.
+ * Sair da conta desmonta tudo: a proxima pessoa nao ve a conversa. */
+function ChatShell() {
+  return (
+    <ProtectedRoute>
+      <ChatProvider>
+        <Outlet />
+      </ChatProvider>
+    </ProtectedRoute>
   );
 }
 
@@ -67,33 +78,31 @@ function RoutedContent() {
             </ProtectedRoute>
           }
         />
-        <Route
-          path="/collection/:workspaceId/report/:reportId"
-          element={
-            <ProtectedRoute>
+        <Route path="/register" element={<Register />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
+        <Route element={<ChatShell />}>
+          <Route
+            path="/collection/:workspaceId/report/:reportId"
+            element={
               <WorkspaceProvider>
                 <ReportFullscreen />
               </WorkspaceProvider>
-            </ProtectedRoute>
-          }
-        />
-        <Route path="/register" element={<Register />} />
-        <Route path="/reset-password" element={<ResetPassword />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
+            }
+          />
+          <Route
+            path="/"
+            element={
               <WorkspaceProvider>
                 <WorkspaceGate />
               </WorkspaceProvider>
-            </ProtectedRoute>
-          }
-        >
-          <Route index element={<Home />} />
-          <Route path="collection" element={<CollectionHome />} />
-          <Route path="settings" element={<Settings />} />
-          <Route path="chat" element={<ChatPage />} />
-          <Route path="*" element={<NotFound />} />
+            }
+          >
+            <Route index element={<Home />} />
+            <Route path="collection" element={<CollectionHome />} />
+            <Route path="settings" element={<Settings />} />
+            <Route path="chat" element={<ChatPage />} />
+            <Route path="*" element={<NotFound />} />
+          </Route>
         </Route>
         <Route path="*" element={<NotFound />} />
       </Routes>

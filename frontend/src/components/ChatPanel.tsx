@@ -1,9 +1,9 @@
-import { useEffect, type ChangeEvent } from "react";
+import { useEffect, type ChangeEvent, type KeyboardEvent } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useChat } from "../context/ChatContext";
 import ChatThread from "./ChatThread";
 
-/** Painel lateral do chat de IA: ocupa a metade da tela ao lado da pagina aberta (em celular, a tela toda).
+/** Painel lateral do chat de IA: uma faixa estreita ao lado da pagina aberta (em celular, a tela toda).
  * Mostra a mesma conversa da pagina /chat. Na propria pagina /chat ele nao aparece, para nao duplicar. */
 export default function ChatPanel() {
   const { canUse, accessLoading, panelOpen, setPanelOpen, conversations, activeId, loadConversations, newConversation, openConversation } =
@@ -28,8 +28,13 @@ export default function ChatPanel() {
     if (conversation) void openConversation(conversation);
   }
 
+  // O Esc dentro do painel nao pode subir ate a pagina: no relatorio em tela cheia ele sai do relatorio
+  function handleKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "Escape") event.stopPropagation();
+  }
+
   return (
-    <aside className="chat-panel" aria-label="Chat de IA">
+    <aside className="chat-panel" aria-label="Chat de IA" onKeyDown={handleKeyDown}>
       <div className="chat-header">
         <h2 className="chat-panel-title">Chat de IA</h2>
         <div className="chat-panel-actions">

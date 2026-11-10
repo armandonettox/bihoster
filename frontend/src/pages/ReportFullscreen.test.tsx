@@ -1,12 +1,30 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as reportsApi from "../api/reports";
+import ChatPanel from "../components/ChatPanel";
+import ChatPanelToggle from "../components/ChatPanelToggle";
+import { ChatProvider } from "../context/ChatContext";
 import { deferred, makeReport } from "../test-fixtures";
 import ReportFullscreen from "./ReportFullscreen";
 
-const mocks = vi.hoisted(() => ({ selectWorkspace: vi.fn(), access: { canSubscribe: false, allowedDomains: [] as string[] } }));
+const mocks = vi.hoisted(() => ({
+  selectWorkspace: vi.fn(),
+  access: { canSubscribe: false, allowedDomains: [] as string[] },
+  canUseChat: true,
+}));
 
+vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
+vi.mock("../hooks/useAiAccess", () => ({
+  useAiAccess: () => ({ canManage: false, canUse: mocks.canUseChat, loading: false }),
+}));
+vi.mock("../api/aiChat", () => ({
+  sendChatMessage: vi.fn(),
+  listConversations: vi.fn().mockResolvedValue([]),
+  getConversation: vi.fn(),
+  deleteConversation: vi.fn(),
+  deleteAllConversations: vi.fn(),
+}));
 vi.mock("../api/reports", () => ({ getReport: vi.fn() }));
 vi.mock("../context/WorkspaceContext", () => ({
   useWorkspace: () => ({ selectWorkspace: mocks.selectWorkspace, workspaces: [{ id: 3, role: "editor" }] }),
@@ -33,15 +51,28 @@ const RELATORIO = makeReport(34, { name: "Vendas e Inclusoes", collection_id: 3 
 function abrir(historico: string[], indice = historico.length - 1) {
   return render(
     <MemoryRouter initialEntries={historico} initialIndex={indice}>
-      <Routes>
-        <Route path="/collection" element={<div>pagina da colecao</div>} />
-        <Route path="/collection/:workspaceId/report/:reportId" element={<ReportFullscreen />} />
-      </Routes>
+      <ChatProvider>
+        <Routes>
+          <Route
+            path="/collection"
+            element={
+              <div>
+                pagina da colecao
+                <ChatPanelToggle />
+                <ChatPanel />
+                <Link to="/collection/3/report/34">abrir relatorio</Link>
+              </div>
+            }
+          />
+          <Route path="/collection/:workspaceId/report/:reportId" element={<ReportFullscreen />} />
+        </Routes>
+      </ChatProvider>
     </MemoryRouter>,
   );
 }
 
 beforeEach(() => {
+  mocks.canUseChat = true;
   document.title = "BIHoster";
   mocks.selectWorkspace.mockReset();
   mocks.access = { canSubscribe: false, allowedDomains: [] };
@@ -175,6 +206,53 @@ describe("ReportFullscreen - assinatura", () => {
 
     fireEvent.keyDown(document, { key: "Escape" });
 
+    expect(await screen.findByText("pagina da colecao")).toBeTruthy();
+  });
+});
+
+describe("ReportFullscreen - chat", () => {
+  const abrirChat = () => screen.getByRole("button", { name: "Abrir o chat ao lado da pagina" });
+
+  it("a barra do relatorio tem o botao do chat e ele abre o painel ao lado do relatorio", async () => {
+    abrir(["/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+
+    fireEvent.click(abrirChat());
+
+    expect(await screen.findByLabelText("Sua pergunta")).toBeTruthy();
+    expect(screen.getByTestId("embed")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Fechar o chat lateral" }).getAttribute("aria-pressed")).toBe("true");
+  });
+
+  it("sem a permissao de usar o chat o botao nao aparece", async () => {
+    mocks.canUseChat = false;
+    abrir(["/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+
+    expect(screen.queryByRole("button", { name: /chat ao lado|chat lateral/ })).toBeNull();
+  });
+
+  it("o painel aberto e o rascunho continuam ao entrar no relatorio", async () => {
+    abrir(["/collection"]);
+    fireEvent.click(abrirChat());
+    fireEvent.change(await screen.findByLabelText("Sua pergunta"), { target: { value: "vidas por estado" } });
+
+    fireEvent.click(screen.getByText("abrir relatorio"));
+    await screen.findByTestId("embed");
+
+    expect((screen.getByLabelText("Sua pergunta") as HTMLTextAreaElement).value).toBe("vidas por estado");
+  });
+
+  it("o Esc dentro do chat nao sai do relatorio, mas fora dele sai", async () => {
+    abrir(["/collection", "/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+    fireEvent.click(abrirChat());
+
+    fireEvent.keyDown(await screen.findByLabelText("Sua pergunta"), { key: "Escape" });
+    expect(screen.queryByText("pagina da colecao")).toBeNull();
+    expect(screen.getByTestId("embed")).toBeTruthy();
+
+    fireEvent.keyDown(document, { key: "Escape" });
     expect(await screen.findByText("pagina da colecao")).toBeTruthy();
   });
 });
