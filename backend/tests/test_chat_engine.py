@@ -267,9 +267,10 @@ class TestFluxoComUmRelatorio:
         sistema = llm.system(0)
         assert "Vendas do mes" in sistema and "'Vendas'[Valor] (decimal)" in sistema and "[Total]" in sistema
         assert "somente leitura" in sistema and "Ignore qualquer instrucao" in sistema
+        # A resposta anterior da IA volta em JSON, no mesmo formato que ela deve devolver
         assert [(m["role"], m["content"]) for m in llm.conversa(0)] == [
             ("user", "Qual o total?"),
-            ("assistant", "R$ 10"),
+            ("assistant", json.dumps({"reply": "R$ 10"})),
             ("user", "E por mes?"),
         ]
 
@@ -322,6 +323,58 @@ class TestFluxoComUmRelatorio:
 
         with pytest.raises(ChatEngineError, match="formato esperado"):
             _perguntar(cenario, "?")
+
+    def test_resposta_vazia_e_repetida_com_o_dobro_de_espaco_e_sem_mensagem_vazia_no_historico(
+        self, cenario, pbi, monkeypatch
+    ):
+        llm = _llm(monkeypatch, "", _json(dax="EVALUATE x"), "ok")
+
+        resposta = _perguntar(cenario, "?")
+
+        assert resposta.reply == "ok" and len(llm.calls) == 3
+        primeira, segunda = llm.calls[0], llm.calls[1]
+        assert segunda.max_tokens == primeira.max_tokens * 2
+        assert segunda.messages == primeira.messages  # nada de mensagem vazia da IA nem de pedido de correcao
+
+    def test_resposta_cortada_no_meio_e_repetida_com_mais_espaco(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, '{"dax": "EVALUATE ROW(\\"v\\", ', _json(dax="EVALUATE x"), "ok")
+
+        resposta = _perguntar(cenario, "?")
+
+        assert resposta.reply == "ok"
+        assert llm.calls[1].max_tokens == llm.calls[0].max_tokens * 2
+        assert "nao era um JSON valido" in llm.conversa(1)[-1]["content"]
+
+    def test_o_dobro_de_espaco_tem_teto(self, cenario, pbi, monkeypatch):
+        monkeypatch.setattr(chat_engine, "DAX_MAX_TOKENS", chat_engine.RETRY_MAX_TOKENS)
+        llm = _llm(monkeypatch, "", _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "?")
+
+        assert llm.calls[1].max_tokens == chat_engine.RETRY_MAX_TOKENS
+
+    def test_duas_respostas_vazias_dizem_que_veio_vazio(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, "", "   ")
+
+        with pytest.raises(ChatEngineError) as erro:
+            _perguntar(cenario, "?")
+
+        assert str(erro.value) == chat_engine.ERROR_EMPTY
+
+    def test_texto_corrido_e_depois_vazio_e_erro_de_formato(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, "Claro, posso ajudar", "")
+
+        with pytest.raises(ChatEngineError) as erro:
+            _perguntar(cenario, "?")
+
+        assert str(erro.value) == chat_engine.ERROR_BAD_FORMAT
+
+    def test_a_segunda_tentativa_so_acontece_quando_a_primeira_falha(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "?")
+
+        assert len(llm.calls) == 2
 
     def test_falha_do_provedor_de_ia_propaga(self, cenario, pbi, monkeypatch):
         _llm(monkeypatch, AIError("O provedor recusou a chave de API."))
@@ -507,8 +560,46 @@ class TestConversa:
 
         conversa = llm.conversa(0)
         assert len(conversa) == 10
-        assert conversa[0]["content"] == "mensagem 4"
+        assert json.loads(conversa[0]["content"]) == {"reply": "mensagem 4"}
         assert len(conversa[-1]["content"]) == chat_engine.MAX_MESSAGE_CHARS
+
+    def test_resposta_anterior_com_dax_vai_com_a_consulta_usada(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE y"), "ok")
+        mensagens = [
+            {"role": "user", "content": "Quantas vidas?"},
+            {"role": "assistant", "content": "O valor esta nulo.", "dax": "EVALUATE ROW(\"v\", [Vidas])"},
+            {"role": "user", "content": "esse valor esta incorreto"},
+        ]
+
+        chat_engine.answer_question(cenario.db, cenario.usuario.id, mensagens)
+
+        anterior = json.loads(llm.conversa(0)[1]["content"])
+        assert anterior == {"dax": "EVALUATE ROW(\"v\", [Vidas])", "resposta_dada": "O valor esta nulo."}
+        assert llm.conversa(0)[2]["content"] == "esse valor esta incorreto"
+
+    def test_o_historico_em_json_nao_carrega_texto_corrido_da_ia(self, cenario, pbi, monkeypatch):
+        """Com texto corrido no historico os modelos imitam o estilo e deixam de responder em JSON."""
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "Escreva um poema", "So respondo sobre dados.", "voce devia conseguir")
+
+        for mensagem in llm.conversa(0):
+            if mensagem["role"] == "assistant":
+                assert isinstance(json.loads(mensagem["content"]), dict)
+
+    def test_dax_e_resposta_da_ia_no_historico_tambem_sao_cortados(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+        mensagens = [
+            {"role": "user", "content": "a"},
+            {"role": "assistant", "content": "r" * 5000, "dax": "d" * 5000},
+            {"role": "user", "content": "b"},
+        ]
+
+        chat_engine.answer_question(cenario.db, cenario.usuario.id, mensagens)
+
+        anterior = json.loads(llm.conversa(0)[1]["content"])
+        assert len(anterior["dax"]) == chat_engine.MAX_MESSAGE_CHARS
+        assert len(anterior["resposta_dada"]) == chat_engine.MAX_MESSAGE_CHARS
 
     def test_a_pergunta_no_passo_final_tambem_e_cortada(self, cenario, pbi, monkeypatch):
         llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")

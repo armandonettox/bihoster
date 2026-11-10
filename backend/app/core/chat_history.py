@@ -55,7 +55,11 @@ def history_for_engine(db: Session, conversation: AIConversation) -> list[dict]:
         .limit(HISTORY_FOR_ENGINE)
         .all()
     )
-    return [{"role": row.role, "content": row.content} for row in reversed(rows)]
+    # A consulta DAX das respostas anteriores vai junto, para a IA conseguir corrigi-la num "esta errado"
+    return [
+        {"role": row.role, "content": row.content, **({"dax": row.dax} if row.dax else {})}
+        for row in reversed(rows)
+    ]
 
 
 def start_conversation(db: Session, user_id: int, first_question: str) -> AIConversation:

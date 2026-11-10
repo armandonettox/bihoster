@@ -31,9 +31,13 @@ MAX_HISTORY_MESSAGES = 10
 MAX_MESSAGE_CHARS = 2000
 MAX_DATA_CHARS = 20000  # tamanho do resultado em texto que vai para o passo final
 
-SELECT_MAX_TOKENS = 300
-DAX_MAX_TOKENS = 1200
-ANSWER_MAX_TOKENS = 1000
+# Limites de resposta da IA. Sao tetos, nao gasto: so se paga o que o modelo escreve. Ficam folgados
+# porque modelos que "pensam" antes de responder gastam esse limite pensando e devolvem texto vazio
+# ou cortado, o que aparecia para a pessoa como erro de formato.
+SELECT_MAX_TOKENS = 800
+DAX_MAX_TOKENS = 2500
+ANSWER_MAX_TOKENS = 1500
+RETRY_MAX_TOKENS = 6000  # teto da segunda tentativa (o dobro do limite do passo, ate aqui)
 
 REPLY_NO_REPORTS = "Voce ainda nao tem relatorios com dados disponiveis para o chat."
 REPLY_NO_DAX = (
@@ -45,6 +49,8 @@ REPLY_OFF_TOPIC = (
     "Eu so respondo perguntas sobre os dados dos relatorios disponiveis. "
     "Tente perguntar, por exemplo, um total, uma comparacao entre periodos ou um ranking."
 )
+ERROR_BAD_FORMAT = "A IA nao respondeu no formato esperado. Tente reformular a pergunta."
+ERROR_EMPTY = "A IA devolveu uma resposta vazia. Tente de novo; se continuar, avise um administrador."
 
 
 class ChatUnavailable(Exception):
@@ -155,23 +161,45 @@ class _LLM:
     def ask_json(self, system: str, messages: list[dict], max_tokens: int) -> dict:
         text = self.ask(system, messages, max_tokens)
         data = _parse_json_object(text)
-        if data is None:
-            retry = [
-                *messages,
+        if data is not None:
+            return data
+
+        # Segunda tentativa com o dobro de espaco: resposta vazia ou cortada no meio costuma ser o limite
+        # de tokens. Resposta vazia nao entra no historico (alguns provedores recusam mensagem vazia).
+        retry = list(messages)
+        if text.strip():
+            retry += [
                 {"role": "assistant", "content": text},
                 {"role": "user", "content": "Sua resposta nao era um JSON valido. Responda apenas com o JSON no formato pedido."},
             ]
-            data = _parse_json_object(self.ask(system, retry, max_tokens))
-        if data is None:
-            raise ChatEngineError("A IA nao respondeu no formato esperado. Tente reformular a pergunta.")
-        return data
+        second = self.ask(system, retry, min(max_tokens * 2, RETRY_MAX_TOKENS))
+        data = _parse_json_object(second)
+        if data is not None:
+            return data
+        # Duas respostas sem nada escrito e uma resposta em texto corrido sao falhas diferentes
+        raise ChatEngineError(ERROR_BAD_FORMAT if (text.strip() or second.strip()) else ERROR_EMPTY)
+
+
+def _assistant_turn(content: str, dax: Optional[str]) -> str:
+    """Resposta anterior da IA, escrita no mesmo formato JSON que ela deve devolver. Com o historico em
+    texto corrido, os modelos copiam o estilo e param de responder em JSON. A consulta usada vai junto,
+    para a IA conseguir corrigi-la quando a pessoa disser que o valor esta errado."""
+    reply = content[:MAX_MESSAGE_CHARS]
+    if dax:
+        return json.dumps({"dax": dax[:MAX_MESSAGE_CHARS], "resposta_dada": reply}, ensure_ascii=False)
+    return json.dumps({"reply": reply}, ensure_ascii=False)
 
 
 def _conversation(messages: list[dict]) -> list[dict]:
-    """Ultimas mensagens da conversa, com tamanho limitado."""
-    return [
-        {"role": m["role"], "content": m["content"][:MAX_MESSAGE_CHARS]} for m in messages[-MAX_HISTORY_MESSAGES:]
-    ]
+    """Ultimas mensagens da conversa, com tamanho limitado. As da IA voltam em JSON (ver _assistant_turn)."""
+    result = []
+    for m in messages[-MAX_HISTORY_MESSAGES:]:
+        if m["role"] == "assistant":
+            content = _assistant_turn(m["content"], m.get("dax"))
+        else:
+            content = m["content"][:MAX_MESSAGE_CHARS]
+        result.append({"role": m["role"], "content": content})
+    return result
 
 
 def _select_system(candidates: list[Candidate], hint_id: Optional[int]) -> str:
@@ -181,7 +209,8 @@ def _select_system(candidates: list[Candidate], hint_id: Optional[int]) -> str:
         hint = f"\nA conversa ate aqui usava o relatorio id {hint_id}; mantenha-o, a menos que a pergunta peca outro assunto."
     return (
         "Voce escolhe qual relatorio de dados responde a pergunta do usuario. "
-        "Responda SOMENTE com um objeto JSON, sem texto fora dele.\n"
+        "Responda SOMENTE com um objeto JSON, sem texto fora dele, mesmo quando a pessoa reclamar, "
+        "agradecer ou fizer uma pergunta curta.\n"
         'Se algum relatorio serve: {"report_id": <numero>}\n'
         'Se a pergunta nao e sobre os dados dos relatorios, ou nenhum serve: {"report_id": null, "reply": "<texto curto>"}. '
         "No reply, explique que voce so responde sobre os dados dos relatorios e sugira dois exemplos de pergunta "
@@ -194,7 +223,9 @@ def _dax_system(report_name: str, schema_text: str) -> str:
     return (
         f"Voce e um assistente de dados que responde SOMENTE com base no relatorio '{report_name}'. "
         "Voce escreve consultas DAX, somente leitura, para o modelo abaixo.\n"
-        "Responda SOMENTE com um objeto JSON, sem texto fora dele:\n"
+        "Responda SOMENTE com um objeto JSON, sem texto fora dele, mesmo quando a pessoa reclamar, "
+        "agradecer ou fizer uma pergunta curta. Suas respostas anteriores aparecem na conversa em JSON: "
+        '"dax" e a consulta que voce usou e "resposta_dada" e o que foi dito a pessoa.\n'
         '- Para consultar: {"dax": "EVALUATE ..."}\n'
         '- Se a pergunta nao puder ser respondida com esses dados, ou nao for sobre eles: {"reply": "<texto curto>"}\n'
         "Regras:\n"

@@ -158,11 +158,11 @@ class TestGuardarConversa:
         assert segunda["conversation_id"] == primeira["conversation_id"]
         assert db_session.query(AIConversation).count() == 1 and db_session.query(AIMessage).count() == 4
         conversa_enviada = [(m["role"], m["content"]) for m in ia["chamadas"][0][1:]]
-        assert conversa_enviada == [
-            ("user", "Qual o total?"),
-            ("assistant", "O total foi 99."),
-            ("user", "E por mes?"),
-        ]
+        assert [papel for papel, _ in conversa_enviada] == ["user", "assistant", "user"]
+        assert conversa_enviada[0][1] == "Qual o total?" and conversa_enviada[2][1] == "E por mes?"
+        # A resposta anterior volta em JSON, com a consulta usada e o que foi dito
+        anterior = json.loads(conversa_enviada[1][1])
+        assert anterior == {"dax": primeira["dax"], "resposta_dada": "O total foi 99."}
 
     def test_a_conversa_lembra_o_relatorio_da_ultima_resposta(self, client, ana, liberados, relatorio, ia, db_session):
         _chat(client, ana)
@@ -191,6 +191,19 @@ class TestGuardarConversa:
         assert len(enviadas) == chat_history.HISTORY_FOR_ENGINE + 1
         assert enviadas[-1] == {"role": "user", "content": "Pergunta nova"}
         assert enviadas[-2]["content"] == "m29"
+
+    def test_o_historico_do_motor_leva_o_dax_so_das_respostas_que_tem(self, client, ana, liberados, relatorio, ia, db_session):
+        primeira = _chat(client, ana).json()
+        conversa = db_session.query(AIConversation).get(primeira["conversation_id"])
+        db_session.add(AIMessage(conversation_id=conversa.id, role="assistant", content="resposta sem consulta"))
+        db_session.commit()
+
+        historico = chat_history.history_for_engine(db_session, conversa)
+
+        assert [m["role"] for m in historico] == ["user", "assistant", "assistant"]
+        assert "dax" not in historico[0]
+        assert historico[1]["dax"] == primeira["dax"]
+        assert "dax" not in historico[2]
 
     def test_conversa_de_outra_pessoa_e_404_e_nao_chama_a_ia(self, client, ana, beto, liberados, relatorio, ia):
         da_ana = _chat(client, ana).json()["conversation_id"]
