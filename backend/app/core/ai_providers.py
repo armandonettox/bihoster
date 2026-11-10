@@ -134,10 +134,40 @@ def _int(value) -> int:
     return value if isinstance(value, int) and value >= 0 else 0
 
 
+def _openai_content(content):
+    """Texto passa como esta. Lista de partes vira o formato do OpenAI: texto e imagem em data URL."""
+    if isinstance(content, str):
+        return content
+    parts = []
+    for part in content:
+        if part.get("type") == "image":
+            url = f"data:{part['media_type']};base64,{part['data']}"
+            parts.append({"type": "image_url", "image_url": {"url": url}})
+        else:
+            parts.append({"type": "text", "text": part["text"]})
+    return parts
+
+
+def _anthropic_content(content):
+    """Texto passa como esta. Lista de partes vira blocos de texto e de imagem da Anthropic."""
+    if isinstance(content, str):
+        return content
+    blocks = []
+    for part in content:
+        if part.get("type") == "image":
+            blocks.append(
+                {"type": "image", "source": {"type": "base64", "media_type": part["media_type"], "data": part["data"]}}
+            )
+        else:
+            blocks.append({"type": "text", "text": part["text"]})
+    return blocks
+
+
 def _complete_openai_compat(
     info: ProviderInfo, api_key: str, model: str, messages: list[dict], max_tokens: int
 ) -> AIResult:
-    body = {"model": model, "messages": messages, info.max_tokens_field: max_tokens}
+    converted = [{"role": m["role"], "content": _openai_content(m["content"])} for m in messages]
+    body = {"model": model, "messages": converted, info.max_tokens_field: max_tokens}
     response = _http.post(
         f"{info.base_url}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -158,7 +188,7 @@ def _complete_anthropic(
 ) -> AIResult:
     # A Anthropic nao aceita papel "system" dentro das mensagens: o texto vai num campo proprio
     system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
-    chat = [m for m in messages if m["role"] != "system"]
+    chat = [{"role": m["role"], "content": _anthropic_content(m["content"])} for m in messages if m["role"] != "system"]
     body: dict = {"model": model, "max_tokens": max_tokens, "messages": chat}
     if system:
         body["system"] = system

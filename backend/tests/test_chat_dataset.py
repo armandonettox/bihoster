@@ -469,3 +469,134 @@ class TestExecutar:
         finally:
             for _ in tomadas:
                 chat_dataset._query_slots.release()
+
+
+class TestDiagnosticoDoEsquema:
+    def test_conta_as_colunas_ocultas_que_a_ia_nao_ve(self, pbi):
+        _respostas_info(pbi)
+
+        esquema = chat_dataset.get_dataset_schema(CONEXAO, RELATORIO)
+
+        assert esquema.hidden_columns == 1  # so "Oculta"; a coluna interna de linha nao conta
+
+    def test_tabela_grande_no_meio_nao_corta_as_menores_depois_dela(self):
+        def pequena(nome):
+            return SchemaTable(nome, (SchemaColumn("c", None),), ())
+
+        grande = SchemaTable("Grande", tuple(SchemaColumn(f"coluna_{i}", None) for i in range(60)), ())
+
+        info = chat_dataset.build_schema_prompt(_esquema(pequena("A"), grande, pequena("Dim")), max_chars=300)
+
+        assert "Tabela 'A'" in info.text and "Tabela 'Dim'" in info.text and "Tabela 'Grande'" not in info.text
+        assert info.shown_tables == ("A", "Dim") and info.omitted_tables == ("Grande",)
+        assert "tabelas omitidas por tamanho: Grande" in info.text
+
+    def test_conta_as_colunas_cortadas_pelo_limite_por_tabela(self):
+        tabela = SchemaTable("T", tuple(SchemaColumn(f"c{i}", None) for i in range(200)), ())
+
+        info = chat_dataset.build_schema_prompt(_esquema(tabela), max_chars=10**6)
+
+        assert info.omitted_columns == 50 and info.omitted_tables == ()
+
+    def test_atualizar_esquece_o_cache_e_le_de_novo(self, pbi):
+        _respostas_info(pbi)
+        chat_dataset.get_dataset_schema(CONEXAO, RELATORIO)
+        pbi.consultas.clear()
+
+        chat_dataset.clear_schema_cache(CONEXAO, RELATORIO)
+        chat_dataset.get_dataset_schema(CONEXAO, RELATORIO)
+
+        assert any("INFO.TABLES" in q for q in pbi.consultas)
+
+
+class TestColunasBloqueadas:
+    BLOQUEADAS = (("Vendas", "Cliente"),)
+
+    def test_a_coluna_bloqueada_nao_entra_no_esquema_do_prompt(self, pbi):
+        _respostas_info(pbi)
+        esquema = chat_dataset.get_dataset_schema(CONEXAO, RELATORIO)
+
+        texto = chat_dataset.format_schema_for_prompt(esquema, blocked=self.BLOQUEADAS)
+
+        assert "'Vendas'[Cliente]" not in texto and "'Vendas'[Valor]" in texto
+
+    def test_o_bloqueio_nao_diferencia_maiuscula_de_minuscula(self):
+        esquema = _esquema(SchemaTable("Vendas", (SchemaColumn("Cliente", "texto"), SchemaColumn("Valor", "decimal")), ()))
+
+        texto = chat_dataset.format_schema_for_prompt(esquema, blocked=(("vendas", "CLIENTE"),))
+
+        assert "Cliente" not in texto and "Valor" in texto
+
+    def test_tabela_so_com_colunas_bloqueadas_some_do_esquema(self):
+        esquema = _esquema(
+            SchemaTable("Pessoas", (SchemaColumn("Nome", "texto", 900),), ()),
+            SchemaTable("Vendas", (SchemaColumn("Valor", "decimal"),), ()),
+        )
+
+        texto = chat_dataset.format_schema_for_prompt(esquema, blocked=(("Pessoas", "Nome"),))
+
+        assert "Pessoas" not in texto and "Tabela 'Vendas'" in texto
+
+    @pytest.mark.parametrize(
+        "dax",
+        [
+            "EVALUATE SUMMARIZECOLUMNS('Vendas'[Cliente])",
+            "EVALUATE SUMMARIZECOLUMNS(Vendas[cliente])",
+            "EVALUATE SUMMARIZECOLUMNS('Vendas' [ Cliente ])",
+            'EVALUATE ADDCOLUMNS(Vendas, "x", [Cliente])',
+        ],
+    )
+    def test_consulta_que_cita_a_coluna_bloqueada_e_recusada_e_a_ia_pode_corrigir(self, dax):
+        with pytest.raises(ChatDataError, match="bloqueou") as erro:
+            chat_dataset.validate_dax(dax, self.BLOQUEADAS)
+
+        assert erro.value.fixable is True and "Vendas[Cliente]" in str(erro.value)
+
+    def test_mesmo_nome_em_outra_tabela_passa(self):
+        chat_dataset.validate_dax("EVALUATE SUMMARIZECOLUMNS(Outra[Cliente])", self.BLOQUEADAS)
+
+    def test_medida_com_o_mesmo_nome_da_coluna_bloqueada_passa(self):
+        dax = 'EVALUATE ROW("x", [Cliente])'
+
+        chat_dataset.validate_dax(dax, self.BLOQUEADAS, frozenset({"cliente"}))
+        with pytest.raises(ChatDataError, match="bloqueou"):
+            chat_dataset.validate_dax(dax, self.BLOQUEADAS)
+
+    def test_consulta_com_a_coluna_bloqueada_nem_chega_ao_power_bi(self, pbi):
+        _respostas_info(pbi)
+
+        with pytest.raises(ChatDataError, match="bloqueou"):
+            chat_dataset.run_chat_query(
+                CONEXAO, RELATORIO, "EVALUATE SUMMARIZECOLUMNS('Vendas'[Cliente])", blocked=self.BLOQUEADAS
+            )
+
+        assert not any("SUMMARIZECOLUMNS" in q for q in pbi.consultas)
+
+    def test_coluna_bloqueada_que_voltou_no_resultado_sem_ser_citada_e_tirada(self, pbi):
+        _respostas_info(pbi)
+        pbi.respostas["TOPN"] = [
+            {"Vendas[Cliente]": "Ana", "Vendas[Valor]": 10},
+            {"Vendas[Cliente]": "Bia", "Vendas[Valor]": 5},
+        ]
+
+        resultado = chat_dataset.run_chat_query(CONEXAO, RELATORIO, "EVALUATE TOPN(10, Vendas)", blocked=self.BLOQUEADAS)
+
+        assert resultado.columns == ["Vendas[Valor]"]
+        assert resultado.rows == [{"Vendas[Valor]": 10}, {"Vendas[Valor]": 5}]
+
+    def test_resultado_so_com_colunas_bloqueadas_vira_erro_corrigivel(self, pbi):
+        _respostas_info(pbi)
+        pbi.respostas["TOPN"] = [{"Vendas[Cliente]": "Ana"}]
+
+        with pytest.raises(ChatDataError, match="bloqueou") as erro:
+            chat_dataset.run_chat_query(CONEXAO, RELATORIO, "EVALUATE TOPN(10, Vendas)", blocked=self.BLOQUEADAS)
+
+        assert erro.value.fixable is True
+
+    def test_sem_bloqueio_nada_muda_e_o_esquema_nem_e_lido(self, pbi):
+        pbi.respostas = {"EVALUATE": [{"Vendas[Cliente]": "Ana"}]}
+
+        resultado = chat_dataset.run_chat_query(CONEXAO, RELATORIO, "EVALUATE TOPN(10, Vendas)")
+
+        assert resultado.columns == ["Vendas[Cliente]"]
+        assert not any("INFO.TABLES" in q for q in pbi.consultas)

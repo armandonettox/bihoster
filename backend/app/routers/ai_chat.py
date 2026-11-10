@@ -44,9 +44,19 @@ def chat(
         raise HTTPException(status_code=429, detail=str(exc))
 
     messages = [*history, {"role": "user", "content": data.message}]
+    open_page = None
+    if data.open_page is not None:
+        open_page = chat_engine.OpenPage(
+            report_id=data.open_page.report_id,
+            page_name=data.open_page.page_name,
+            page_title=data.open_page.page_title,
+            visuals=tuple(
+                chat_engine.PageVisual(title=v.title, kind=v.type, fields=tuple(v.fields)) for v in data.open_page.visuals
+            ),
+        )
     try:
         answer = chat_engine.answer_question(
-            db, current_user.id, messages, conversation.last_report_id if conversation else None
+            db, current_user.id, messages, conversation.last_report_id if conversation else None, open_page
         )
     except chat_engine.ChatUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
@@ -74,6 +84,7 @@ def chat(
         details=(
             f"{answer.provider} {answer.model}; {answer.llm_calls} chamadas; "
             f"{answer.input_tokens} tokens de entrada e {answer.output_tokens} de saida"
+            + ("; com imagem da pagina" if answer.used_image else "")
         ),
     )
 
@@ -97,4 +108,5 @@ def chat(
             output_tokens=answer.output_tokens,
             cost_usd=cost,
         ),
+        used_image=answer.used_image,
     )

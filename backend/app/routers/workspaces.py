@@ -17,6 +17,7 @@ from app.models.audit_log import AuditLog
 from app.models.favorite import Favorite
 from app.models.report import Report
 from app.models.settings import AppSettings
+from app.core.ai_report_settings import delete_settings_of_reports
 from app.models.subscription import delete_subscriptions_of_reports
 from app.models.user import User, UserRole
 from app.models.workspace import Group, GroupWorkspaceAccess, Workspace
@@ -155,6 +156,7 @@ def delete_workspace(
     if report_ids:
         db.query(Favorite).filter(Favorite.report_id.in_(report_ids)).delete(synchronize_session=False)
         delete_subscriptions_of_reports(db, report_ids)
+        delete_settings_of_reports(db, report_ids)
 
     db.query(AuditLog).filter(AuditLog.workspace_id == workspace_id).update(
         {"workspace_id": None}, synchronize_session=False

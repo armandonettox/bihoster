@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core import ai_providers, chat_dataset, chat_engine
+from app.core import ai_providers, ai_report_settings, chat_dataset, chat_engine, chat_images
 from app.core.ai_providers import AIError, AIResult
 from app.core.chat_dataset import ChatQueryResult, DatasetSchema, SchemaColumn, SchemaTable
 from app.core.powerbi import PowerBIError
@@ -65,10 +65,15 @@ def provedor(client, admin):
 @pytest.fixture
 def ia(monkeypatch):
     """IA e Power BI simulados: a IA responde o JSON do DAX e depois o texto final."""
-    estado = {"respostas": [json.dumps({"dax": "EVALUATE ROW(\"t\", [Total])"}), "O total foi 99."], "chamadas": 0}
+    estado = {
+        "respostas": [json.dumps({"dax": "EVALUATE ROW(\"t\", [Total])"}), "O total foi 99."],
+        "chamadas": 0,
+        "mensagens": [],  # as mensagens de cada chamada a IA, na ordem
+    }
 
     def fake_complete(provider, api_key, model, messages, max_tokens=1024):
         estado["chamadas"] += 1
+        estado["mensagens"].append(messages)
         resposta = estado["respostas"].pop(0)
         if isinstance(resposta, Exception):
             raise resposta
@@ -76,8 +81,15 @@ def ia(monkeypatch):
 
     monkeypatch.setattr(ai_providers, "complete", fake_complete)
     monkeypatch.setattr(chat_dataset, "get_dataset_schema", lambda connection, report: ESQUEMA)
-    monkeypatch.setattr(chat_dataset, "run_chat_query", lambda connection, report, dax: RESULTADO)
+    monkeypatch.setattr(chat_dataset, "run_chat_query", lambda connection, report, dax, blocked=(): RESULTADO)
     return estado
+
+
+@pytest.fixture(autouse=True)
+def _imagens_limpas():
+    chat_images.clear()
+    yield
+    chat_images.clear()
 
 
 def _chat(client, headers, texto="Qual o total de vendas?", **extra):
@@ -258,3 +270,97 @@ class TestAuditoria:
         _chat(client, admin)
 
         assert db_session.query(AuditLog).filter(AuditLog.action == "ai_chat").one().entity_id is None
+
+
+class TestPaginaAberta:
+    def _pagina(self, **extra):
+        return {
+            "report_id": 1,
+            "page_name": "ReportSection1",
+            "page_title": "Custo por unidade",
+            "visuals": [{"title": "Vidas por unidade", "type": "barChart", "fields": ["dim_unidade[uf]", "[Vidas Ativas]"]}],
+            **extra,
+        }
+
+    def test_a_pagina_aberta_chega_ao_prompt_do_dax(self, client, admin, relatorio, provedor, ia):
+        resp = _chat(client, admin, open_page=self._pagina(report_id=relatorio.id))
+
+        assert resp.status_code == 200
+        prompt = ia["mensagens"][0][0]["content"]
+        assert 'pagina "Custo por unidade"' in prompt and "Vidas por unidade (barChart): dim_unidade[uf]; [Vidas Ativas]" in prompt
+
+    def test_pagina_de_outro_relatorio_e_ignorada(self, client, admin, relatorio, provedor, ia):
+        _chat(client, admin, open_page=self._pagina(report_id=relatorio.id + 100))
+
+        assert "Vidas por unidade" not in ia["mensagens"][0][0]["content"]
+
+    def test_o_que_passa_do_limite_e_cortado_e_nao_recusado(self, client, admin, relatorio, provedor, ia):
+        muitos = [{"title": f"grafico {i}", "type": "t", "fields": ["a"] * 50} for i in range(60)]
+        pagina = self._pagina(report_id=relatorio.id, visuals=muitos, page_title="x" * 500)
+
+        resp = _chat(client, admin, open_page=pagina)
+
+        assert resp.status_code == 200
+        prompt = ia["mensagens"][0][0]["content"]
+        assert "grafico 39" in prompt and "grafico 40" not in prompt
+        assert "x" * 200 not in prompt  # o titulo da pagina foi cortado
+
+    def test_nome_de_pagina_fora_do_formato_nao_pede_nem_usa_imagem(self, client, admin, relatorio, provedor, ia, db_session):
+        ai_report_settings.save_settings(db_session, relatorio.id, "", [], True)
+        chat_images._store((relatorio.id, "../etc"), b"png")
+
+        resp = _chat(client, admin, open_page=self._pagina(report_id=relatorio.id, page_name="../etc"))
+
+        assert resp.status_code == 200 and resp.json()["used_image"] is False
+
+    def test_sem_pagina_aberta_nada_muda(self, client, admin, relatorio, provedor, ia):
+        corpo = _chat(client, admin).json()
+
+        assert corpo["used_image"] is False
+        assert "Graficos da pagina aberta" not in ia["mensagens"][0][0]["content"]
+
+
+class TestImagemDaPagina:
+    def _preparar(self, db_session, relatorio, liberar=True):
+        ai_report_settings.save_settings(db_session, relatorio.id, "", [], liberar)
+        chat_images._store((relatorio.id, "ReportSection1"), b"PNGDATA")
+
+    def _pagina(self, relatorio):
+        return {"report_id": relatorio.id, "page_name": "ReportSection1", "visuals": []}
+
+    def test_com_imagem_liberada_e_pronta_ela_vai_na_pergunta_e_a_resposta_avisa(
+        self, client, admin, relatorio, provedor, ia, db_session
+    ):
+        self._preparar(db_session, relatorio)
+
+        corpo = _chat(client, admin, open_page=self._pagina(relatorio)).json()
+
+        assert corpo["used_image"] is True
+        ultima = ia["mensagens"][0][-1]["content"]
+        assert isinstance(ultima, list) and [p["type"] for p in ultima] == ["text", "image"]
+        assert "traz a imagem da pagina" in ia["mensagens"][0][0]["content"]
+
+    def test_sem_a_liberacao_do_admin_a_imagem_nao_vai_mesmo_pronta(self, client, admin, relatorio, provedor, ia, db_session):
+        self._preparar(db_session, relatorio, liberar=False)
+
+        corpo = _chat(client, admin, open_page=self._pagina(relatorio)).json()
+
+        assert corpo["used_image"] is False
+        assert isinstance(ia["mensagens"][0][-1]["content"], str)
+
+    def test_imagem_ainda_nao_pronta_nao_espera_e_segue_so_com_texto(self, client, admin, relatorio, provedor, ia, db_session):
+        ai_report_settings.save_settings(db_session, relatorio.id, "", [], True)
+
+        corpo = _chat(client, admin, open_page=self._pagina(relatorio)).json()
+
+        assert corpo["used_image"] is False and corpo["reply"] == "O total foi 99."
+
+    def test_provedor_que_recusa_a_imagem_refaz_so_com_texto(self, client, admin, relatorio, provedor, ia, db_session):
+        self._preparar(db_session, relatorio)
+        ia["respostas"] = [AIError("modelo sem visao"), json.dumps({"dax": 'EVALUATE ROW("t", [Total])'}), "O total foi 99."]
+
+        corpo = _chat(client, admin, open_page=self._pagina(relatorio)).json()
+
+        assert corpo["reply"] == "O total foi 99." and corpo["used_image"] is False
+        assert isinstance(ia["mensagens"][0][-1]["content"], list)  # a primeira tentativa levou a imagem
+        assert all(isinstance(m[-1]["content"], str) for m in ia["mensagens"][1:])  # as outras, so texto

@@ -389,7 +389,7 @@ def ia(client, admin, monkeypatch):
 
     monkeypatch.setattr(ai_providers, "complete", fake_complete)
     monkeypatch.setattr(chat_dataset, "get_dataset_schema", lambda connection, report: ESQUEMA)
-    monkeypatch.setattr(chat_dataset, "run_chat_query", lambda connection, report, dax: RESULTADO)
+    monkeypatch.setattr(chat_dataset, "run_chat_query", lambda connection, report, dax, blocked=(): RESULTADO)
     return estado
 
 

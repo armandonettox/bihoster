@@ -72,6 +72,7 @@ class SchemaTable:
 @dataclass(frozen=True)
 class DatasetSchema:
     tables: tuple[SchemaTable, ...]
+    hidden_columns: int = 0  # colunas ocultas no modelo, que a IA nao ve (so a contagem)
 
     @property
     def column_count(self) -> int:
@@ -176,10 +177,15 @@ def _schema_from_info(table_rows: list[dict], column_rows: list[dict], measure_r
         table_names[_field(row, "ID")] = name
 
     columns: dict = {name: [] for name in table_names.values()}
+    hidden_columns = 0
     for row in column_rows:
         table = table_names.get(_field(row, "TableID"))
         name = _field(row, "ExplicitName") or _field(row, "InferredName")
-        if table is None or not name or _field(row, "IsHidden"):
+        if table is None or not name:
+            continue
+        if _field(row, "IsHidden"):
+            if _field(row, "Type") != _COLUMN_TYPE_ROW_NUMBER and not name.startswith("RowNumber-"):
+                hidden_columns += 1
             continue
         if _field(row, "Type") == _COLUMN_TYPE_ROW_NUMBER or name.startswith("RowNumber-"):
             continue
@@ -199,7 +205,7 @@ def _schema_from_info(table_rows: list[dict], column_rows: list[dict], measure_r
         for name in table_names.values()
         if columns[name] or measures[name]
     ]
-    return DatasetSchema(tables=tuple(tables))
+    return DatasetSchema(tables=tuple(tables), hidden_columns=hidden_columns)
 
 
 def _cardinalities(rows: list[dict]) -> dict[tuple[str, str], int]:
@@ -228,7 +234,7 @@ def _with_cardinality(schema: DatasetSchema, cardinalities: dict[tuple[str, str]
         )
         for table in schema.tables
     )
-    return DatasetSchema(tables=tables)
+    return DatasetSchema(tables=tables, hidden_columns=schema.hidden_columns)
 
 
 def _schema_from_statistics(rows: list[dict]) -> DatasetSchema:
@@ -285,6 +291,12 @@ def get_dataset_schema(connection, report) -> DatasetSchema:
     return schema
 
 
+def clear_schema_cache(connection, report) -> None:
+    """Esquece o esquema guardado deste relatorio: a proxima leitura vai ao Power BI de novo (o admin
+    mexeu no modelo e quer ver o resultado)."""
+    _schema_cache.pop(_cache_key(connection, report), None)
+
+
 def _dax_table(name: str) -> str:
     return "'" + name.replace("'", "''") + "'"
 
@@ -308,18 +320,44 @@ def _column_label(table: str, column: SchemaColumn) -> str:
     return _dax_column(table, column.name) + (f" ({', '.join(notes)})" if notes else "")
 
 
-def format_schema_for_prompt(schema: DatasetSchema, max_chars: int = MAX_SCHEMA_CHARS) -> str:
+@dataclass(frozen=True)
+class SchemaPrompt:
+    """O esquema como a IA o recebe, e o que ficou de fora por tamanho (para o admin conferir)."""
+
+    text: str
+    shown_tables: tuple[str, ...]
+    omitted_tables: tuple[str, ...]  # tabelas inteiras que nao couberam
+    omitted_columns: int  # colunas cortadas pelo limite por tabela, nas tabelas mostradas
+
+
+MAX_OMITTED_NAMES = 20
+
+
+def _blocked_keys(blocked) -> frozenset[tuple[str, str]]:
+    return frozenset((table.lower(), column.lower()) for table, column in blocked)
+
+
+def build_schema_prompt(schema: DatasetSchema, max_chars: int = MAX_SCHEMA_CHARS, blocked=()) -> SchemaPrompt:
     """Esquema em texto compacto, ja com a sintaxe DAX de cada nome, para a IA copiar sem errar.
-    Corta por tamanho e avisa o que ficou de fora."""
+
+    Colunas bloqueadas pelo admin nao entram. Quando passa do tamanho, a tabela que nao cabe fica de fora
+    mas as seguintes, menores, ainda entram (antes uma tabela grande no meio cortava todas as demais, e a
+    dimensao pequena com os valores certos sumia). As tabelas que ficaram de fora sao listadas pelo nome."""
+    keys = _blocked_keys(blocked)
     blocks: list[str] = []
+    shown_tables: list[str] = []
+    omitted: list[str] = []
+    omitted_columns = 0
     used = 0
-    omitted_tables = 0
     for table in schema.tables:
-        shown = table.columns[:MAX_COLUMNS_PER_TABLE]
+        visible = [c for c in table.columns if (table.name.lower(), c.name.lower()) not in keys]
+        if not visible and not table.measures:
+            continue  # so tinha colunas bloqueadas
+        shown = visible[:MAX_COLUMNS_PER_TABLE]
         lines = [f"Tabela {_dax_table(table.name)}"]
         if shown:
             parts = [_column_label(table.name, c) for c in shown]
-            extra = len(table.columns) - len(shown)
+            extra = len(visible) - len(shown)
             suffix = f"; (+{extra} colunas omitidas)" if extra > 0 else ""
             lines.append("  Colunas: " + "; ".join(parts) + suffix)
         if table.measures:
@@ -328,14 +366,21 @@ def format_schema_for_prompt(schema: DatasetSchema, max_chars: int = MAX_SCHEMA_
         block = "\n".join(lines)
         # A primeira tabela entra sempre, mesmo estourando: esquema vazio nao serve a ninguem
         if blocks and used + len(block) + 1 > max_chars:
-            omitted_tables = len(schema.tables) - len(blocks)
-            break
+            omitted.append(table.name)
+            continue
         blocks.append(block)
+        shown_tables.append(table.name)
+        omitted_columns += len(visible) - len(shown)
         used += len(block) + 1
     text = "\n".join(blocks)
-    if omitted_tables:
-        text += f"\n(+{omitted_tables} tabelas omitidas por tamanho)"
-    return text
+    if omitted:
+        names = ", ".join(omitted[:MAX_OMITTED_NAMES]) + ("..." if len(omitted) > MAX_OMITTED_NAMES else "")
+        text += f"\n(+{len(omitted)} tabelas omitidas por tamanho: {names})"
+    return SchemaPrompt(text, tuple(shown_tables), tuple(omitted), omitted_columns)
+
+
+def format_schema_for_prompt(schema: DatasetSchema, max_chars: int = MAX_SCHEMA_CHARS, blocked=()) -> str:
+    return build_schema_prompt(schema, max_chars, blocked).text
 
 
 # ---------------------------------------------------------------- consulta
@@ -355,11 +400,30 @@ def _scrub(dax: str) -> str:
     return dax
 
 
-def validate_dax(dax: str) -> str:
+def _blocked_references(query: str, blocked, measure_names: frozenset[str]) -> list[str]:
+    """Colunas bloqueadas que a consulta cita, como `Tabela[Coluna]`. Acha a forma com tabela (com ou sem
+    aspas) e a forma so `[Coluna]` (valida dentro de um contexto de linha), exceto quando existe uma medida
+    com esse nome: `[Nome]` sem tabela e como se chama uma medida."""
+    found: list[str] = []
+    for table, column in blocked:
+        col = re.escape(column.replace("]", "]]"))
+        tab = r"(?:'" + re.escape(table.replace("'", "''")) + r"'|" + re.escape(table) + r")"
+        qualified = re.search(tab + r"\s*\[\s*" + col + r"\s*\]", query, re.IGNORECASE)
+        bare = column.lower() not in measure_names and re.search(
+            r"(?<![\w'\]])\[\s*" + col + r"\s*\]", query, re.IGNORECASE
+        )
+        if qualified or bare:
+            found.append(f"{table}[{column}]")
+    return found
+
+
+def validate_dax(dax: str, blocked=(), measure_names: frozenset[str] = frozenset()) -> str:
     """Confere a consulta antes de mandar ao Power BI e devolve o texto sem espacos nas pontas.
 
     Nao e a barreira de seguranca (o executeQueries so le, nunca grava): serve para barrar erro
-    cedo e manter a IA no combinado, uma consulta de dados sem olhar metadados do modelo."""
+    cedo e manter a IA no combinado, uma consulta de dados sem olhar metadados do modelo. Com colunas
+    bloqueadas pelo admin, recusa a consulta que as cita (uma camada a mais: elas ja nao aparecem no
+    esquema e, se mesmo assim chegarem no resultado, sao tiradas dele)."""
     query = (dax or "").strip()
     if not query:
         raise ChatDataError("A consulta DAX esta vazia.", fixable=True)
@@ -376,15 +440,45 @@ def validate_dax(dax: str) -> str:
             "Consultas de metadados do modelo nao sao permitidas. Use as tabelas, colunas e medidas informadas.",
             fixable=True,
         )
+    if blocked:
+        cited = _blocked_references(query, blocked, measure_names)
+        if cited:
+            raise ChatDataError(
+                f"A consulta usa colunas que o administrador bloqueou para o chat: {', '.join(cited)}. "
+                "Use outras colunas.",
+                fixable=True,
+            )
     return query
 
 
-def run_chat_query(connection, report, dax: str) -> ChatQueryResult:
+def _strip_blocked_columns(rows: list[dict], blocked) -> list[dict]:
+    """Tira do resultado as colunas bloqueadas (o Power BI nomeia a coluna `Tabela[Coluna]`). Pega o caso em que a
+    consulta traz a tabela inteira sem citar a coluna, como um TOPN sobre a tabela."""
+    keys = {f"{table}[{column}]".lower() for table, column in blocked}
+    if not rows or not any(key.lower() in keys for key in rows[0]):
+        return rows
+    stripped = [{k: v for k, v in row.items() if k.lower() not in keys} for row in rows]
+    if not stripped[0]:
+        raise ChatDataError(
+            "A consulta so devolveu colunas que o administrador bloqueou para o chat. Use outras colunas.",
+            fixable=True,
+        )
+    return stripped
+
+
+def run_chat_query(connection, report, dax: str, blocked=()) -> ChatQueryResult:
     """Valida e executa a consulta DAX no dataset do relatorio, e devolve ate MAX_ROWS_FOR_AI linhas.
+    `blocked` sao as colunas (tabela, coluna) que o admin bloqueou: a consulta que as cita e recusada e elas
+    saem do resultado.
 
     Erro da consulta em si vira ChatDataError(fixable=True); falha de rede ou de autenticacao no
     Power BI propaga como PowerBIError."""
-    query = validate_dax(dax)
+    blocked = tuple(blocked)
+    measure_names: frozenset[str] = frozenset()
+    if blocked:
+        schema = get_dataset_schema(connection, report)  # em cache; tambem confere a elegibilidade
+        measure_names = frozenset(name.lower() for table in schema.tables for name, _ in table.measures)
+    query = validate_dax(dax, blocked, measure_names)
     _require_eligible(connection, report)
 
     if not _query_slots.acquire(timeout=QUERY_SLOT_WAIT_SECONDS):
@@ -398,6 +492,8 @@ def run_chat_query(connection, report, dax: str) -> ChatQueryResult:
     finally:
         _query_slots.release()
 
+    if blocked:
+        rows = _strip_blocked_columns(rows, blocked)
     total = len(rows)
     kept = rows[:MAX_ROWS_FOR_AI]
     columns = list(kept[0].keys()) if kept else []

@@ -171,6 +171,57 @@ class TestFormatoAnthropic:
             ai_providers.complete("anthropic", KEY, "m", MESSAGES)
 
 
+COM_IMAGEM = [
+    {"role": "system", "content": "Voce responde sobre dados."},
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Qual o total?"},
+            {"type": "image", "media_type": "image/png", "data": "QUJD"},
+        ],
+    },
+]
+
+
+class TestImagemNaMensagem:
+    @pytest.mark.parametrize("provedor", ["openai", "gemini", "openrouter", "nvidia"])
+    def test_openai_compativel_manda_a_imagem_como_data_url(self, chamadas, provedor):
+        chamadas["resposta"] = _openai_ok()
+
+        ai_providers.complete(provedor, KEY, "m", COM_IMAGEM)
+
+        mensagens = json.loads(chamadas["requisicoes"][0].content)["messages"]
+        assert mensagens[0] == {"role": "system", "content": "Voce responde sobre dados."}
+        assert mensagens[1]["content"] == [
+            {"type": "text", "text": "Qual o total?"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,QUJD"}},
+        ]
+
+    def test_anthropic_manda_a_imagem_como_bloco_base64(self, chamadas):
+        chamadas["resposta"] = _anthropic_ok()
+
+        ai_providers.complete("anthropic", KEY, "m", COM_IMAGEM)
+
+        corpo = json.loads(chamadas["requisicoes"][0].content)
+        assert corpo["system"] == "Voce responde sobre dados."
+        assert corpo["messages"] == [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "Qual o total?"},
+                    {"type": "image", "source": {"type": "base64", "media_type": "image/png", "data": "QUJD"}},
+                ],
+            }
+        ]
+
+    def test_mensagem_so_de_texto_segue_igual(self, chamadas):
+        chamadas["resposta"] = _openai_ok()
+
+        ai_providers.complete("openai", KEY, "m", MESSAGES)
+
+        assert json.loads(chamadas["requisicoes"][0].content)["messages"] == MESSAGES
+
+
 class TestErros:
     @pytest.mark.parametrize("status", [401, 403])
     def test_chave_recusada(self, chamadas, status):
