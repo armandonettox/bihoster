@@ -5,6 +5,7 @@ import { extractErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { SkeletonList } from "../../components/Skeleton";
 import AiOptionsCard from "../../components/AiOptionsCard";
+import AiUsageCard from "../../components/AiUsageCard";
 
 interface CardProps {
   provider: AIProvider;
@@ -211,6 +212,7 @@ export default function AiTab() {
       {providers.map((provider) => (
         <ProviderCard key={provider.provider} provider={provider} onSaved={handleSaved} />
       ))}
+      <AiUsageCard />
     </div>
   );
 }

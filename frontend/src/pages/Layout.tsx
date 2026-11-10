@@ -7,6 +7,7 @@ import type { Report } from "../api/reports";
 import CollectionList from "../components/CollectionList";
 import SearchBar from "../components/SearchBar";
 import AccountMenu from "../components/AccountMenu";
+import ChatNavLink from "../components/ChatNavLink";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import { assetUrl } from "../api/client";
 import { safeStorage } from "../utils/safeStorage";
@@ -110,6 +111,7 @@ export default function Layout() {
                   <span className="sidebar-home-icon material-symbols-outlined">home</span>
                   Inicio
                 </Link>
+                <ChatNavLink />
               </div>
 
               {favorites.length > 0 && (
