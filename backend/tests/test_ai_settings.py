@@ -43,11 +43,13 @@ class TestPermissao:
         assert client.get("/settings/ai/").status_code == 401
         assert client.put("/settings/ai/openai", json={"model": "x"}).status_code == 401
         assert client.post("/settings/ai/openai/test").status_code == 401
+        assert client.get("/settings/ai/openai/models").status_code == 401
 
     def test_quem_nao_e_administrador_nao_le_nem_grava_nem_testa(self, client, pessoa):
         assert client.get("/settings/ai/", headers=pessoa).status_code == 403
         assert client.put("/settings/ai/openai", json={"api_key": CHAVE}, headers=pessoa).status_code == 403
         assert client.post("/settings/ai/openai/test", headers=pessoa).status_code == 403
+        assert client.get("/settings/ai/openai/models", headers=pessoa).status_code == 403
 
     def test_a_rota_publica_de_configuracoes_nao_mostra_nada_de_ia(self, client, admin):
         _salvar(client, admin)
@@ -328,3 +330,70 @@ class TestTeste:
             codigos = [client.post("/settings/ai/openrouter/test", headers=admin).status_code for _ in range(6)]
 
         assert codigos == [200, 200, 200, 200, 200, 429]
+
+
+class TestListaDeModelos:
+    def test_sem_chave_salva_pede_para_salvar_e_nao_chama_o_provedor(self, client, admin):
+        with patch.object(ai_providers, "list_models") as listar:
+            resp = client.get("/settings/ai/openai/models", headers=admin)
+
+        assert resp.status_code == 400
+        assert "Salve a chave" in resp.json()["detail"]
+        listar.assert_not_called()
+
+    def test_provedor_desconhecido(self, client, admin):
+        assert client.get("/settings/ai/nao-existe/models", headers=admin).status_code == 404
+
+    def test_usa_a_chave_salva_e_devolve_so_a_lista(self, client, admin):
+        _salvar(client, admin)
+
+        with patch.object(ai_providers, "list_models", return_value=["a", "b"]) as listar:
+            resp = client.get("/settings/ai/openrouter/models", headers=admin)
+
+        assert resp.status_code == 200
+        assert resp.json() == {"models": ["a", "b"]}
+        assert listar.call_args.args == ("openrouter", CHAVE)
+        assert CHAVE not in resp.text
+
+    def test_funciona_com_a_chave_salva_sem_modelo_escolhido(self, client, admin):
+        client.put("/settings/ai/openrouter", json={"api_key": CHAVE}, headers=admin)
+
+        with patch.object(ai_providers, "list_models", return_value=["a"]):
+            resp = client.get("/settings/ai/openrouter/models", headers=admin)
+
+        assert resp.status_code == 200
+
+    def test_o_contrato_http_de_verdade_leva_a_chave_no_cabecalho(self, client, admin, monkeypatch):
+        vistas = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            vistas.append(request)
+            return httpx.Response(200, json={"data": [{"id": "openai/gpt-4o-mini"}]})
+
+        monkeypatch.setattr(ai_providers, "_http", httpx.Client(transport=httpx.MockTransport(handler)))
+        _salvar(client, admin, "openrouter")
+
+        resp = client.get("/settings/ai/openrouter/models", headers=admin)
+
+        assert resp.status_code == 200
+        assert resp.json() == {"models": ["openai/gpt-4o-mini"]}
+        assert str(vistas[0].url) == "https://openrouter.ai/api/v1/models"
+        assert vistas[0].headers["authorization"] == f"Bearer {CHAVE}"
+
+    def test_falha_do_provedor_vira_502_sem_a_chave(self, client, admin):
+        _salvar(client, admin)
+
+        with patch.object(ai_providers, "list_models", side_effect=AIError("O provedor recusou a chave de API.")):
+            resp = client.get("/settings/ai/openrouter/models", headers=admin)
+
+        assert resp.status_code == 502
+        assert "recusou a chave" in resp.json()["detail"]
+        assert CHAVE not in resp.text
+
+    def test_limite_de_consultas_por_minuto(self, client, admin):
+        _salvar(client, admin)
+
+        with patch.object(ai_providers, "list_models", return_value=["a"]):
+            codigos = [client.get("/settings/ai/openrouter/models", headers=admin).status_code for _ in range(11)]
+
+        assert codigos == [200] * 10 + [429]

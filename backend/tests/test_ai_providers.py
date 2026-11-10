@@ -257,3 +257,107 @@ class TestCatalogo:
 
     def test_toda_url_e_https(self):
         assert all(info.base_url.startswith("https://") for info in ai_providers.PROVIDERS.values())
+
+
+def _lista(*ids):
+    return httpx.Response(200, json={"data": [{"id": i} for i in ids]})
+
+
+class TestListaDeModelos:
+    @pytest.mark.parametrize(
+        "provedor,url",
+        [
+            ("openai", "https://api.openai.com/v1/models"),
+            ("gemini", "https://generativelanguage.googleapis.com/v1beta/openai/models"),
+            ("openrouter", "https://openrouter.ai/api/v1/models"),
+            ("nvidia", "https://integrate.api.nvidia.com/v1/models"),
+        ],
+    )
+    def test_url_e_cabecalho_dos_provedores_openai_compativeis(self, chamadas, provedor, url):
+        chamadas["resposta"] = _lista("modelo-b", "modelo-a")
+
+        modelos = ai_providers.list_models(provedor, KEY)
+
+        req = chamadas["requisicoes"][0]
+        assert req.method == "GET"
+        assert str(req.url) == url
+        assert req.headers["authorization"] == f"Bearer {KEY}"
+        assert modelos == ["modelo-a", "modelo-b"]
+
+    def test_anthropic_usa_o_cabecalho_proprio_e_pede_a_lista_inteira(self, chamadas):
+        chamadas["resposta"] = _lista("claude-b", "claude-a")
+
+        modelos = ai_providers.list_models("anthropic", KEY)
+
+        req = chamadas["requisicoes"][0]
+        assert req.url.path == "/v1/models"
+        assert req.url.params["limit"] == "1000"
+        assert req.headers["x-api-key"] == KEY
+        assert req.headers["anthropic-version"] == ai_providers.ANTHROPIC_VERSION
+        assert "authorization" not in req.headers
+        assert modelos == ["claude-a", "claude-b"]
+
+    def test_gemini_perde_o_prefixo_models(self, chamadas):
+        chamadas["resposta"] = _lista("models/gemini-2.0-flash", "models/gemini-1.5-pro")
+
+        assert ai_providers.list_models("gemini", KEY) == ["gemini-1.5-pro", "gemini-2.0-flash"]
+
+    def test_esconde_modelos_que_nao_sao_de_conversa(self, chamadas):
+        chamadas["resposta"] = _lista(
+            "gpt-4o-mini", "text-embedding-3-small", "whisper-1", "tts-1", "dall-e-3", "gpt-4o-realtime-preview", "gpt-4o"
+        )
+
+        assert ai_providers.list_models("openai", KEY) == ["gpt-4o", "gpt-4o-mini"]
+
+    def test_sem_repeticao_e_ignora_itens_malformados(self, chamadas):
+        chamadas["resposta"] = httpx.Response(
+            200, json={"data": [{"id": "a"}, {"id": "a"}, {"id": 5}, {"nome": "b"}, "c", {"id": ""}]}
+        )
+
+        assert ai_providers.list_models("openrouter", KEY) == ["a"]
+
+    def test_lista_sem_nenhum_modelo_de_conversa_e_erro(self, chamadas):
+        chamadas["resposta"] = _lista("text-embedding-3-small")
+
+        with pytest.raises(AIError, match="nenhum modelo de conversa"):
+            ai_providers.list_models("openai", KEY)
+
+    @pytest.mark.parametrize("corpo", [{}, {"data": "x"}, {"data": None}, []])
+    def test_resposta_fora_do_formato(self, chamadas, corpo):
+        chamadas["resposta"] = httpx.Response(200, json=corpo)
+
+        with pytest.raises(AIError, match="Resposta inesperada"):
+            ai_providers.list_models("openai", KEY)
+
+    def test_resposta_que_nao_e_json(self, chamadas):
+        chamadas["resposta"] = httpx.Response(200, text="<html>")
+
+        with pytest.raises(AIError, match="Resposta inesperada"):
+            ai_providers.list_models("openai", KEY)
+
+    def test_chave_recusada(self, chamadas):
+        chamadas["resposta"] = httpx.Response(401, json={"error": {"message": f"chave {KEY} invalida"}})
+
+        with pytest.raises(AIError, match="recusou a chave") as erro:
+            ai_providers.list_models("openai", KEY)
+        assert KEY not in str(erro.value)
+
+    def test_404_nao_fala_de_modelo_nao_encontrado(self, chamadas):
+        chamadas["resposta"] = httpx.Response(404, json={})
+
+        with pytest.raises(AIError, match="nao oferece a lista") as erro:
+            ai_providers.list_models("nvidia", KEY)
+        assert "Modelo nao encontrado" not in str(erro.value)
+
+    def test_demora_e_falha_de_conexao(self, chamadas):
+        chamadas["resposta"] = httpx.ReadTimeout("lento")
+        with pytest.raises(AIError, match="demorou demais"):
+            ai_providers.list_models("openai", KEY)
+
+        chamadas["resposta"] = httpx.ConnectError("sem rede")
+        with pytest.raises(AIError, match="conectar"):
+            ai_providers.list_models("openai", KEY)
+
+    def test_provedor_desconhecido(self):
+        with pytest.raises(AIError, match="desconhecido"):
+            ai_providers.list_models("nao-existe", KEY)

@@ -11,7 +11,7 @@ from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.models.ai_provider import AIProvider
 from app.models.user import User
-from app.schemas.ai_settings import AIProviderOut, AIProviderTestOut, AIProviderUpdate
+from app.schemas.ai_settings import AIProviderModelsOut, AIProviderOut, AIProviderTestOut, AIProviderUpdate
 
 # Rotas proprias, so para quem tem a permissao "Gerenciar IA" (grupos; administradores sempre tem):
 # a chave de API nunca sai por aqui nem pela rota publica de configuracoes.
@@ -96,6 +96,28 @@ def update_ai_provider(
         details=", ".join(sorted(updated)),  # so os nomes dos campos, nunca os valores
     )
     return _to_out(provider, row)
+
+
+@router.get("/{provider}/models", response_model=AIProviderModelsOut)
+@limiter.limit("10/minute")
+def list_ai_provider_models(
+    request: Request,
+    provider: str,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_ai_manage),
+):
+    """Modelos que a chave salva consegue usar, direto do provedor. A chave vem sempre do banco, nunca
+    do navegador: assim ela nao trafega de novo e a rota nao serve para testar chave de outra pessoa."""
+    _get_provider_or_404(provider)
+    row = db.query(AIProvider).filter(AIProvider.provider == provider).first()
+    if row is None or not row.api_key:
+        raise HTTPException(status_code=400, detail="Salve a chave de API antes de carregar a lista de modelos.")
+
+    try:
+        models = ai_providers.list_models(provider, row.api_key)
+    except AIError as exc:
+        raise HTTPException(status_code=502, detail=str(exc))
+    return AIProviderModelsOut(models=models)
 
 
 @router.post("/{provider}/test", response_model=AIProviderTestOut)

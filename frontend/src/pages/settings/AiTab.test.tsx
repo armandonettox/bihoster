@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as aiApi from "../../api/aiSettings";
 import type { AIProvider } from "../../api/aiSettings";
@@ -7,18 +7,20 @@ import AiTab from "./AiTab";
 const mocks = vi.hoisted(() => ({ showToast: vi.fn() }));
 
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
-// O bloco de opcoes do chat tem teste proprio; aqui so interessam os cartoes dos provedores
+// O bloco de opcoes do chat e o de consumo tem teste proprio; aqui so interessa o provedor
 vi.mock("../../components/AiOptionsCard", () => ({ default: () => null }));
 vi.mock("../../components/AiUsageCard", () => ({ default: () => null }));
 vi.mock("../../api/aiSettings", () => ({
   listAIProviders: vi.fn(),
   updateAIProvider: vi.fn(),
   testAIProvider: vi.fn(),
+  listAIProviderModels: vi.fn(),
 }));
 
 const list = vi.mocked(aiApi.listAIProviders);
 const update = vi.mocked(aiApi.updateAIProvider);
 const test = vi.mocked(aiApi.testAIProvider);
+const listModels = vi.mocked(aiApi.listAIProviderModels);
 
 function provedor(chave: string, label: string, extra: Partial<AIProvider> = {}): AIProvider {
   return {
@@ -42,32 +44,73 @@ const VAZIOS: AIProvider[] = [
 async function abrir(dados: AIProvider[] = VAZIOS) {
   list.mockResolvedValue(dados);
   render(<AiTab />);
-  await screen.findByText("Provedores de IA");
+  await screen.findByRole("heading", { name: "Provedor de IA" });
 }
 
-const cartao = (nome: string) => within(screen.getByRole("region", { name: nome }));
+const escolher = (chave: string) => fireEvent.change(screen.getByLabelText("Provedor"), { target: { value: chave } });
+const salvar = () => fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+const selecionado = () => (screen.getByLabelText("Provedor") as HTMLSelectElement).value;
 
 beforeEach(() => {
   mocks.showToast.mockClear();
   update.mockReset();
   test.mockReset();
+  listModels.mockReset();
+  listModels.mockResolvedValue(["modelo-a", "modelo-b"]);
 });
 
-describe("AiTab - carregar", () => {
-  it("mostra um cartao por provedor, com a sugestao de modelo", async () => {
-    await abrir();
+describe("AiTab - lista de provedores", () => {
+  it("tem uma lista suspensa com todos os provedores e o estado de cada um", async () => {
+    await abrir([
+      provedor("openai", "OpenAI (ChatGPT)"),
+      provedor("anthropic", "Anthropic (Claude)", { api_key_configured: true }),
+      provedor("openrouter", "OpenRouter", { api_key_configured: true, model: "m", enabled: true }),
+      provedor("gemini", "Google Gemini", { api_key_configured: true, model: "m", enabled: true, chat_default: true }),
+    ]);
 
-    expect(screen.getAllByRole("region")).toHaveLength(3);
-    expect((cartao("OpenAI (ChatGPT)").getByLabelText("Modelo") as HTMLInputElement).placeholder).toBe("Ex.: exemplo-openai");
+    const opcoes = Array.from((screen.getByLabelText("Provedor") as HTMLSelectElement).options).map((o) => o.text);
+    expect(opcoes).toEqual([
+      "OpenAI (ChatGPT) (sem chave)",
+      "Anthropic (Claude) (chave salva, inativo)",
+      "OpenRouter (ativo)",
+      "Google Gemini (ativo, padrao do chat)",
+    ]);
   });
 
-  it("a chave nunca aparece: so um aviso de que ja foi cadastrada", async () => {
-    await abrir([provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x" })]);
+  it("mostra so o formulario do provedor escolhido, e trocar mostra o do outro", async () => {
+    await abrir();
 
-    const chave = cartao("OpenAI (ChatGPT)").getByLabelText("Chave de API") as HTMLInputElement;
-    expect(chave.value).toBe("");
-    expect(chave.placeholder).toMatch(/Ja cadastrada/);
-    expect((cartao("OpenAI (ChatGPT)").getByLabelText("Modelo") as HTMLInputElement).value).toBe("gpt-x");
+    expect(screen.getAllByLabelText("Chave de API")).toHaveLength(1);
+    expect(screen.getByRole("form", { name: "OpenAI (ChatGPT)" })).toBeTruthy();
+
+    escolher("anthropic");
+
+    expect(screen.getAllByLabelText("Chave de API")).toHaveLength(1);
+    expect(screen.getByRole("form", { name: "Anthropic (Claude)" })).toBeTruthy();
+  });
+
+  it("comeca no provedor que responde o chat", async () => {
+    await abrir([
+      provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "m", enabled: true }),
+      provedor("anthropic", "Anthropic (Claude)", { api_key_configured: true, model: "m", enabled: true, chat_default: true }),
+    ]);
+
+    expect(selecionado()).toBe("anthropic");
+  });
+
+  it("sem provedor do chat, comeca no primeiro ativo", async () => {
+    await abrir([
+      provedor("openai", "OpenAI (ChatGPT)"),
+      provedor("anthropic", "Anthropic (Claude)", { api_key_configured: true, model: "m", enabled: true }),
+    ]);
+
+    expect(selecionado()).toBe("anthropic");
+  });
+
+  it("sem nenhum ativo, comeca no primeiro da lista", async () => {
+    await abrir();
+
+    expect(selecionado()).toBe("openai");
   });
 
   it("avisa quando nao consegue carregar", async () => {
@@ -78,16 +121,97 @@ describe("AiTab - carregar", () => {
   });
 });
 
+describe("AiTab - carregar", () => {
+  it("sem chave, o modelo e um campo de texto com a sugestao", async () => {
+    await abrir();
+
+    expect((screen.getByLabelText("Modelo") as HTMLInputElement).placeholder).toBe("Ex.: exemplo-openai");
+  });
+
+  it("a chave nunca aparece: so um aviso de que ja foi cadastrada", async () => {
+    await abrir([provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x" })]);
+
+    const chave = screen.getByLabelText("Chave de API") as HTMLInputElement;
+    expect(chave.value).toBe("");
+    expect(chave.placeholder).toMatch(/Ja cadastrada/);
+  });
+});
+
+describe("AiTab - lista de modelos", () => {
+  const COM_CHAVE = [
+    provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "modelo-b" }),
+    provedor("anthropic", "Anthropic (Claude)"),
+  ];
+
+  it("com chave salva, o modelo vira uma lista suspensa com o modelo salvo escolhido", async () => {
+    await abrir(COM_CHAVE);
+
+    await screen.findByText("2 modelos disponiveis.");
+    expect(listModels).toHaveBeenCalledWith("openai");
+    const lista = screen.getByLabelText("Modelo") as HTMLSelectElement;
+    expect(lista.tagName).toBe("SELECT");
+    expect(lista.value).toBe("modelo-b");
+  });
+
+  it("trocar de provedor e voltar nao consulta a lista de novo", async () => {
+    await abrir(COM_CHAVE);
+    await screen.findByText("2 modelos disponiveis.");
+
+    escolher("anthropic");
+    escolher("openai");
+
+    expect(await screen.findByText("2 modelos disponiveis.")).toBeTruthy();
+    expect(listModels).toHaveBeenCalledTimes(1);
+  });
+
+  it("salvar uma chave nova descarta a lista e consulta de novo com a chave nova", async () => {
+    update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "modelo-b" }));
+    await abrir(COM_CHAVE);
+    await screen.findByText("2 modelos disponiveis.");
+
+    fireEvent.change(screen.getByLabelText("Chave de API"), { target: { value: "chave-nova" } });
+    salvar();
+
+    await waitFor(() => expect(listModels).toHaveBeenCalledTimes(2));
+  });
+
+  it("salvar sem mexer na chave mantem a lista", async () => {
+    update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "modelo-a" }));
+    await abrir(COM_CHAVE);
+    await screen.findByText("2 modelos disponiveis.");
+
+    fireEvent.change(screen.getByLabelText("Modelo"), { target: { value: "modelo-a" } });
+    salvar();
+
+    await waitFor(() => expect(update).toHaveBeenCalled());
+    expect(update.mock.calls[0][1]).toMatchObject({ model: "modelo-a" });
+    await screen.findByText("2 modelos disponiveis.");
+    expect(listModels).toHaveBeenCalledTimes(1);
+  });
+
+  it("cadastrar a primeira chave passa a carregar a lista", async () => {
+    update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true }));
+    await abrir();
+    expect(listModels).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Chave de API"), { target: { value: "chave-123" } });
+    salvar();
+
+    expect(await screen.findByText("2 modelos disponiveis.")).toBeTruthy();
+    expect(listModels).toHaveBeenCalledWith("openai");
+  });
+});
+
 describe("AiTab - salvar", () => {
-  it("envia so o provedor do cartao, com a chave digitada, e avisa que salvou", async () => {
+  it("envia o provedor escolhido, com a chave digitada, e avisa que salvou", async () => {
     update.mockResolvedValue(provedor("openrouter", "OpenRouter", { api_key_configured: true, model: "openai/gpt-4o-mini", enabled: true }));
     await abrir();
-    const c = cartao("OpenRouter");
-    fireEvent.change(c.getByLabelText("Chave de API"), { target: { value: " chave-123 " } });
-    fireEvent.change(c.getByLabelText("Modelo"), { target: { value: "openai/gpt-4o-mini" } });
-    fireEvent.click(c.getByLabelText("Provedor ativo"));
+    escolher("openrouter");
+    fireEvent.change(screen.getByLabelText("Chave de API"), { target: { value: " chave-123 " } });
+    fireEvent.change(screen.getByLabelText("Modelo"), { target: { value: "openai/gpt-4o-mini" } });
+    fireEvent.click(screen.getByLabelText("Provedor ativo"));
 
-    fireEvent.click(c.getByRole("button", { name: "Salvar" }));
+    salvar();
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     expect(update).toHaveBeenCalledWith("openrouter", {
@@ -99,24 +223,35 @@ describe("AiTab - salvar", () => {
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("OpenRouter salvo."));
   });
 
-  it("depois de salvar o campo da chave volta vazio e o cartao passa a aceitar teste", async () => {
+  it("depois de salvar, o estado do provedor na lista suspensa se atualiza", async () => {
+    update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x", enabled: true }));
+    await abrir();
+    fireEvent.change(screen.getByLabelText("Chave de API"), { target: { value: "chave-123" } });
+    fireEvent.change(screen.getByLabelText("Modelo"), { target: { value: "gpt-x" } });
+    fireEvent.click(screen.getByLabelText("Provedor ativo"));
+
+    salvar();
+
+    expect(await screen.findByRole("option", { name: "OpenAI (ChatGPT) (ativo)" })).toBeTruthy();
+  });
+
+  it("depois de salvar o campo da chave volta vazio e o provedor passa a aceitar teste", async () => {
     update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x" }));
     await abrir();
-    const c = cartao("OpenAI (ChatGPT)");
-    fireEvent.change(c.getByLabelText("Chave de API"), { target: { value: "chave-123" } });
-    fireEvent.change(c.getByLabelText("Modelo"), { target: { value: "gpt-x" } });
+    fireEvent.change(screen.getByLabelText("Chave de API"), { target: { value: "chave-123" } });
+    fireEvent.change(screen.getByLabelText("Modelo"), { target: { value: "gpt-x" } });
 
-    fireEvent.click(c.getByRole("button", { name: "Salvar" }));
+    salvar();
 
-    await waitFor(() => expect((c.getByRole("button", { name: "Testar conexao" }) as HTMLButtonElement).disabled).toBe(false));
-    expect((c.getByLabelText("Chave de API") as HTMLInputElement).value).toBe("");
+    await waitFor(() => expect((screen.getByRole("button", { name: "Testar conexao" }) as HTMLButtonElement).disabled).toBe(false));
+    expect((screen.getByLabelText("Chave de API") as HTMLInputElement).value).toBe("");
   });
 
   it("deixar a chave em branco mantem a atual: o campo nem vai no pedido", async () => {
     update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x" }));
     await abrir([provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x" })]);
 
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    salvar();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][1]).not.toHaveProperty("api_key");
@@ -125,10 +260,9 @@ describe("AiTab - salvar", () => {
   it("apagar a chave salva manda texto vazio", async () => {
     update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)"));
     await abrir([provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "gpt-x" })]);
-    const c = cartao("OpenAI (ChatGPT)");
 
-    fireEvent.click(c.getByLabelText("Apagar a chave salva"));
-    fireEvent.click(c.getByRole("button", { name: "Salvar" }));
+    fireEvent.click(screen.getByLabelText("Apagar a chave salva"));
+    salvar();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][1].api_key).toBe("");
@@ -138,20 +272,21 @@ describe("AiTab - salvar", () => {
     update.mockResolvedValue(provedor("openai", "OpenAI (ChatGPT)"));
     await abrir();
 
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    salvar();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][1].model).toBeNull();
   });
 
-  it("mostra o motivo quando o servidor recusa, so no cartao certo", async () => {
+  it("mostra o motivo quando o servidor recusa, so no provedor em tela", async () => {
     update.mockRejectedValue({ response: { data: { detail: "Informe a chave e o modelo antes de ativar o provedor." } } });
     await abrir();
 
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    salvar();
 
-    expect(await cartao("OpenAI (ChatGPT)").findByText("Informe a chave e o modelo antes de ativar o provedor.")).toBeTruthy();
-    expect(cartao("OpenRouter").queryByText("Informe a chave e o modelo antes de ativar o provedor.")).toBeNull();
+    expect(await screen.findByText("Informe a chave e o modelo antes de ativar o provedor.")).toBeTruthy();
+    escolher("openrouter");
+    expect(screen.queryByText("Informe a chave e o modelo antes de ativar o provedor.")).toBeNull();
   });
 });
 
@@ -159,28 +294,29 @@ describe("AiTab - provedor do chat", () => {
   const ATIVO = (chave: string, label: string, extra: Partial<AIProvider> = {}) =>
     provedor(chave, label, { api_key_configured: true, model: "m", enabled: true, ...extra });
 
-  const usarNoChat = (nome: string) => cartao(nome).getByLabelText("Usar este provedor no chat") as HTMLInputElement;
+  const usarNoChat = () => screen.getByLabelText("Usar este provedor no chat") as HTMLInputElement;
 
   it("a caixa vem travada, com aviso, enquanto o provedor nao esta ativo", async () => {
     await abrir();
 
-    expect(usarNoChat("OpenAI (ChatGPT)").disabled).toBe(true);
-    expect(cartao("OpenAI (ChatGPT)").getByText("Ative o provedor para poder escolhe-lo para o chat.")).toBeTruthy();
+    expect(usarNoChat().disabled).toBe(true);
+    expect(screen.getByText("Ative o provedor para poder escolhe-lo para o chat.")).toBeTruthy();
   });
 
   it("mostra marcado so o provedor que o servidor diz que responde o chat", async () => {
     await abrir([ATIVO("openai", "OpenAI (ChatGPT)"), ATIVO("anthropic", "Anthropic (Claude)", { chat_default: true })]);
 
-    expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(false);
-    expect(usarNoChat("Anthropic (Claude)").checked).toBe(true);
+    expect(usarNoChat().checked).toBe(true);
+    escolher("openai");
+    expect(usarNoChat().checked).toBe(false);
   });
 
   it("marcar a caixa envia chat_default verdadeiro", async () => {
     update.mockResolvedValue(ATIVO("openai", "OpenAI (ChatGPT)", { chat_default: true }));
     await abrir([ATIVO("openai", "OpenAI (ChatGPT)")]);
 
-    fireEvent.click(usarNoChat("OpenAI (ChatGPT)"));
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    fireEvent.click(usarNoChat());
+    salvar();
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     expect(update.mock.calls[0][1].chat_default).toBe(true);
@@ -190,11 +326,11 @@ describe("AiTab - provedor do chat", () => {
     update.mockResolvedValue(ATIVO("openai", "OpenAI (ChatGPT)", { enabled: false }));
     await abrir([ATIVO("openai", "OpenAI (ChatGPT)", { chat_default: true })]);
 
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByLabelText("Provedor ativo"));
+    fireEvent.click(screen.getByLabelText("Provedor ativo"));
 
-    expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(false);
-    expect(usarNoChat("OpenAI (ChatGPT)").disabled).toBe(true);
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    expect(usarNoChat().checked).toBe(false);
+    expect(usarNoChat().disabled).toBe(true);
+    salvar();
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][1]).toMatchObject({ enabled: false, chat_default: false });
   });
@@ -202,23 +338,26 @@ describe("AiTab - provedor do chat", () => {
   it("quando outro provedor vira o escolhido, o antigo desmarca sozinho", async () => {
     update.mockResolvedValue(ATIVO("anthropic", "Anthropic (Claude)", { chat_default: true }));
     await abrir([ATIVO("openai", "OpenAI (ChatGPT)", { chat_default: true }), ATIVO("anthropic", "Anthropic (Claude)")]);
-    expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(true);
+    escolher("anthropic");
 
-    fireEvent.click(usarNoChat("Anthropic (Claude)"));
-    fireEvent.click(cartao("Anthropic (Claude)").getByRole("button", { name: "Salvar" }));
+    fireEvent.click(usarNoChat());
+    salvar();
 
-    await waitFor(() => expect(usarNoChat("OpenAI (ChatGPT)").checked).toBe(false));
-    expect(usarNoChat("Anthropic (Claude)").checked).toBe(true);
+    await waitFor(() => expect(screen.getByRole("option", { name: "OpenAI (ChatGPT) (ativo)" })).toBeTruthy());
+    escolher("openai");
+    expect(usarNoChat().checked).toBe(false);
+    escolher("anthropic");
+    expect(usarNoChat().checked).toBe(true);
   });
 
   it("mostra o motivo quando o servidor recusa a escolha", async () => {
     update.mockRejectedValue({ response: { data: { detail: "Ative o provedor antes de escolhe-lo para o chat." } } });
     await abrir([ATIVO("openai", "OpenAI (ChatGPT)")]);
 
-    fireEvent.click(usarNoChat("OpenAI (ChatGPT)"));
-    fireEvent.click(cartao("OpenAI (ChatGPT)").getByRole("button", { name: "Salvar" }));
+    fireEvent.click(usarNoChat());
+    salvar();
 
-    expect(await cartao("OpenAI (ChatGPT)").findByText("Ative o provedor antes de escolhe-lo para o chat.")).toBeTruthy();
+    expect(await screen.findByText("Ative o provedor antes de escolhe-lo para o chat.")).toBeTruthy();
   });
 });
 
@@ -228,16 +367,15 @@ describe("AiTab - testar conexao", () => {
   it("so testa depois de salvar a chave e o modelo", async () => {
     await abrir();
 
-    const c = cartao("Anthropic (Claude)");
-    expect((c.getByRole("button", { name: "Testar conexao" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(c.getByText("Salve a chave e o modelo para poder testar.")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Testar conexao" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText("Salve a chave e o modelo para poder testar.")).toBeTruthy();
   });
 
-  it("testa o provedor do cartao e confirma com modelo e tempo", async () => {
+  it("testa o provedor em tela e confirma com modelo e tempo", async () => {
     test.mockResolvedValue({ ok: true, model: "claude-x", latency_ms: 420 });
     await abrir([SALVO]);
 
-    fireEvent.click(cartao("Anthropic (Claude)").getByRole("button", { name: "Testar conexao" }));
+    fireEvent.click(screen.getByRole("button", { name: "Testar conexao" }));
 
     expect(await screen.findByText("Conexao ok com o modelo claude-x (420 ms).")).toBeTruthy();
     expect(test).toHaveBeenCalledWith("anthropic");
@@ -247,7 +385,7 @@ describe("AiTab - testar conexao", () => {
     test.mockRejectedValue({ response: { data: { detail: "O provedor recusou a chave de API. Confira se ela esta correta e ativa." } } });
     await abrir([SALVO]);
 
-    fireEvent.click(cartao("Anthropic (Claude)").getByRole("button", { name: "Testar conexao" }));
+    fireEvent.click(screen.getByRole("button", { name: "Testar conexao" }));
 
     expect(await screen.findByText(/O provedor recusou a chave de API/)).toBeTruthy();
   });

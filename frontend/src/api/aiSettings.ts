@@ -76,6 +76,12 @@ export async function updateAIProvider(provider: string, input: AIProviderUpdate
   return data;
 }
 
+/** Modelos de conversa que a chave salva consegue usar, direto do provedor. */
+export async function listAIProviderModels(provider: string): Promise<string[]> {
+  const { data } = await api.get(`/settings/ai/${provider}/models`);
+  return data.models;
+}
+
 export async function testAIProvider(provider: string): Promise<AIProviderTest> {
   const { data } = await api.post(`/settings/ai/${provider}/test`);
   return data;

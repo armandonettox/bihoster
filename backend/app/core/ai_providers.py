@@ -181,6 +181,70 @@ def _complete_anthropic(
     return AIResult(text=text, input_tokens=_int(usage.get("input_tokens")), output_tokens=_int(usage.get("output_tokens")))
 
 
+# Nomes que marcam modelo que nao serve para conversa (vetores, voz, imagem). Os provedores misturam
+# tudo na mesma lista; o campo de texto livre na tela cobre qualquer modelo que o filtro esconder.
+_NON_CHAT_WORDS = (
+    "embedding",
+    "embed",
+    "whisper",
+    "tts",
+    "transcribe",
+    "dall-e",
+    "imagen",
+    "moderation",
+    "realtime",
+    "audio",
+    "aqa",
+    "rerank",
+)
+_MAX_MODELS = 1000
+
+
+def _is_chat_model(model_id: str) -> bool:
+    lowered = model_id.lower()
+    return not any(word in lowered for word in _NON_CHAT_WORDS)
+
+
+def list_models(provider: str, api_key: str) -> list[str]:
+    """Pergunta ao provedor quais modelos a chave consegue usar, para a tela oferecer uma lista em vez
+    de pedir para digitar o nome. Devolve so modelos de conversa, em ordem alfabetica. Qualquer falha
+    vira AIError com mensagem segura (sem a chave)."""
+    info = get_provider_info(provider)
+    try:
+        if info.kind == "anthropic":
+            response = _http.get(
+                f"{info.base_url}/models",
+                params={"limit": _MAX_MODELS},
+                headers={"x-api-key": api_key, "anthropic-version": ANTHROPIC_VERSION},
+            )
+        else:
+            response = _http.get(f"{info.base_url}/models", headers={"Authorization": f"Bearer {api_key}"})
+    except httpx.TimeoutException:
+        raise AIError("O provedor demorou demais para responder.")
+    except httpx.HTTPError:
+        raise AIError("Nao foi possivel conectar ao provedor.")
+
+    if response.status_code == 404:
+        # O 404 de _raise_for_status fala de "modelo nao encontrado", que aqui confundiria
+        raise AIError("Esse provedor nao oferece a lista de modelos.")
+    _raise_for_status(response, api_key)
+
+    try:
+        items = response.json()["data"]
+        if not isinstance(items, list):
+            raise ValueError("data nao e uma lista")
+        ids = {item["id"] for item in items if isinstance(item, dict) and isinstance(item.get("id"), str)}
+    except (ValueError, KeyError, TypeError):
+        raise AIError("Resposta inesperada do provedor.")
+
+    # O Gemini devolve "models/gemini-..."; o nome usado na conversa e sem o prefixo
+    names = {name.removeprefix("models/") for name in ids}
+    models = sorted(name for name in names if name and _is_chat_model(name))[:_MAX_MODELS]
+    if not models:
+        raise AIError("O provedor nao devolveu nenhum modelo de conversa.")
+    return models
+
+
 def complete(
     provider: str,
     api_key: str,

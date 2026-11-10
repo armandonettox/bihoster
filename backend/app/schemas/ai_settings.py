@@ -44,6 +44,10 @@ class AIProviderOut(BaseModel):
     chat_default: bool
 
 
+class AIProviderModelsOut(BaseModel):
+    models: list[str]
+
+
 class AIProviderTestOut(BaseModel):
     ok: bool
     model: str
