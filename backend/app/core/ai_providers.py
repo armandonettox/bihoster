@@ -77,6 +77,20 @@ class AIResult:
     output_tokens: int
 
 
+def http_get_json(url: str, timeout: float = 10.0):
+    """GET simples que devolve o JSON ou levanta AIError. Usado para consultas publicas aos provedores
+    (hoje, a lista de modelos e precos do OpenRouter, que nao pede chave)."""
+    try:
+        response = _http.get(url, timeout=timeout)
+        if response.status_code != 200:
+            raise AIError(f"O provedor respondeu com erro {response.status_code}.")
+        return response.json()
+    except httpx.HTTPError:
+        raise AIError("Nao foi possivel conectar ao provedor.")
+    except ValueError:
+        raise AIError("Resposta inesperada do provedor.")
+
+
 def get_provider_info(provider: str) -> ProviderInfo:
     info = PROVIDERS.get(provider)
     if info is None:

@@ -4,6 +4,7 @@ import type { AIProvider } from "../../api/aiSettings";
 import { extractErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { SkeletonList } from "../../components/Skeleton";
+import AiOptionsCard from "../../components/AiOptionsCard";
 
 interface CardProps {
   provider: AIProvider;
@@ -206,6 +207,7 @@ export default function AiTab() {
           responde o chat com a opcao "Usar este provedor no chat": so um por vez.
         </p>
       </div>
+      <AiOptionsCard />
       {providers.map((provider) => (
         <ProviderCard key={provider.provider} provider={provider} onSaved={handleSaved} />
       ))}

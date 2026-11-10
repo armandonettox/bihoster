@@ -11,20 +11,23 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core import alert_runner, cache_warmup, subscription_runner
+from app.core import ai_history_runner, alert_runner, cache_warmup, subscription_runner
 from app.core import powerbi as core_powerbi
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
-from app.models import ai_provider, alert, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import ai_conversation, ai_provider, ai_usage as ai_usage_model, alert, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
 from app.models import permission as permission_model  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
     ai_access,
     ai_chat,
     ai_check,
+    ai_history,
+    ai_options,
     ai_settings,
+    ai_usage,
     alerts,
     audit,
     auth,
@@ -88,12 +91,14 @@ async def _lifespan(_: FastAPI):
     cache_warmup.start()
     subscription_runner.start()
     alert_runner.start()
+    ai_history_runner.start()
     try:
         yield
     finally:
         cache_warmup.stop()
         subscription_runner.stop()
         alert_runner.stop()
+        ai_history_runner.stop()
 
 
 app = FastAPI(title="BIHoster Python", lifespan=_lifespan)
@@ -200,6 +205,9 @@ app.include_router(ai_settings.router)
 app.include_router(ai_access.router)
 app.include_router(ai_check.router)
 app.include_router(ai_chat.router)
+app.include_router(ai_history.router)
+app.include_router(ai_options.router)
+app.include_router(ai_usage.router)
 app.include_router(report_export.router)
 app.include_router(subscriptions.router)
 app.include_router(subscriptions.admin_router)

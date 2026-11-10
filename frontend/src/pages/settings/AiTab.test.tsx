@@ -7,6 +7,8 @@ import AiTab from "./AiTab";
 const mocks = vi.hoisted(() => ({ showToast: vi.fn() }));
 
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
+// O bloco de opcoes do chat tem teste proprio; aqui so interessam os cartoes dos provedores
+vi.mock("../../components/AiOptionsCard", () => ({ default: () => null }));
 vi.mock("../../api/aiSettings", () => ({
   listAIProviders: vi.fn(),
   updateAIProvider: vi.fn(),

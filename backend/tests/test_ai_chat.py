@@ -81,7 +81,7 @@ def ia(monkeypatch):
 
 
 def _chat(client, headers, texto="Qual o total de vendas?", **extra):
-    return client.post("/ai/chat", json={"messages": [{"role": "user", "content": texto}], **extra}, headers=headers)
+    return client.post("/ai/chat", json={"message": texto, **extra}, headers=headers)
 
 
 def _liberar_usar(client, admin, email="pessoa@example.com"):
@@ -92,7 +92,7 @@ def _liberar_usar(client, admin, email="pessoa@example.com"):
 
 class TestPermissao:
     def test_exige_estar_logado(self, client):
-        assert client.post("/ai/chat", json={"messages": [{"role": "user", "content": "oi"}]}).status_code == 401
+        assert client.post("/ai/chat", json={"message": "oi"}).status_code == 401
 
     def test_quem_nao_pode_usar_o_chat_recebe_403(self, client, pessoa, relatorio, provedor, ia):
         resp = _chat(client, pessoa)
@@ -129,28 +129,20 @@ class TestValidacao:
         "corpo",
         [
             {},
-            {"messages": []},
-            {"messages": [{"role": "user", "content": "   "}]},
-            {"messages": [{"role": "user", "content": ""}]},
-            {"messages": [{"role": "system", "content": "oi"}]},
-            {"messages": [{"role": "assistant", "content": "oi"}]},
-            {"messages": [{"role": "user", "content": "a"}, {"role": "assistant", "content": "b"}]},
-            {"messages": [{"role": "user", "content": "x" * 4001}]},
-            {"messages": [{"role": "user", "content": "oi"}] * 21},
-            {"messages": [{"role": "user", "content": "oi"}], "report_id": "abc"},
+            {"message": ""},
+            {"message": "   "},
+            {"message": "x" * 4001},
+            {"message": "oi", "conversation_id": "abc"},
+            # forma antiga da API (a conversa inteira vinha do cliente): o servidor guarda o historico agora
+            {"messages": [{"role": "user", "content": "oi"}]},
         ],
     )
     def test_corpo_invalido_e_recusado_sem_chamar_a_ia(self, client, admin, relatorio, provedor, ia, corpo):
         assert client.post("/ai/chat", json=corpo, headers=admin).status_code == 422
         assert ia["chamadas"] == 0
 
-    def test_conversa_no_limite_e_aceita(self, client, admin, relatorio, provedor, ia):
-        mensagens = []
-        for i in range(20):
-            mensagens.append({"role": "user" if i % 2 == 0 else "assistant", "content": f"m{i}"})
-        mensagens[-1]["role"] = "user"
-
-        assert client.post("/ai/chat", json={"messages": mensagens}, headers=admin).status_code == 200
+    def test_mensagem_no_limite_de_tamanho_e_aceita(self, client, admin, relatorio, provedor, ia):
+        assert _chat(client, admin, "x" * 4000).status_code == 200
 
 
 class TestProvedorNaoConfigurado:
@@ -174,6 +166,7 @@ class TestResposta:
 
         assert resp.status_code == 200
         corpo = resp.json()
+        assert corpo["conversation_id"] > 0 and corpo["conversation_title"] == "Qual o total de vendas?"
         assert corpo["reply"] == "O total foi 99."
         assert corpo["report"] == {"id": relatorio.id, "name": "Vendas do mes"}
         assert corpo["dax"] == 'EVALUATE ROW("t", [Total])'
@@ -184,6 +177,7 @@ class TestResposta:
             "llm_calls": 2,
             "input_tokens": 24,
             "output_tokens": 8,
+            "cost_usd": None,  # sem preco do OpenRouter nos testes: a rede esta bloqueada
         }
 
     def test_resposta_sem_dados_vem_sem_dax_e_sem_tabela(self, client, admin, relatorio, provedor, ia):
@@ -196,19 +190,6 @@ class TestResposta:
 
     def test_a_chave_do_provedor_nunca_aparece_na_resposta(self, client, admin, relatorio, provedor, ia):
         assert "chave-x" not in _chat(client, admin).text
-
-    def test_aceita_o_relatorio_da_conversa_e_o_historico(self, client, admin, relatorio, provedor, ia):
-        corpo = {
-            "messages": [
-                {"role": "user", "content": "Qual o total?"},
-                {"role": "assistant", "content": "99"},
-                {"role": "user", "content": "E por mes?"},
-            ],
-            "report_id": relatorio.id,
-        }
-
-        assert client.post("/ai/chat", json=corpo, headers=admin).status_code == 200
-
 
 class TestErros:
     def test_falha_do_provedor_de_ia_vira_502_com_mensagem_clara(self, client, admin, relatorio, provedor, ia):

@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core import chat_engine
+from app.core import ai_pricing, ai_usage, chat_engine, chat_history
 from app.core.ai_access import require_ai_use
 from app.core.ai_providers import AIError
 from app.core.audit import log_action
@@ -21,15 +21,48 @@ def chat(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_ai_use),
 ):
-    """Responde uma pergunta sobre os dados dos relatorios que a pessoa pode ver. Exige a permissao
-    "Usar chat de IA". Falha do Power BI sobe pelo tratador global (502)."""
-    messages = [{"role": m.role, "content": m.content} for m in data.messages]
+    """Responde uma pergunta sobre os dados dos relatorios que a pessoa pode ver e guarda a conversa
+    no historico dela. Exige a permissao "Usar chat de IA". Falha do Power BI sobe pelo tratador global (502)."""
+    conversation = None
+    history: list[dict] = []
+    if data.conversation_id is not None:
+        conversation = chat_history.get_conversation(db, current_user.id, data.conversation_id)
+        if conversation is None:
+            raise HTTPException(status_code=404, detail="Conversa nao encontrada")
+        if chat_history.count_messages(db, conversation) >= chat_history.MAX_CONVERSATION_MESSAGES:
+            raise HTTPException(status_code=400, detail="Esta conversa ficou longa demais. Comece uma nova.")
+        history = chat_history.history_for_engine(db, conversation)
+
+    # Limite de perguntas por dia e orcamento do mes, antes de gastar uma chamada a IA
     try:
-        answer = chat_engine.answer_question(db, current_user.id, messages, data.report_id)
+        provider = chat_engine.resolve_chat_provider(db)
+    except chat_engine.ChatUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    try:
+        ai_usage.check_limits(db, current_user.id, provider.provider)
+    except ai_usage.LimitReached as exc:
+        raise HTTPException(status_code=429, detail=str(exc))
+
+    messages = [*history, {"role": "user", "content": data.message}]
+    try:
+        answer = chat_engine.answer_question(
+            db, current_user.id, messages, conversation.last_report_id if conversation else None
+        )
     except chat_engine.ChatUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
     except (AIError, chat_engine.ChatEngineError) as exc:
         raise HTTPException(status_code=502, detail=str(exc))
+
+    # So guarda depois de a resposta existir: erro no meio nao deixa pergunta solta no historico
+    if conversation is None:
+        conversation = chat_history.start_conversation(db, current_user.id, data.message)
+    chat_history.save_exchange(db, conversation, data.message, answer)
+
+    # Conta como pergunta so quando a IA foi chamada: bloqueio e recusa sem chamada nao gastam a cota
+    cost = None
+    if answer.llm_calls > 0:
+        cost = ai_pricing.cost_usd(answer.provider, answer.model, answer.input_tokens, answer.output_tokens)
+        ai_usage.record(db, current_user, answer, cost)
 
     # So o resumo: o texto da pergunta e da resposta pode ter dado de beneficiario e nao vai para a auditoria
     log_action(
@@ -46,6 +79,8 @@ def chat(
 
     table = answer.table
     return ChatOut(
+        conversation_id=conversation.id,
+        conversation_title=conversation.title,
         reply=answer.reply,
         report=ChatReportOut(id=answer.report.id, name=answer.report.name) if answer.report else None,
         dax=answer.dax,
@@ -60,5 +95,6 @@ def chat(
             llm_calls=answer.llm_calls,
             input_tokens=answer.input_tokens,
             output_tokens=answer.output_tokens,
+            cost_usd=cost,
         ),
     )

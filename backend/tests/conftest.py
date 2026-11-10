@@ -6,8 +6,22 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 # Precisa importar todos os modelos antes do create_all -- mesmo padrao usado em app/main.py --
 # senao tabelas referenciadas so por FK (sem import direto aqui) nao sao criadas.
-from app.models import ai_provider, alert, audit_log, favorite, group_permission, invite, password_reset, permission, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import ai_conversation, ai_provider, ai_usage, alert, audit_log, favorite, group_permission, invite, password_reset, permission, powerbi_connection, report, subscription, user, workspace  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
+
+
+@pytest.fixture(autouse=True)
+def _sem_rede_para_provedores(monkeypatch):
+    """Nenhum teste fala com a internet de verdade: o cliente HTTP dos provedores de IA recusa toda
+    chamada. O teste que precisa de resposta troca o cliente por um transporte falso proprio."""
+    import httpx
+
+    from app.core import ai_providers
+
+    def recusa(request: httpx.Request) -> httpx.Response:
+        raise httpx.ConnectError("sem rede nos testes")
+
+    monkeypatch.setattr(ai_providers, "_http", httpx.Client(transport=httpx.MockTransport(recusa)))
 
 
 @pytest.fixture()
@@ -59,9 +73,10 @@ def _limpa_caches_do_powerbi():
     """Os caches do Power BI sao dicionarios em memoria do processo. Cada teste recria o banco do
     zero e reaproveita os mesmos ids (colecao 1, relatorio 1), entao um cache que sobrasse de um
     teste serviria dado de outro."""
-    from app.core import chat_dataset
+    from app.core import ai_pricing, chat_dataset
     from app.routers import powerbi as embed_router
 
+    ai_pricing.clear_cache()
     chat_dataset.clear_caches()
     embed_router._embed_cache.clear()
     embed_router._refresh_info_cache.clear()

@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, Integer, String
+from sqlalchemy import Boolean, Column, Float, Integer, String
 
 from app.core.crypto import EncryptedString
 from app.core.database import Base
@@ -51,3 +51,9 @@ class AppSettings(Base):
     # Nullable para compatibilidade com instancias existentes; o router usa os defaults abaixo.
     cache_warmup_enabled = Column(Boolean, nullable=True)         # default True
     cache_warmup_interval_seconds = Column(Integer, nullable=True)  # default 240
+
+    # Chat de IA (ver core/ai_options.py). Nullable: a migracao automatica so adiciona colunas
+    # nulaveis; nulo vale o padrao de cada opcao.
+    ai_retention_days = Column(Integer, nullable=True)  # por quanto tempo o historico fica guardado; padrao 30
+    ai_daily_question_limit = Column(Integer, nullable=True)  # perguntas por pessoa por dia; padrao 50, 0 = sem limite
+    ai_openrouter_monthly_budget = Column(Float, nullable=True)  # dolares por mes so do OpenRouter; nulo ou 0 = sem orcamento

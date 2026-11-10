@@ -5,6 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core import chat_history
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.workspace_deps import require_platform_admin
@@ -121,6 +122,7 @@ def delete_user(
     db.query(GroupMember).filter(GroupMember.user_id == user_id).delete(synchronize_session=False)
     db.query(PasswordResetToken).filter(PasswordResetToken.user_id == user_id).delete(synchronize_session=False)
     db.query(Favorite).filter(Favorite.user_id == user_id).delete(synchronize_session=False)
+    chat_history.delete_user_history(db, user_id, commit=False)  # historico do chat de IA e dado da pessoa: sai junto
     db.query(GroupInvite).filter(GroupInvite.invited_by_id == user_id).update(
         {"invited_by_id": None}, synchronize_session=False
     )
