@@ -426,6 +426,68 @@ class TestCorrecaoDoDax:
         assert resposta.reply == "Nao ha esse dado no relatorio." and resposta.table is None
 
 
+VAZIO = ChatQueryResult(columns=["[Total]"], rows=[], total_rows=0, truncated=False)
+NULO = ChatQueryResult(columns=["[Total]"], rows=[{"[Total]": None}], total_rows=1, truncated=False)
+
+
+class TestResultadoVazio:
+    def test_resultado_nulo_volta_para_a_ia_e_a_segunda_consulta_vale(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [NULO, RESULTADO]
+        llm = _llm(monkeypatch, _json(dax="EVALUATE a"), _json(dax="EVALUATE b"), "Sao 1.234,5.")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.reply == "Sao 1.234,5." and resposta.dax == "EVALUATE b"
+        assert resposta.table is RESULTADO
+        assert pbi.consultas == ["EVALUATE a", "EVALUATE b"]
+        segunda = llm.conversa(1)
+        assert segunda[-2] == {"role": "assistant", "content": '{"dax": "EVALUATE a"}'}
+        assert segunda[-1]["content"] == chat_engine.BLANK_RESULT_HINT
+
+    def test_resultado_sem_linhas_tambem_conta_como_vazio(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [VAZIO, RESULTADO]
+        _llm(monkeypatch, _json(dax="EVALUATE a"), _json(dax="EVALUATE b"), "ok")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.dax == "EVALUATE b" and len(pbi.consultas) == 2
+
+    def test_zero_e_valor_valido_e_nao_refaz_a_consulta(self, cenario, pbi, monkeypatch):
+        zero = ChatQueryResult(columns=["[Total]"], rows=[{"[Total]": 0}], total_rows=1, truncated=False)
+        pbi.resultados = [zero]
+        llm = _llm(monkeypatch, _json(dax="EVALUATE a"), "Zero.")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.reply == "Zero." and len(pbi.consultas) == 1 and len(llm.calls) == 2
+
+    def test_so_uma_nova_tentativa_e_o_resultado_vazio_segue_para_a_resposta(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [NULO, VAZIO]
+        llm = _llm(monkeypatch, _json(dax="EVALUATE a"), _json(dax="EVALUATE b"), "Nao ha dados.")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.reply == "Nao ha dados." and resposta.table is VAZIO and resposta.dax == "EVALUATE b"
+        assert len(pbi.consultas) == 2 and len(llm.calls) == 3
+
+    def test_se_a_ia_desiste_da_nova_consulta_vale_o_resultado_vazio_anterior(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [NULO]
+        _llm(monkeypatch, _json(dax="EVALUATE a"), _json(reply="Esta vazio mesmo."), "Sem dados.")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.reply == "Sem dados." and resposta.table is NULO and resposta.dax == "EVALUATE a"
+
+    def test_se_a_nova_consulta_der_erro_corrigivel_tres_vezes_vale_o_vazio_anterior(self, cenario, pbi, monkeypatch):
+        erro = ChatDataError("DAX invalida", fixable=True)
+        pbi.resultados = [NULO, erro, erro]
+        _llm(monkeypatch, _json(dax="EVALUATE a"), _json(dax="EVALUATE b"), _json(dax="EVALUATE c"), "Sem dados.")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.reply == "Sem dados." and resposta.table is NULO and resposta.dax == "EVALUATE a"
+
+
 class TestBloqueios:
     def test_relatorio_com_rls_responde_o_motivo_sem_chamar_a_ia(self, cenario, pbi, monkeypatch):
         pbi.esquema = ChatDataError(chat_dataset.REASON_RLS)

@@ -53,6 +53,20 @@ ERROR_BAD_FORMAT = "A IA nao respondeu no formato esperado. Tente reformular a p
 ERROR_EMPTY = "A IA devolveu uma resposta vazia. Tente de novo; se continuar, avise um administrador."
 
 
+MAX_BLANK_RETRIES = 1
+BLANK_RESULT_HINT = (
+    "A consulta rodou, mas voltou sem linhas ou so com valores nulos. Confira se os filtros usam o texto "
+    "exatamente como aparece nos dados (maiusculas, acentos, siglas), se a medida certa foi usada e se o "
+    "periodo tem dados. Responda com outra consulta apenas em JSON; se acha que o resultado vazio esta "
+    'correto, responda {"reply": "<explicacao curta>"}.'
+)
+
+
+def _is_blank(result: ChatQueryResult) -> bool:
+    """Sem linhas, ou todas as celulas nulas ou vazias. O zero e um valor valido e nao conta como vazio."""
+    return all(value is None or value == "" for row in result.rows for value in row.values())
+
+
 class ChatUnavailable(Exception):
     """O chat nao esta configurado (nenhum provedor escolhido)."""
 
@@ -334,16 +348,22 @@ def answer_question(
     attempt_messages = list(conversation)
     result: Optional[ChatQueryResult] = None
     dax = ""
+    blank_retries = 0
+    blank_result: Optional[ChatQueryResult] = None  # ultimo resultado vazio, usado se a nova tentativa falhar
+    blank_dax = ""
     for _ in range(MAX_DAX_ATTEMPTS):
         plan = llm.ask_json(system, attempt_messages, DAX_MAX_TOKENS)
         candidate_dax = plan.get("dax")
         if not isinstance(candidate_dax, str) or not candidate_dax.strip():
+            if blank_result is not None:
+                # A IA desistiu de refazer a consulta: responde com o resultado vazio que ja tinha
+                result, dax = blank_result, blank_dax
+                break
             reply = plan.get("reply")
             return done(reply.strip() if isinstance(reply, str) and reply.strip() else REPLY_OFF_TOPIC, report=report)
         dax = candidate_dax.strip()
         try:
-            result = chat_dataset.run_chat_query(connection, report, dax)
-            break
+            run = chat_dataset.run_chat_query(connection, report, dax)
         except ChatDataError as exc:
             if not exc.fixable:
                 return done(str(exc), report=report)
@@ -352,6 +372,22 @@ def answer_question(
                 {"role": "assistant", "content": json.dumps({"dax": dax}, ensure_ascii=False)},
                 {"role": "user", "content": f"A consulta falhou: {exc}. Corrija e responda de novo apenas com o JSON."},
             ]
+            continue
+        if _is_blank(run) and blank_retries < MAX_BLANK_RETRIES:
+            # Consulta valida que voltou sem dado util: costuma ser filtro com texto diferente do cadastrado
+            # ou medida errada. Uma nova tentativa evita responder "nulo" quando o dado existe.
+            blank_retries += 1
+            blank_result, blank_dax = run, dax
+            attempt_messages = [
+                *attempt_messages,
+                {"role": "assistant", "content": json.dumps({"dax": dax}, ensure_ascii=False)},
+                {"role": "user", "content": BLANK_RESULT_HINT},
+            ]
+            continue
+        result = run
+        break
+    if result is None and blank_result is not None:
+        result, dax = blank_result, blank_dax  # as novas tentativas falharam: vale o resultado vazio
     if result is None:
         return done(REPLY_NO_DAX, report=report, dax=dax)
 
