@@ -3,6 +3,7 @@ import { BrowserRouter, Routes, Route, useLocation } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import { FavoritesProvider } from "./context/FavoritesContext";
 import { BrandingProvider } from "./context/BrandingContext";
+import { ChatProvider } from "./context/ChatContext";
 import { ToastProvider } from "./context/ToastContext";
 import { ThemeProvider } from "./context/ThemeContext";
 import { WorkspaceProvider, useWorkspace } from "./context/WorkspaceContext";
@@ -40,7 +41,9 @@ function WorkspaceGate() {
 
   return (
     <FavoritesProvider>
-      <Layout />
+      <ChatProvider>
+        <Layout />
+      </ChatProvider>
     </FavoritesProvider>
   );
 }

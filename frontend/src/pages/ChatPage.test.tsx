@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as chatApi from "../api/aiChat";
 import type { ChatResponse, Conversation } from "../api/aiChat";
+import { ChatProvider } from "../context/ChatContext";
 import ChatPage from "./ChatPage";
 
 const mocks = vi.hoisted(() => ({ showToast: vi.fn(), canUse: true, loading: false }));
@@ -37,6 +38,13 @@ const RESPOSTA: ChatResponse = {
   usage: { provider: "openrouter", model: "m", llm_calls: 2, input_tokens: 24, output_tokens: 8, cost_usd: null },
 };
 
+const renderChat = () =>
+  render(
+    <ChatProvider>
+      <ChatPage />
+    </ChatProvider>,
+  );
+
 const caixa = () => screen.getByLabelText("Sua pergunta") as HTMLTextAreaElement;
 const botaoEnviar = () => screen.getByRole("button", { name: "Enviar" }) as HTMLButtonElement;
 
@@ -46,7 +54,7 @@ function escrever(texto: string) {
 
 async function abrir(conversas: Conversation[] = []) {
   list.mockResolvedValue(conversas);
-  render(<ChatPage />);
+  renderChat();
   await screen.findByLabelText("Sua pergunta");
   if (conversas.length) await screen.findByText(conversas[0].title);
 }
@@ -65,7 +73,7 @@ beforeEach(() => {
 describe("ChatPage - acesso", () => {
   it("sem a permissao mostra o aviso e nao carrega nada", () => {
     mocks.canUse = false;
-    render(<ChatPage />);
+    renderChat();
 
     expect(screen.getByText(/Voce nao tem permissao para usar o chat de IA/)).toBeTruthy();
     expect(screen.queryByLabelText("Sua pergunta")).toBeNull();
@@ -74,7 +82,7 @@ describe("ChatPage - acesso", () => {
 
   it("enquanto confere a permissao nao mostra o chat nem o aviso", () => {
     mocks.loading = true;
-    render(<ChatPage />);
+    renderChat();
 
     expect(screen.queryByLabelText("Sua pergunta")).toBeNull();
     expect(screen.queryByText(/nao tem permissao/)).toBeNull();
@@ -100,7 +108,7 @@ describe("ChatPage - tela inicial", () => {
 
   it("avisa quando nao consegue carregar o historico", async () => {
     list.mockRejectedValue(new Error("500"));
-    render(<ChatPage />);
+    renderChat();
 
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Nao foi possivel carregar o historico.", "error"));
   });
@@ -128,7 +136,7 @@ describe("ChatPage - enviar", () => {
   it("a conversa nova aparece na lista depois da resposta", async () => {
     send.mockResolvedValue(RESPOSTA);
     list.mockResolvedValueOnce([]).mockResolvedValue([CONVERSA]);
-    render(<ChatPage />);
+    renderChat();
     await screen.findByLabelText("Sua pergunta");
     escrever("Qual o total?");
 
@@ -235,7 +243,7 @@ describe("ChatPage - enviar", () => {
   it("texto da resposta que parece HTML entra como texto", async () => {
     send.mockResolvedValue({ ...RESPOSTA, reply: "<img src=x onerror=alert(1)>", table: null, dax: null });
     list.mockResolvedValue([]);
-    const { container } = render(<ChatPage />);
+    const { container } = renderChat();
     await screen.findByLabelText("Sua pergunta");
     escrever("oi");
 
@@ -243,6 +251,40 @@ describe("ChatPage - enviar", () => {
 
     expect(await screen.findByText("<img src=x onerror=alert(1)>")).toBeTruthy();
     expect(container.querySelector("img")).toBeNull();
+  });
+});
+
+describe("ChatPage - estado compartilhado", () => {
+  it("a conversa e o texto digitado continuam ao sair da pagina e voltar", async () => {
+    list.mockResolvedValue([]);
+    send.mockResolvedValue(RESPOSTA);
+    const { rerender } = render(
+      <ChatProvider>
+        <ChatPage />
+      </ChatProvider>,
+    );
+    await screen.findByLabelText("Sua pergunta");
+    escrever("Qual o total?");
+    fireEvent.click(botaoEnviar());
+    expect(await screen.findByText("O total foi 99.")).toBeTruthy();
+    escrever("rascunho");
+
+    // A pagina sai de cena, o provedor (no Layout) continua
+    rerender(
+      <ChatProvider>
+        <p>outra pagina</p>
+      </ChatProvider>,
+    );
+    expect(screen.queryByLabelText("Sua pergunta")).toBeNull();
+    rerender(
+      <ChatProvider>
+        <ChatPage />
+      </ChatProvider>,
+    );
+
+    expect(await screen.findByText("O total foi 99.")).toBeTruthy();
+    expect(caixa().value).toBe("rascunho");
+    expect(send).toHaveBeenCalledTimes(1);
   });
 });
 

@@ -1,56 +1,41 @@
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
-import * as chatApi from "../api/aiChat";
 import type { Conversation } from "../api/aiChat";
-import { extractErrorMessage } from "../api/client";
-import { useAiAccess } from "../hooks/useAiAccess";
-import { useToast } from "../context/ToastContext";
-import ChatMessageView, { type ChatItem } from "../components/ChatMessageView";
+import { useChat } from "../context/ChatContext";
+import ChatMessageView from "../components/ChatMessageView";
 import ConfirmDialog from "../components/ConfirmDialog";
 import PageLoading from "../components/PageLoading";
 
 const MAX_MESSAGE_CHARS = 4000;
 
-let nextKey = 0;
-const newKey = () => `m${nextKey++}`;
-
 /** Chat global de IA: pergunta sobre os dados dos relatorios que a pessoa pode ver. As conversas ficam
- * no historico dela (so ela ve) e podem ser apagadas a qualquer hora. */
+ * no historico dela (so ela ve) e podem ser apagadas a qualquer hora. O estado da conversa fica no
+ * ChatContext, para o painel lateral mostrar a mesma conversa. */
 export default function ChatPage() {
-  const { canUse, loading: accessLoading } = useAiAccess();
-  const { showToast } = useToast();
+  const {
+    canUse,
+    accessLoading,
+    conversations,
+    activeId,
+    items,
+    input,
+    setInput,
+    sending,
+    loadConversations,
+    sendMessage,
+    newConversation,
+    openConversation,
+    deleteConversation,
+    deleteAllConversations,
+  } = useChat();
 
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeId, setActiveId] = useState<number | null>(null);
-  const [items, setItems] = useState<ChatItem[]>([]);
-  const [input, setInput] = useState("");
-  const [sending, setSending] = useState(false);
   const [listOpen, setListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
   const messagesRef = useRef<HTMLDivElement>(null);
 
-  async function loadConversations() {
-    try {
-      setConversations(await chatApi.listConversations());
-    } catch {
-      showToast("Nao foi possivel carregar o historico.", "error");
-    }
-  }
-
   useEffect(() => {
     if (accessLoading || !canUse) return;
-    let cancelled = false;
-    chatApi
-      .listConversations()
-      .then((data) => {
-        if (!cancelled) setConversations(data);
-      })
-      .catch(() => {
-        if (!cancelled) showToast("Nao foi possivel carregar o historico.", "error");
-      });
-    return () => {
-      cancelled = true;
-    };
+    void loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUse, accessLoading]);
 
@@ -60,103 +45,37 @@ export default function ChatPage() {
     if (el) el.scrollTop = el.scrollHeight;
   }, [items, sending]);
 
-  async function handleSend(event?: FormEvent) {
+  function handleSend(event?: FormEvent) {
     event?.preventDefault();
-    const message = input.trim();
-    if (!message || sending) return;
-
-    setInput("");
-    setSending(true);
-    setItems((current) => [...current, { key: newKey(), role: "user", content: message }]);
-    try {
-      const response = await chatApi.sendChatMessage(message, activeId ?? undefined);
-      setActiveId(response.conversation_id);
-      setItems((current) => [
-        ...current,
-        {
-          key: newKey(),
-          role: "assistant",
-          content: response.reply,
-          report: response.report,
-          dax: response.dax,
-          table: response.table,
-        },
-      ]);
-      await loadConversations();
-    } catch (err: any) {
-      // A pergunta nao foi guardada: volta para a caixa de texto, para tentar de novo sem redigitar
-      setInput(message);
-      setItems((current) => [
-        ...current,
-        {
-          key: newKey(),
-          role: "assistant",
-          content: extractErrorMessage(err) || "Nao foi possivel obter a resposta. Tente de novo.",
-          error: true,
-        },
-      ]);
-    } finally {
-      setSending(false);
-    }
+    void sendMessage();
   }
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     // Enter envia; Shift+Enter quebra a linha
     if (event.key === "Enter" && !event.shiftKey) {
       event.preventDefault();
-      void handleSend();
+      void sendMessage();
     }
   }
 
-  function newConversation() {
-    setActiveId(null);
-    setItems([]);
-    setInput("");
+  function handleNew() {
+    newConversation();
     setListOpen(false);
   }
 
-  async function openConversation(conversation: Conversation) {
+  function handleOpen(conversation: Conversation) {
     setListOpen(false);
-    try {
-      const detail = await chatApi.getConversation(conversation.id);
-      setActiveId(detail.id);
-      setItems(
-        detail.messages.map((m) => ({
-          key: `h${m.id}`,
-          role: m.role,
-          content: m.content,
-          report: m.report,
-          dax: m.dax,
-          fromHistory: true,
-        })),
-      );
-    } catch (err: any) {
-      showToast(extractErrorMessage(err) || "Nao foi possivel abrir a conversa.", "error");
-    }
+    void openConversation(conversation);
   }
 
-  async function deleteOne(conversation: Conversation) {
+  function handleDeleteOne(conversation: Conversation) {
     setConfirmDelete(null);
-    try {
-      await chatApi.deleteConversation(conversation.id);
-      if (activeId === conversation.id) newConversation();
-      await loadConversations();
-      showToast("Conversa apagada.");
-    } catch (err: any) {
-      showToast(extractErrorMessage(err) || "Nao foi possivel apagar a conversa.", "error");
-    }
+    void deleteConversation(conversation);
   }
 
-  async function deleteAll() {
+  function handleDeleteAll() {
     setConfirmDeleteAll(false);
-    try {
-      await chatApi.deleteAllConversations();
-      newConversation();
-      setConversations([]);
-      showToast("Historico apagado.");
-    } catch (err: any) {
-      showToast(extractErrorMessage(err) || "Nao foi possivel apagar o historico.", "error");
-    }
+    void deleteAllConversations();
   }
 
   if (accessLoading) return <PageLoading />;
@@ -173,7 +92,7 @@ export default function ChatPage() {
   return (
     <div className="chat-page">
       <aside className={`chat-sidebar ${listOpen ? "chat-sidebar-open" : ""}`} aria-label="Conversas">
-        <button type="button" className="btn btn-primary" onClick={newConversation}>
+        <button type="button" className="btn btn-primary" onClick={handleNew}>
           Nova conversa
         </button>
         <ul className="chat-conversations">
@@ -182,7 +101,7 @@ export default function ChatPage() {
               key={conversation.id}
               className={`chat-conversation ${conversation.id === activeId ? "chat-conversation-active" : ""}`}
             >
-              <button type="button" className="chat-conversation-open" onClick={() => openConversation(conversation)}>
+              <button type="button" className="chat-conversation-open" onClick={() => handleOpen(conversation)}>
                 {conversation.title}
               </button>
               <button
@@ -257,7 +176,7 @@ export default function ChatPage() {
           title="Apagar conversa"
           message={`Apagar a conversa "${confirmDelete.title}"? Isso nao pode ser desfeito.`}
           confirmLabel="Apagar"
-          onConfirm={() => deleteOne(confirmDelete)}
+          onConfirm={() => handleDeleteOne(confirmDelete)}
           onCancel={() => setConfirmDelete(null)}
         />
       )}
@@ -266,7 +185,7 @@ export default function ChatPage() {
           title="Apagar todo o historico"
           message="Apagar todas as suas conversas do chat de IA? Isso nao pode ser desfeito."
           confirmLabel="Apagar tudo"
-          onConfirm={deleteAll}
+          onConfirm={handleDeleteAll}
           onCancel={() => setConfirmDeleteAll(false)}
         />
       )}
