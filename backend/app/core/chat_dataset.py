@@ -59,6 +59,7 @@ class Eligibility:
 class SchemaColumn:
     name: str
     data_type: Optional[str]
+    distinct: Optional[int] = None  # quantos valores diferentes a coluna tem (so a contagem, nunca os valores)
 
 
 @dataclass(frozen=True)
@@ -201,16 +202,48 @@ def _schema_from_info(table_rows: list[dict], column_rows: list[dict], measure_r
     return DatasetSchema(tables=tuple(tables))
 
 
+def _cardinalities(rows: list[dict]) -> dict[tuple[str, str], int]:
+    """Quantidade de valores diferentes por coluna, vinda do COLUMNSTATISTICS(). So a coluna Cardinality e
+    lida: Min e Max de uma coluna de texto seriam valores reais (nomes de pessoas) indo para o prompt."""
+    result: dict[tuple[str, str], int] = {}
+    for row in rows:
+        table = _field(row, "Table Name")
+        column = _field(row, "Column Name")
+        count = _field(row, "Cardinality")
+        if table and column and isinstance(count, (int, float)) and not isinstance(count, bool):
+            result[(table, column)] = int(count)
+    return result
+
+
+def _with_cardinality(schema: DatasetSchema, cardinalities: dict[tuple[str, str], int]) -> DatasetSchema:
+    if not cardinalities:
+        return schema
+    tables = tuple(
+        SchemaTable(
+            name=table.name,
+            columns=tuple(
+                SchemaColumn(c.name, c.data_type, cardinalities.get((table.name, c.name), c.distinct)) for c in table.columns
+            ),
+            measures=table.measures,
+        )
+        for table in schema.tables
+    )
+    return DatasetSchema(tables=tables)
+
+
 def _schema_from_statistics(rows: list[dict]) -> DatasetSchema:
     """Alternativa quando as funcoes INFO nao funcionam: COLUMNSTATISTICS() lista tabela e coluna.
     Nao traz medidas nem tipos, e inclui colunas ocultas; por isso so e usada como segunda opcao."""
+    cardinalities = _cardinalities(rows)
     by_table: dict[str, list[SchemaColumn]] = {}
     for row in rows:
         table = _field(row, "Table Name")
         column = _field(row, "Column Name")
         if not table or not column or _is_auto_table(table) or column.startswith("RowNumber-"):
             continue
-        by_table.setdefault(table, []).append(SchemaColumn(name=column, data_type=None))
+        by_table.setdefault(table, []).append(
+            SchemaColumn(name=column, data_type=None, distinct=cardinalities.get((table, column)))
+        )
     return DatasetSchema(
         tables=tuple(SchemaTable(name=name, columns=tuple(cols), measures=()) for name, cols in by_table.items())
     )
@@ -224,6 +257,12 @@ def _read_schema(connection, report) -> DatasetSchema:
 
     try:
         schema = _schema_from_info(run("EVALUATE INFO.TABLES()"), run("EVALUATE INFO.COLUMNS()"), run("EVALUATE INFO.MEASURES()"))
+        # A contagem de valores diferentes ajuda a IA a separar uma dimensao (estado, filial) de uma coluna de
+        # nomes. Se nao der para ler, o chat funciona sem ela.
+        try:
+            schema = _with_cardinality(schema, _cardinalities(run("EVALUATE COLUMNSTATISTICS()")))
+        except (DaxQueryError, PowerBIError):
+            pass
     except DaxQueryError:
         schema = _schema_from_statistics(run("EVALUATE COLUMNSTATISTICS()"))
     if not schema.tables:
@@ -258,6 +297,17 @@ def _dax_measure(name: str) -> str:
     return f"[{name.replace(']', ']]')}]"
 
 
+def _column_label(table: str, column: SchemaColumn) -> str:
+    """Coluna na sintaxe DAX, com o tipo e, nas de texto, quantos valores diferentes tem: e o que separa
+    uma dimensao (poucos valores) de um identificador ou nome (centenas ou milhares)."""
+    notes = []
+    if column.data_type:
+        notes.append(column.data_type)
+    if column.distinct is not None and column.data_type in (None, "texto"):
+        notes.append(f"{column.distinct} valores")
+    return _dax_column(table, column.name) + (f" ({', '.join(notes)})" if notes else "")
+
+
 def format_schema_for_prompt(schema: DatasetSchema, max_chars: int = MAX_SCHEMA_CHARS) -> str:
     """Esquema em texto compacto, ja com a sintaxe DAX de cada nome, para a IA copiar sem errar.
     Corta por tamanho e avisa o que ficou de fora."""
@@ -268,9 +318,7 @@ def format_schema_for_prompt(schema: DatasetSchema, max_chars: int = MAX_SCHEMA_
         shown = table.columns[:MAX_COLUMNS_PER_TABLE]
         lines = [f"Tabela {_dax_table(table.name)}"]
         if shown:
-            parts = [
-                f"{_dax_column(table.name, c.name)}" + (f" ({c.data_type})" if c.data_type else "") for c in shown
-            ]
+            parts = [_column_label(table.name, c) for c in shown]
             extra = len(table.columns) - len(shown)
             suffix = f"; (+{extra} colunas omitidas)" if extra > 0 else ""
             lines.append("  Colunas: " + "; ".join(parts) + suffix)

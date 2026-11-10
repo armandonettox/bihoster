@@ -488,6 +488,48 @@ class TestResultadoVazio:
         assert resposta.reply == "Sem dados." and resposta.table is NULO and resposta.dax == "EVALUATE a"
 
 
+MUITAS = ChatQueryResult(columns=["unidade", "[Vidas]"], rows=[{"unidade": "x", "[Vidas]": 1}], total_rows=1377, truncated=True)
+POUCAS = ChatQueryResult(
+    columns=["estado", "[Vidas]"], rows=[{"estado": "ES", "[Vidas]": 9648}, {"estado": "CE", "[Vidas]": 4634}], total_rows=2, truncated=False
+)
+
+
+class TestLinhasDemais:
+    def test_resultado_cortado_volta_para_a_ia_com_o_total_e_a_segunda_consulta_vale(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [MUITAS, POUCAS]
+        llm = _llm(monkeypatch, _json(dax="EVALUATE por_unidade"), _json(dax="EVALUATE por_estado"), "ES tem 9.648.")
+
+        resposta = _perguntar(cenario, "Vidas por filial?")
+
+        assert resposta.reply == "ES tem 9.648." and resposta.dax == "EVALUATE por_estado" and resposta.table is POUCAS
+        assert pbi.consultas == ["EVALUATE por_unidade", "EVALUATE por_estado"]
+        aviso = llm.conversa(1)[-1]["content"]
+        assert "1377 linhas" in aviso and "limite de 100" in aviso
+
+    def test_se_a_ia_explica_que_nenhuma_coluna_serve_vale_a_explicacao_e_nao_as_linhas(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [MUITAS]
+        _llm(monkeypatch, _json(dax="EVALUATE por_unidade"), _json(reply="Nao ha coluna de filial neste relatorio."))
+
+        resposta = _perguntar(cenario, "Vidas por filial?")
+
+        assert resposta.reply == "Nao ha coluna de filial neste relatorio." and resposta.table is None
+
+    def test_se_a_ia_desiste_sem_texto_vale_o_primeiro_resultado_cortado(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [MUITAS]
+        _llm(monkeypatch, _json(dax="EVALUATE por_unidade"), _json(reply=""), "Parcial.")
+
+        resposta = _perguntar(cenario, "Vidas por filial?")
+
+        assert resposta.reply == "Parcial." and resposta.table is MUITAS
+
+    def test_o_prompt_orienta_a_agrupar_por_colunas_com_poucos_valores(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "Total?")
+
+        assert "poucos valores" in llm.system(0) and "identificadores" in llm.system(0)
+
+
 class TestBloqueios:
     def test_relatorio_com_rls_responde_o_motivo_sem_chamar_a_ia(self, cenario, pbi, monkeypatch):
         pbi.esquema = ChatDataError(chat_dataset.REASON_RLS)
@@ -717,9 +759,13 @@ class TestProtecaoDosDados:
 
     def test_corte_do_power_bi_passa_adiante(self, cenario, pbi, monkeypatch):
         resultado = ChatQueryResult(columns=["[N]"], rows=[{"[N]": 1}], total_rows=500, truncated=True)
+        # Resultado cortado ganha uma nova tentativa; aqui a segunda consulta tambem vem cortada
+        pbi.resultados = [resultado, resultado]
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), _json(dax="EVALUATE y"), "ok")
 
-        conteudo = self._final(cenario, pbi, monkeypatch, resultado)
+        _perguntar(cenario, "Total?")
 
+        conteudo = llm.conversa(2)[0]["content"]
         assert '"cortado": true' in conteudo and '"total_linhas_no_resultado": 500' in conteudo
 
     def test_valores_como_data_sao_serializados(self, cenario, pbi, monkeypatch):

@@ -182,6 +182,38 @@ class TestEsquema:
 
         assert (len(esquema.tables), esquema.column_count, esquema.measure_count) == (2, 4, 2)
 
+    def test_guarda_quantos_valores_diferentes_cada_coluna_tem(self, pbi):
+        _respostas_info(pbi)
+        pbi.respostas["COLUMNSTATISTICS"] = [
+            {"[Table Name]": "Vendas", "[Column Name]": "Cliente", "[Cardinality]": 1377, "[Min]": "ANA", "[Max]": "ZE"},
+            {"[Table Name]": "Vendas", "[Column Name]": "Valor", "[Cardinality]": 50},
+            {"[Table Name]": "Vendas", "[Column Name]": "Data", "[Cardinality]": "abc"},
+        ]
+
+        colunas = {c.name: c.distinct for c in chat_dataset.get_dataset_schema(CONEXAO, RELATORIO).tables[0].columns}
+
+        assert colunas == {"Data": None, "Valor": 50, "Cliente": 1377, "Sem tipo": None}
+
+    @pytest.mark.parametrize("falha", [DaxQueryError("nao suportado"), PowerBIError("HTTP 500")])
+    def test_sem_a_contagem_o_esquema_sai_igual(self, pbi, falha):
+        _respostas_info(pbi)
+        pbi.respostas["COLUMNSTATISTICS"] = falha
+
+        esquema = chat_dataset.get_dataset_schema(CONEXAO, RELATORIO)
+
+        assert [c.name for c in esquema.tables[0].columns] == ["Data", "Valor", "Cliente", "Sem tipo"]
+        assert all(c.distinct is None for c in esquema.tables[0].columns)
+
+    def test_a_alternativa_columnstatistics_tambem_traz_a_contagem(self, pbi):
+        pbi.respostas = {
+            "INFO.TABLES": DaxQueryError("INFO nao suportada"),
+            "COLUMNSTATISTICS": [{"[Table Name]": "Clientes", "[Column Name]": "Nome", "[Cardinality]": 900}],
+        }
+
+        coluna = chat_dataset.get_dataset_schema(CONEXAO, RELATORIO).tables[0].columns[0]
+
+        assert (coluna.name, coluna.distinct) == ("Nome", 900)
+
     def test_fica_em_cache(self, pbi):
         _respostas_info(pbi)
 
@@ -250,6 +282,29 @@ class TestEsquemaEmTexto:
             "Tabela 'Vendas'\n"
             "  Colunas: 'Vendas'[Valor] (decimal); 'Vendas'[Cliente]\n"
             "  Medidas: [Total] - Soma; [Ticket]"
+        )
+
+    def test_colunas_de_texto_mostram_quantos_valores_tem_e_as_outras_nao(self):
+        texto = chat_dataset.format_schema_for_prompt(
+            _esquema(
+                SchemaTable(
+                    "Carteira",
+                    (
+                        SchemaColumn("unidade", "texto", 1377),
+                        SchemaColumn("estado", "texto", 5),
+                        SchemaColumn("valor", "decimal", 900),
+                        SchemaColumn("sem_tipo", None, 12),
+                        SchemaColumn("sem_contagem", "texto"),
+                    ),
+                    (),
+                )
+            )
+        )
+
+        assert texto == (
+            "Tabela 'Carteira'\n"
+            "  Colunas: 'Carteira'[unidade] (texto, 1377 valores); 'Carteira'[estado] (texto, 5 valores); "
+            "'Carteira'[valor] (decimal); 'Carteira'[sem_tipo] (12 valores); 'Carteira'[sem_contagem] (texto)"
         )
 
     def test_escapa_apostrofo_e_colchete_fechando(self):
