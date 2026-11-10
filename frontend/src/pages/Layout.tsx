@@ -8,6 +8,8 @@ import CollectionList from "../components/CollectionList";
 import SearchBar from "../components/SearchBar";
 import AccountMenu from "../components/AccountMenu";
 import ChatNavLink from "../components/ChatNavLink";
+import ChatPanel from "../components/ChatPanel";
+import ChatPanelToggle from "../components/ChatPanelToggle";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import { assetUrl } from "../api/client";
 import { safeStorage } from "../utils/safeStorage";
@@ -84,6 +86,7 @@ export default function Layout() {
           <SearchBar />
         </div>
         <div className="flex-row gap-sm">
+          <ChatPanelToggle />
           <button
             className="btn btn-ghost"
             onClick={toggleTheme}
@@ -151,6 +154,7 @@ export default function Layout() {
             <Outlet />
           </div>
         </main>
+        <ChatPanel />
       </div>
     </div>
   );

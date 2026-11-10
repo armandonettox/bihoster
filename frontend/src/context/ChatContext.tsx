@@ -18,6 +18,8 @@ interface ChatContextValue {
   input: string;
   setInput: (value: string) => void;
   sending: boolean;
+  panelOpen: boolean;
+  setPanelOpen: (open: boolean) => void;
   loadConversations: () => Promise<void>;
   sendMessage: () => Promise<void>;
   newConversation: () => void;
@@ -39,6 +41,7 @@ export function ChatProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<ChatItem[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [panelOpen, setPanelOpen] = useState(false);
   // Impede dois envios ao mesmo tempo mesmo antes de o estado "sending" chegar a tela
   const sendingRef = useRef(false);
 
@@ -149,6 +152,8 @@ export function ChatProvider({ children }: { children: ReactNode }) {
         input,
         setInput,
         sending,
+        panelOpen,
+        setPanelOpen,
         loadConversations,
         sendMessage,
         newConversation,

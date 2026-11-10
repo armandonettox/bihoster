@@ -2685,6 +2685,45 @@ table.table tr:last-child td {
   max-height: 160px;
 }
 
+/* Painel lateral do chat: metade da tela ao lado da pagina aberta */
+.chat-panel {
+  display: flex;
+  flex: 0 0 50%;
+  flex-direction: column;
+  min-width: 340px;
+  min-height: 0;
+  background: var(--color-surface);
+  border-left: 1px solid var(--color-border);
+}
+
+.chat-panel-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.chat-panel-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.chat-panel-icon {
+  display: inline-flex;
+  padding: 6px;
+}
+
+.chat-panel-icon .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.chat-panel-bar {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.chat-panel-select {
+  width: 100%;
+}
+
 .usage-summary {
   margin: 12px 0;
   padding-left: 18px;
@@ -2712,5 +2751,14 @@ table.table tr:last-child td {
 
   .chat-list-toggle {
     display: inline-flex;
+  }
+
+  /* Em celular meia tela e pequena demais: o painel cobre a tela toda */
+  .chat-panel {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    min-width: 0;
+    border-left: none;
   }
 }

@@ -1,11 +1,9 @@
-import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useState } from "react";
 import type { Conversation } from "../api/aiChat";
 import { useChat } from "../context/ChatContext";
-import ChatMessageView from "../components/ChatMessageView";
+import ChatThread from "../components/ChatThread";
 import ConfirmDialog from "../components/ConfirmDialog";
 import PageLoading from "../components/PageLoading";
-
-const MAX_MESSAGE_CHARS = 4000;
 
 /** Chat global de IA: pergunta sobre os dados dos relatorios que a pessoa pode ver. As conversas ficam
  * no historico dela (so ela ve) e podem ser apagadas a qualquer hora. O estado da conversa fica no
@@ -16,12 +14,7 @@ export default function ChatPage() {
     accessLoading,
     conversations,
     activeId,
-    items,
-    input,
-    setInput,
-    sending,
     loadConversations,
-    sendMessage,
     newConversation,
     openConversation,
     deleteConversation,
@@ -31,32 +24,12 @@ export default function ChatPage() {
   const [listOpen, setListOpen] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<Conversation | null>(null);
   const [confirmDeleteAll, setConfirmDeleteAll] = useState(false);
-  const messagesRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (accessLoading || !canUse) return;
     void loadConversations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canUse, accessLoading]);
-
-  // Mantem a ultima mensagem a vista
-  useEffect(() => {
-    const el = messagesRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
-  }, [items, sending]);
-
-  function handleSend(event?: FormEvent) {
-    event?.preventDefault();
-    void sendMessage();
-  }
-
-  function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter envia; Shift+Enter quebra a linha
-    if (event.key === "Enter" && !event.shiftKey) {
-      event.preventDefault();
-      void sendMessage();
-    }
-  }
 
   function handleNew() {
     newConversation();
@@ -134,41 +107,7 @@ export default function ChatPage() {
           </button>
         </div>
 
-        <div className="chat-messages" ref={messagesRef} aria-live="polite">
-          {items.length === 0 && !sending && (
-            <div className="chat-empty">
-              <h2>Pergunte sobre os dados dos seus relatorios</h2>
-              <p>
-                Eu respondo so com base nos relatorios que voce pode ver. Cada resposta mostra de qual relatorio veio e a
-                consulta usada. Relatorios com seguranca por linha (RLS) ainda nao sao consultados.
-              </p>
-            </div>
-          )}
-          {items.map((item) => (
-            <ChatMessageView key={item.key} item={item} />
-          ))}
-          {sending && (
-            <div className="chat-message chat-message-assistant">
-              <div className="chat-bubble chat-pending">Pensando...</div>
-            </div>
-          )}
-        </div>
-
-        <form className="chat-form" onSubmit={handleSend}>
-          <textarea
-            className="input chat-input"
-            aria-label="Sua pergunta"
-            rows={2}
-            maxLength={MAX_MESSAGE_CHARS}
-            placeholder="Escreva sua pergunta. Enter envia, Shift+Enter quebra a linha."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-          />
-          <button type="submit" className="btn btn-primary" disabled={sending || !input.trim()}>
-            Enviar
-          </button>
-        </form>
+        <ChatThread />
       </section>
 
       {confirmDelete && (
