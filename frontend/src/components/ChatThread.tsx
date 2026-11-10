@@ -1,6 +1,7 @@
 import { useEffect, useRef, type FormEvent, type KeyboardEvent } from "react";
 import { useChat } from "../context/ChatContext";
 import ChatMessageView from "./ChatMessageView";
+import ChatPending from "./ChatPending";
 
 const MAX_MESSAGE_CHARS = 4000;
 
@@ -44,11 +45,7 @@ export default function ChatThread() {
         {items.map((item) => (
           <ChatMessageView key={item.key} item={item} />
         ))}
-        {sending && (
-          <div className="chat-message chat-message-assistant">
-            <div className="chat-bubble chat-pending">Pensando...</div>
-          </div>
-        )}
+        {sending && <ChatPending />}
       </div>
 
       <form className="chat-form" onSubmit={handleSubmit}>

@@ -188,7 +188,7 @@ describe("ChatPage - enviar", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
-  it("mostra Pensando e trava o envio enquanto espera a resposta", async () => {
+  it("mostra o indicador de espera e trava o envio enquanto espera a resposta", async () => {
     let responder: (value: ChatResponse) => void = () => {};
     send.mockReturnValue(new Promise((resolve) => (responder = resolve)));
     await abrir();
@@ -196,14 +196,14 @@ describe("ChatPage - enviar", () => {
 
     fireEvent.click(botaoEnviar());
 
-    expect(await screen.findByText("Pensando...")).toBeTruthy();
+    expect(await screen.findByText("Escolhendo o relatorio")).toBeTruthy();
     escrever("outra coisa");
     expect(botaoEnviar().disabled).toBe(true);
     fireEvent.keyDown(caixa(), { key: "Enter" });
     expect(send).toHaveBeenCalledTimes(1);
 
     responder(RESPOSTA);
-    await waitFor(() => expect(screen.queryByText("Pensando...")).toBeNull());
+    await waitFor(() => expect(screen.queryByText("Escolhendo o relatorio")).toBeNull());
   });
 
   it("mostra o motivo da falha como aviso e devolve o texto para a caixa", async () => {
