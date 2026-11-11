@@ -27,7 +27,7 @@ const SUMMARY: AuditSummary = {
 };
 
 function widget(over: Partial<DashboardWidget>): DashboardWidget {
-  return { id: "w", type: "stat", source: "events", title: null, x: 0, y: 0, w: 4, h: 2, ...over };
+  return { id: "w", type: "stat", source: "events", title: null, color: null, query: null, x: 0, y: 0, w: 4, h: 2, ...over };
 }
 
 const show = (w: DashboardWidget, summary = SUMMARY, editing = false) =>

@@ -13,6 +13,7 @@ export const MIN_SIZE: Record<string, { w: number; h: number }> = {
   bars: { w: 5, h: 4 },
   hours: { w: 6, h: 4 },
   donut: { w: 6, h: 4 },
+  table: { w: 5, h: 4 },
 };
 
 /** Posicao e tamanho que a grade devolveu, aplicados de volta nos visuais. */

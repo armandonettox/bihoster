@@ -148,3 +148,85 @@ def test_salvar_e_restaurar_ficam_na_auditoria(client):
     assert {i["action"] for i in items} == {"update_dashboard", "reset_dashboard"}
     assert {i["action_label"] for i in items} == {"Painel de analiticos alterado", "Painel de analiticos restaurado"}
     assert {i["entity_label"] for i in items} == {"Painel"}
+
+
+# --- visuais personalizados (medida + agrupamento), cor e tabela ---
+
+
+def _custom(id_="c1", type_="bars", metric="events", group_by="action", limit=8, color=None, title=None, **pos) -> dict:
+    base = {"x": 0, "y": 0, "w": 10, "h": 7}
+    base.update(pos)
+    return {
+        "id": id_,
+        "type": type_,
+        "source": "custom",
+        "title": title,
+        "color": color,
+        "query": {"metric": metric, "group_by": group_by, "limit": limit},
+        **base,
+    }
+
+
+def test_salva_visuais_personalizados_de_todos_os_tipos_com_cor_e_consulta(client):
+    admin = _admin(client)
+    widgets = [
+        _custom("a", "stat", "logins", "none", x=0, y=0, w=4, h=2, color="danger"),
+        _custom("b", "line", "events", "day", x=0, y=2, w=20, h=6, title="Eventos"),
+        _custom("c", "bars", "people", "collection", x=0, y=8, color="accent"),
+        _custom("d", "donut", "logins", "login_method", x=10, y=8),
+        _custom("e", "table", "report_opens", "report", limit=15, x=0, y=15),
+        _widget("f", "hours", "by_hour", x=10, y=15, w=10, h=6),
+    ]
+
+    resp = client.put("/audit/dashboard", json={"widgets": widgets}, headers=admin)
+
+    assert resp.status_code == 200, resp.text
+    saved = {w["id"]: w for w in client.get("/audit/dashboard", headers=admin).json()["widgets"]}
+    assert saved["a"]["color"] == "danger" and saved["a"]["query"] == {"metric": "logins", "group_by": "none", "limit": 8}
+    assert saved["e"]["query"]["limit"] == 15 and saved["e"]["type"] == "table"
+    assert saved["f"]["query"] is None and saved["f"]["color"] is None  # visual padrao continua como era
+
+
+def test_visuais_padrao_aceitam_cor_e_titulo(client):
+    admin = _admin(client)
+
+    resp = client.put(
+        "/audit/dashboard", json={"widgets": [{**_widget("a", "stat", "events"), "color": "accent", "title": "Total"}]}, headers=admin
+    )
+
+    assert resp.status_code == 200
+    assert resp.json()["widgets"][0]["color"] == "accent"
+
+
+def test_visual_personalizado_invalido_e_recusado(client):
+    admin = _admin(client)
+    invalidos = {
+        "personalizado sem consulta": [{**_custom(), "query": None}],
+        "visual padrao com consulta": [{**_widget(), "query": {"metric": "events", "group_by": "none"}}],
+        "cartao agrupado": [_custom("a", "stat", "events", "action", w=4, h=2)],
+        "barras sem agrupamento": [_custom("a", "bars", "events", "none")],
+        "linha agrupada por categoria": [_custom("a", "line", "events", "action")],
+        "rosca por dia": [_custom("a", "donut", "events", "day")],
+        "tabela sem agrupamento": [_custom("a", "table", "events", "none")],
+        "metodo de login com outra medida": [_custom("a", "bars", "events", "login_method")],
+        "medida desconhecida": [_custom("a", "bars", "inventada", "action")],
+        "agrupamento desconhecido": [_custom("a", "bars", "events", "inventado")],
+        "limite zero": [_custom("a", "bars", "events", "action", limit=0)],
+        "limite grande demais": [_custom("a", "bars", "events", "action", limit=51)],
+        "cor fora do tema": [_custom("a", "bars", color="rosa")],
+        "tabela com fonte padrao": [_widget("a", "table", "by_action")],
+        "horas personalizado": [{**_custom("a", "hours", "events", "hour")}],
+    }
+
+    for nome, widgets in invalidos.items():
+        assert client.put("/audit/dashboard", json={"widgets": widgets}, headers=admin).status_code == 422, nome
+
+    assert client.get("/audit/dashboard", headers=admin).json()["is_default"] is True
+
+
+def test_painel_padrao_continua_sem_consulta_nem_cor(client):
+    admin = _admin(client)
+
+    widgets = client.get("/audit/dashboard", headers=admin).json()["widgets"]
+
+    assert all(w["query"] is None and w["color"] is None for w in widgets)

@@ -8,6 +8,7 @@ const mocks = vi.hoisted(() => ({
   getDashboard: vi.fn(),
   save: vi.fn(),
   reset: vi.fn(),
+  query: vi.fn(),
   toast: vi.fn(),
   grid: null as null | { widgets: DashboardWidget[]; editing: boolean; onChange: (w: DashboardWidget[]) => void },
 }));
@@ -18,11 +19,18 @@ vi.mock("../../api/audit", async (importOriginal) => ({
   getDashboard: mocks.getDashboard,
   saveDashboard: mocks.save,
   resetDashboard: mocks.reset,
+  queryAudit: mocks.query,
 }));
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.toast }) }));
 // A grade tem teste proprio; aqui ela e trocada por uma peca que mostra o que recebeu e deixa mover um visual
 vi.mock("./dashboard/DashboardGrid", () => ({
-  default: (props: { widgets: DashboardWidget[]; editing: boolean; onChange: (w: DashboardWidget[]) => void }) => {
+  default: (props: {
+    widgets: DashboardWidget[];
+    editing: boolean;
+    onChange: (w: DashboardWidget[]) => void;
+    onEditWidget?: (id: string) => void;
+    onRemoveWidget?: (id: string) => void;
+  }) => {
     mocks.grid = props;
     return (
       <div data-testid="grid" data-editing={String(props.editing)}>
@@ -30,14 +38,20 @@ vi.mock("./dashboard/DashboardGrid", () => ({
           <span key={w.id}>{`${w.id}@${w.x},${w.y}`}</span>
         ))}
         <button onClick={() => props.onChange(props.widgets.map((w) => ({ ...w, x: w.x + 1 })))}>mover tudo</button>
+        {props.widgets.map((w) => (
+          <span key={`acoes-${w.id}`}>
+            <button onClick={() => props.onEditWidget?.(w.id)}>{`configurar ${w.id}`}</button>
+            <button onClick={() => props.onRemoveWidget?.(w.id)}>{`remover ${w.id}`}</button>
+          </span>
+        ))}
       </div>
     );
   },
 }));
 
 const WIDGETS: DashboardWidget[] = [
-  { id: "a", type: "stat", source: "events", title: null, x: 0, y: 0, w: 4, h: 2 },
-  { id: "b", type: "line", source: "by_day", title: null, x: 0, y: 2, w: 20, h: 6 },
+  { id: "a", type: "stat", source: "events", title: null, color: null, query: null, x: 0, y: 0, w: 4, h: 2 },
+  { id: "b", type: "line", source: "by_day", title: null, color: null, query: null, x: 0, y: 2, w: 20, h: 6 },
 ];
 
 const SUMMARY = {
@@ -61,6 +75,14 @@ beforeEach(() => {
   mocks.getDashboard.mockReset().mockResolvedValue(dashboard());
   mocks.save.mockReset();
   mocks.reset.mockReset();
+  mocks.query.mockReset().mockResolvedValue({
+    metric: "events",
+    metric_label: "Eventos",
+    group_by: "action",
+    rows: [{ key: "login", label: "Login", value: 5 }],
+    total: 5,
+    timezone: "UTC",
+  });
   mocks.toast.mockReset();
   mocks.grid = null;
 });

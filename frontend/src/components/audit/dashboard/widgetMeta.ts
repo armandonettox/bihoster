@@ -1,4 +1,5 @@
 import type { DashboardWidget } from "../../../api/audit";
+import { defaultTitle } from "./widgetCatalog";
 
 /** Icone, nome e destaque de cada cartao */
 export const STAT_META: Record<string, { icon: string; label: string; danger?: boolean }> = {
@@ -21,5 +22,8 @@ export const SOURCE_TITLES: Record<string, string> = {
 };
 
 export function widgetTitle(widget: DashboardWidget): string {
-  return widget.title || (widget.type === "stat" ? STAT_META[widget.source]?.label : SOURCE_TITLES[widget.source]) || widget.source;
+  if (widget.title) return widget.title;
+  // Visual personalizado sem titulo: "Eventos por acao"
+  if (widget.query) return defaultTitle(widget.query.metric, widget.query.group_by);
+  return (widget.type === "stat" ? STAT_META[widget.source]?.label : SOURCE_TITLES[widget.source]) || widget.source;
 }

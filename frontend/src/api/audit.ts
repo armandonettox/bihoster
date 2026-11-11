@@ -134,15 +134,40 @@ export function revertConflictOf(err: unknown): RevertConflict | null {
 
 // --- Painel de Analiticos (compartilhado, editavel) ---
 
-export type WidgetType = "stat" | "line" | "bars" | "hours" | "donut";
+export type WidgetType = "stat" | "line" | "bars" | "hours" | "donut" | "table";
+
+/** Cores do tema que um visual pode usar */
+export type WidgetColor = "primary" | "secondary" | "accent" | "danger" | "muted";
+
+export type Metric =
+  | "events"
+  | "people"
+  | "logins"
+  | "logins_blocked"
+  | "accounts_locked"
+  | "report_opens"
+  | "collection_visits"
+  | "changes";
+
+export type GroupBy = "none" | "day" | "hour" | "weekday" | "action" | "entity" | "user" | "collection" | "report" | "login_method";
+
+/** O que um visual personalizado conta (medida) e como reparte (agrupamento) */
+export interface WidgetQuery {
+  metric: Metric;
+  group_by: GroupBy;
+  limit: number;
+}
 
 /** Um visual do painel: o que mostrar (`type` e `source`) e onde fica na grade (x, y, w, h em celulas). */
 export interface DashboardWidget {
   id: string;
   type: WidgetType;
   /** Chave do resumo de /audit/summary: "events", "by_day", "top_users"... */
+  /** "custom" quando o visual foi montado pela pessoa (a consulta fica em `query`) */
   source: string;
   title: string | null;
+  color: WidgetColor | null;
+  query: WidgetQuery | null;
   x: number;
   y: number;
   w: number;
@@ -171,5 +196,24 @@ export async function saveDashboard(widgets: DashboardWidget[]): Promise<Dashboa
 
 export async function resetDashboard(): Promise<Dashboard> {
   const { data } = await api.delete("/audit/dashboard");
+  return data;
+}
+
+export interface AuditQueryResult {
+  metric: Metric;
+  metric_label: string;
+  group_by: GroupBy;
+  rows: { key: string; label: string; value: number }[];
+  /** A medida no periodo todo, sem o corte do "top N" */
+  total: number;
+  timezone: string;
+}
+
+/** Numero ou serie de um visual personalizado, com os mesmos filtros da tabela. */
+export async function queryAudit(filters: AuditFilters, query: WidgetQuery): Promise<AuditQueryResult> {
+  const { data } = await api.get("/audit/query", {
+    params: { ...filters, metric: query.metric, group_by: query.group_by, limit: query.limit },
+    paramsSerializer: REPEAT_PARAMS,
+  });
   return data;
 }

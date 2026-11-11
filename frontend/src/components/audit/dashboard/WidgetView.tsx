@@ -1,16 +1,121 @@
-import type { AuditSummary, DashboardWidget } from "../../../api/audit";
+import { useEffect, useState } from "react";
+import {
+  queryAudit,
+  type AuditFilters,
+  type AuditQueryResult,
+  type AuditSummary,
+  type DashboardWidget,
+  type WidgetQuery,
+} from "../../../api/audit";
+import { shortDate } from "../../../utils/auditPeriod";
 import { BarList, Donut, HourChart, LineChart } from "../charts";
 import { STAT_META, widgetTitle } from "./widgetMeta";
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("pt-BR")} ${n === 1 ? one : many}`;
 
-function hintFor(widget: DashboardWidget, summary: AuditSummary): string | undefined {
-  if (widget.source === "by_hour") return `Eventos por hora do dia (${summary.timezone})`;
+// Cores das fatias da rosca: as do tema primeiro, depois duas fixas para quando ha mais categorias
+const DONUT_COLORS = [
+  "var(--color-primary-text)",
+  "var(--color-accent)",
+  "var(--color-secondary)",
+  "var(--color-danger)",
+  "#e0a030",
+  "#8e6bbf",
+  "var(--color-text-muted)",
+  "#4da3a0",
+];
+
+function hintFor(widget: DashboardWidget, summary: AuditSummary | null): string | undefined {
+  if (widget.source === "by_hour" && summary) return `Eventos por hora do dia (${summary.timezone})`;
   if (widget.source === "top_reports") return "Cada abertura conta uma vez a cada 10 minutos por pessoa";
   return undefined;
 }
 
-function Body({ widget, summary }: { widget: DashboardWidget; summary: AuditSummary }) {
+type QueryState =
+  | { status: "none" }
+  | { status: "loading" }
+  | { status: "failed" }
+  | { status: "ready"; data: AuditQueryResult };
+
+/** Busca o numero ou a serie de um visual personalizado; busca de novo quando a consulta ou os filtros mudam. */
+function useQueryResult(query: WidgetQuery | null, filters: AuditFilters): QueryState {
+  const key = query ? JSON.stringify([query, filters]) : "";
+  const [result, setResult] = useState<{ key: string; data?: AuditQueryResult; failed?: boolean } | null>(null);
+
+  useEffect(() => {
+    if (!query) return;
+    let cancelled = false;
+    queryAudit(filters, query)
+      .then((data) => !cancelled && setResult({ key, data }))
+      .catch(() => !cancelled && setResult({ key, failed: true }));
+    return () => {
+      cancelled = true;
+    };
+    // key ja resume a consulta e os filtros
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [key]);
+
+  if (!query) return { status: "none" };
+  if (result?.key !== key) return { status: "loading" };
+  if (result.failed || !result.data) return { status: "failed" };
+  return { status: "ready", data: result.data };
+}
+
+function CustomBody({ widget, state }: { widget: DashboardWidget; state: QueryState }) {
+  if (state.status === "loading") return <p className="audit-empty">Carregando...</p>;
+  if (state.status !== "ready") return <p className="audit-empty" role="alert">Nao foi possivel carregar este visual.</p>;
+
+  const { rows, metric_label, group_by } = state.data;
+  if (rows.length === 0 || rows.every((r) => r.value === 0) && widget.type !== "line") {
+    return <p className="audit-empty">Sem dados.</p>;
+  }
+
+  const unit = (n: number) => n.toLocaleString("pt-BR");
+  switch (widget.type) {
+    case "line":
+      return (
+        <LineChart
+          data={rows.map((r) => ({ label: group_by === "day" ? r.key : r.label, value: r.value }))}
+          formatLabel={group_by === "day" ? shortDate : (label) => label}
+          describe={(n) => `${unit(n)} ${metric_label.toLowerCase()}`}
+        />
+      );
+    case "bars":
+      return <BarList items={rows.map((r) => ({ key: r.key, label: r.label, value: r.value }))} unit={unit} />;
+    case "donut":
+      return (
+        <Donut
+          centerLabel={metric_label.toLowerCase()}
+          emptyText="Sem dados."
+          parts={rows.map((r, i) => ({ key: r.key, label: r.label, value: r.value, color: DONUT_COLORS[i % DONUT_COLORS.length] }))}
+        />
+      );
+    case "table":
+      return (
+        <table className="table audit-widget-table">
+          <thead>
+            <tr>
+              <th>{group_by === "day" ? "Dia" : "Item"}</th>
+              <th>{metric_label}</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr key={r.key}>
+                <td>{group_by === "day" ? shortDate(r.key) : r.label}</td>
+                <td>{unit(r.value)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      );
+    default:
+      return <p className="audit-empty">Este visual nao e conhecido nesta versao.</p>;
+  }
+}
+
+function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: AuditSummary | null }) {
+  if (!summary) return <p className="audit-empty">Sem dados.</p>;
   switch (widget.source) {
     case "by_day":
       return (
@@ -80,42 +185,67 @@ function Body({ widget, summary }: { widget: DashboardWidget; summary: AuditSumm
 
 interface Props {
   widget: DashboardWidget;
-  summary: AuditSummary;
-  /** No modo de edicao o cabecalho vira a alca de arrastar */
+  /** Resumo da auditoria: alimenta os visuais padrao. Os personalizados buscam o proprio dado. */
+  summary: AuditSummary | null;
+  /** Filtros da pagina, que valem tambem para os visuais personalizados */
+  filters?: AuditFilters;
+  /** No modo de edicao o cabecalho vira a alca de arrastar e aparecem os botoes de configurar e remover */
   editing: boolean;
+  onEdit?: () => void;
+  onRemove?: () => void;
 }
 
-/** Um visual do painel, desenhado a partir do resumo da auditoria. Ocupa todo o espaco que a grade deu. */
-export default function WidgetView({ widget, summary, editing }: Props) {
+/** Um visual do painel. Ocupa todo o espaco que a grade deu. */
+export default function WidgetView({ widget, summary, filters = {}, editing, onEdit, onRemove }: Props) {
+  const state = useQueryResult(widget.query, filters);
   const dragClass = editing ? "dash-drag" : "";
+  const colorClass = widget.color ? `dash-color-${widget.color}` : "";
+  const title = widgetTitle(widget);
+
+  const actions = editing ? (
+    <div className="dash-actions">
+      <button type="button" className="dash-action" aria-label={`Configurar ${title}`} title="Configurar" onClick={onEdit}>
+        <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+      </button>
+      <button type="button" className="dash-action" aria-label={`Remover ${title}`} title="Remover" onClick={onRemove}>
+        <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+      </button>
+    </div>
+  ) : null;
 
   if (widget.type === "stat") {
     const meta = STAT_META[widget.source];
-    const value = (summary.totals as unknown as Record<string, number>)[widget.source] ?? 0;
-    const danger = meta?.danger && value > 0;
+    const value = widget.query
+      ? state.status === "ready"
+        ? state.data.total
+        : null
+      : ((summary?.totals as unknown as Record<string, number> | undefined)?.[widget.source] ?? 0);
+    const danger = meta?.danger && (value ?? 0) > 0;
     return (
-      <div className={`audit-stat dash-fill ${danger ? "audit-stat-danger" : ""} ${dragClass}`}>
+      <div className={`audit-stat dash-fill ${danger ? "audit-stat-danger" : ""} ${colorClass} ${dragClass}`}>
         <span className="material-symbols-outlined audit-stat-icon" aria-hidden="true">{meta?.icon ?? "analytics"}</span>
         <div>
-          <div className="audit-stat-value">{value.toLocaleString("pt-BR")}</div>
-          <div className="audit-stat-label">{widgetTitle(widget)}</div>
+          <div className="audit-stat-value">
+            {value === null ? (state.status === "failed" ? "--" : "...") : value.toLocaleString("pt-BR")}
+          </div>
+          <div className="audit-stat-label">{title}</div>
         </div>
+        {actions}
       </div>
     );
   }
 
   const hint = hintFor(widget, summary);
   return (
-    <section className="audit-panel dash-fill">
+    <section className={`audit-panel dash-fill ${colorClass}`}>
       <header className={`dash-header ${dragClass}`}>
-        {editing && (
-          <span className="material-symbols-outlined dash-grip" aria-hidden="true">drag_indicator</span>
-        )}
-        <h3>{widgetTitle(widget)}</h3>
+        {editing && <span className="material-symbols-outlined dash-grip" aria-hidden="true">drag_indicator</span>}
+        <h3>{title}</h3>
+        {actions}
       </header>
       {hint && <p className="audit-panel-hint">{hint}</p>}
       <div className="dash-body">
-        <Body widget={widget} summary={summary} />
+        {widget.query ? <CustomBody widget={widget} state={state} /> : <SummaryBody widget={widget} summary={summary} />}
       </div>
     </section>
   );

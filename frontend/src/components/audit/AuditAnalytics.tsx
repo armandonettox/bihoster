@@ -14,6 +14,8 @@ import { useToast } from "../../context/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import { SkeletonList } from "../Skeleton";
 import DashboardGrid from "./dashboard/DashboardGrid";
+import { DEFAULT_SIZE } from "./dashboard/widgetCatalog";
+import WidgetEditor from "./dashboard/WidgetEditor";
 
 type Result = { key: string; data?: AuditSummary; failed?: boolean };
 
@@ -23,8 +25,11 @@ interface Props {
   canEdit?: boolean;
 }
 
-// So posicao e tamanho entram na comparacao: e o que o modo de edicao muda
-const positions = (widgets: DashboardWidget[]) => JSON.stringify(widgets.map((w) => [w.id, w.x, w.y, w.w, w.h]));
+/** Tudo que o modo de edicao muda (posicao, tamanho, visuais novos ou removidos, titulo, cor, consulta) */
+const snapshot = (widgets: DashboardWidget[]) => JSON.stringify(widgets);
+
+/** Primeira linha livre abaixo de todos os visuais, para o visual novo entrar no fim do painel */
+const bottomOf = (widgets: DashboardWidget[]) => widgets.reduce((bottom, w) => Math.max(bottom, w.y + w.h), 0);
 
 /** Aba Analiticos: o painel de visuais (compartilhado, editavel) com os mesmos filtros da tabela. */
 export default function AuditAnalytics({ filters, canEdit = false }: Props) {
@@ -35,6 +40,8 @@ export default function AuditAnalytics({ filters, canEdit = false }: Props) {
   const [draft, setDraft] = useState<DashboardWidget[] | null>(null);
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState<"cancel" | "reset" | null>(null);
+  // Janela de visual aberta: sem widget e um visual novo; com widget, configura o existente
+  const [editor, setEditor] = useState<{ widget?: DashboardWidget } | null>(null);
   const requestKey = JSON.stringify(filters);
   const editing = draft !== null;
 
@@ -70,7 +77,18 @@ export default function AuditAnalytics({ filters, canEdit = false }: Props) {
   }
 
   const summary = result.data;
-  const dirty = draft !== null && positions(draft) !== positions(dashboard.widgets);
+  const dirty = draft !== null && snapshot(draft) !== snapshot(dashboard.widgets);
+
+  function applyEditor(widget: DashboardWidget) {
+    const current = draft ?? [];
+    if (editor?.widget) {
+      setDraft(current.map((w) => (w.id === widget.id ? widget : w)));
+    } else {
+      // Visual novo entra no fim do painel, na primeira coluna
+      setDraft([...current, { ...widget, x: 0, y: bottomOf(current), ...DEFAULT_SIZE[widget.type] }]);
+    }
+    setEditor(null);
+  }
 
   async function save() {
     if (!draft) return;
@@ -111,6 +129,10 @@ export default function AuditAnalytics({ filters, canEdit = false }: Props) {
               todos, e so muda depois de Salvar.
             </p>
             <div className="dash-toolbar-actions">
+              <button className="btn btn-ghost" disabled={saving} onClick={() => setEditor({})}>
+                <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">add_chart</span>
+                Adicionar visual
+              </button>
               <button className="btn btn-primary" disabled={saving || !dirty} onClick={save}>
                 {saving ? "Salvando..." : "Salvar"}
               </button>
@@ -142,13 +164,32 @@ export default function AuditAnalytics({ filters, canEdit = false }: Props) {
 
       {summary.totals.events === 0 && <p className="audit-empty">Nenhum evento nesse periodo e com esses filtros.</p>}
 
+      {(draft ?? dashboard.widgets).length === 0 && (
+        <p className="audit-empty">
+          O painel esta vazio. {editing ? "Use Adicionar visual para montar o primeiro." : "Quem edita o painel pode adicionar visuais."}
+        </p>
+      )}
+
       <DashboardGrid
         widgets={draft ?? dashboard.widgets}
         columns={dashboard.columns}
         summary={summary}
+        filters={filters}
         editing={editing}
         onChange={setDraft}
+        onEditWidget={(id) => setEditor({ widget: (draft ?? []).find((w) => w.id === id) })}
+        onRemoveWidget={(id) => setDraft((draft ?? []).filter((w) => w.id !== id))}
       />
+
+      {editor && (
+        <WidgetEditor
+          initial={editor.widget}
+          filters={filters}
+          summary={summary}
+          onSave={applyEditor}
+          onClose={() => setEditor(null)}
+        />
+      )}
 
       {confirm === "cancel" && (
         <ConfirmDialog

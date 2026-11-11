@@ -36,8 +36,8 @@ const SUMMARY = {
 } as AuditSummary;
 
 const WIDGETS: DashboardWidget[] = [
-  { id: "a", type: "stat", source: "events", title: null, x: 0, y: 0, w: 4, h: 2 },
-  { id: "b", type: "line", source: "by_day", title: "Linha", x: 0, y: 2, w: 20, h: 6 },
+  { id: "a", type: "stat", source: "events", title: null, color: null, query: null, x: 0, y: 0, w: 4, h: 2 },
+  { id: "b", type: "line", source: "by_day", title: "Linha", color: null, query: null, x: 0, y: 2, w: 20, h: 6 },
 ];
 
 beforeEach(() => {
@@ -84,7 +84,7 @@ describe("DashboardGrid", () => {
     expect(mocks.gridProps!.resizeConfig.enabled).toBe(false);
 
     render20(true);
-    expect(mocks.gridProps!.dragConfig).toEqual({ enabled: true, handle: ".dash-drag" });
+    expect(mocks.gridProps!.dragConfig).toEqual({ enabled: true, handle: ".dash-drag", cancel: ".dash-actions" });
     expect(mocks.gridProps!.resizeConfig).toEqual({ enabled: true, handles: ["s", "e", "se"] });
   });
 

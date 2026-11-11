@@ -33,6 +33,7 @@ from app.routers import (  # noqa: F401
     alerts,
     audit,
     audit_dashboard,
+    audit_query,
     auth,
     email_settings,
     favorites,
@@ -202,6 +203,7 @@ app.include_router(powerbi_catalog.router)
 app.include_router(powerbi_connections.router)
 app.include_router(audit.router)
 app.include_router(audit_dashboard.router)
+app.include_router(audit_query.router)
 app.include_router(audit.workspace_router)
 app.include_router(settings_router.router)
 app.include_router(email_settings.router)

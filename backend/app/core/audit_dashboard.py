@@ -9,20 +9,36 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from app.core.audit_query import GROUPS_BY_TYPE, GroupBy, Metric, QueryError, check_combination
+
 GRID_COLUMNS = 20
 MAX_WIDGETS = 40
 MAX_ROW = 500
 
-WidgetType = Literal["stat", "line", "bars", "hours", "donut"]
+WidgetType = Literal["stat", "line", "bars", "hours", "donut", "table"]
+# Cores do tema que um visual pode usar (o front troca pelas variaveis de cor)
+WidgetColor = Literal["primary", "secondary", "accent", "danger", "muted"]
+# "custom" = visual montado pela pessoa, com a consulta no proprio visual
+CUSTOM_SOURCE = "custom"
 
 # Quais fontes servem a cada tipo de visual
 SOURCES_BY_TYPE: dict[str, set[str]] = {
-    "stat": {"events", "active_users", "logins_ok", "logins_blocked", "accounts_locked"},
-    "line": {"by_day"},
-    "bars": {"by_action", "top_users", "top_collections", "top_reports"},
+    "stat": {"events", "active_users", "logins_ok", "logins_blocked", "accounts_locked", CUSTOM_SOURCE},
+    "line": {"by_day", CUSTOM_SOURCE},
+    "bars": {"by_action", "top_users", "top_collections", "top_reports", CUSTOM_SOURCE},
     "hours": {"by_hour"},
-    "donut": {"login_methods"},
+    "donut": {"login_methods", CUSTOM_SOURCE},
+    "table": {CUSTOM_SOURCE},
 }
+
+
+class WidgetQuery(BaseModel):
+    """O que um visual personalizado conta e como reparte."""
+
+    metric: Metric
+    group_by: GroupBy
+    # Quantos itens mostrar nos agrupamentos por categoria (acao, pessoa, colecao...)
+    limit: int = Field(default=8, ge=1, le=50)
 
 
 class DashboardWidget(BaseModel):
@@ -30,6 +46,8 @@ class DashboardWidget(BaseModel):
     type: WidgetType
     source: str = Field(min_length=1, max_length=40)
     title: str | None = Field(default=None, max_length=80)
+    color: WidgetColor | None = None
+    query: WidgetQuery | None = None
     x: int = Field(ge=0, lt=GRID_COLUMNS)
     y: int = Field(ge=0, le=MAX_ROW)
     w: int = Field(ge=1, le=GRID_COLUMNS)
@@ -45,6 +63,17 @@ class DashboardWidget(BaseModel):
     def check_source_and_width(self) -> "DashboardWidget":
         if self.source not in SOURCES_BY_TYPE[self.type]:
             raise ValueError(f"A fonte '{self.source}' nao serve a um visual do tipo '{self.type}'")
+        if self.source == CUSTOM_SOURCE:
+            if self.query is None:
+                raise ValueError("Um visual personalizado precisa de medida e agrupamento")
+            if self.query.group_by not in GROUPS_BY_TYPE[self.type]:
+                raise ValueError(f"O agrupamento '{self.query.group_by}' nao serve a um visual do tipo '{self.type}'")
+            try:
+                check_combination(self.query.metric, self.query.group_by)
+            except QueryError as exc:
+                raise ValueError(str(exc)) from exc
+        elif self.query is not None:
+            raise ValueError("So um visual personalizado tem medida e agrupamento")
         if self.x + self.w > GRID_COLUMNS:
             raise ValueError("O visual passa da largura do painel")
         return self

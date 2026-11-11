@@ -65,6 +65,39 @@ ENTITY_LABELS: dict[str, str] = {
 }
 
 
+# Acoes que alteram algo (medida "Alteracoes" dos visuais): nao entram logins, visitas nem perguntas ao chat
+CHANGE_ACTIONS = frozenset(
+    {
+        "create",
+        "update",
+        "delete",
+        "delete_user",
+        "set_access",
+        "remove_access",
+        "set_group_permissions",
+        "add_group_member",
+        "invite_group_member",
+        "update_auth_settings",
+        "update_email_settings",
+        "update_ai_provider",
+        "update_ai_options",
+        "update_ai_report_settings",
+        "subscription_created",
+        "subscription_updated",
+        "subscription_deleted",
+        "alert_created",
+        "alert_updated",
+        "alert_deleted",
+        "update_dashboard",
+        "reset_dashboard",
+        "reset_password",
+        "change_password",
+        "update_profile",
+        "revert",
+    }
+)
+
+
 def entity_label(entity: str) -> str:
     return ENTITY_LABELS.get(entity, entity)
 

@@ -7,10 +7,12 @@ interface LineChartProps {
   data: { label: string; value: number }[];
   /** Descricao de um ponto na dica ao passar o cursor, ex: "12 eventos" */
   describe: (value: number) => string;
+  /** Como mostrar o rotulo de cada ponto; o padrao trata como data (2026-11-10 vira 10/11) */
+  formatLabel?: (label: string) => string;
 }
 
 /** Linha com area, uma coluna invisivel por ponto para a dica de cada dia. */
-export function LineChart({ data, describe }: LineChartProps) {
+export function LineChart({ data, describe, formatLabel = shortDate }: LineChartProps) {
   const width = 600;
   const height = 180;
   const max = Math.max(1, ...data.map((d) => d.value));
@@ -33,15 +35,15 @@ export function LineChart({ data, describe }: LineChartProps) {
         {data.length === 1 && <circle cx={x(0)} cy={y(data[0].value)} r="4" className="audit-line-dot" />}
         {data.map((d, i) => (
           <rect key={d.label} x={i * colWidth} y="0" width={colWidth} height={height} className="audit-line-hit">
-            <title>{`${shortDate(d.label)}: ${describe(d.value)}`}</title>
+            <title>{`${formatLabel(d.label)}: ${describe(d.value)}`}</title>
           </rect>
         ))}
       </svg>
       {data.length > 0 && (
         <div className="audit-line-axis">
-          <span>{shortDate(data[0].label)}</span>
-          {data.length > 2 && <span>{shortDate(data[Math.floor((data.length - 1) / 2)].label)}</span>}
-          {data.length > 1 && <span>{shortDate(data[data.length - 1].label)}</span>}
+          <span>{formatLabel(data[0].label)}</span>
+          {data.length > 2 && <span>{formatLabel(data[Math.floor((data.length - 1) / 2)].label)}</span>}
+          {data.length > 1 && <span>{formatLabel(data[data.length - 1].label)}</span>}
         </div>
       )}
     </div>
