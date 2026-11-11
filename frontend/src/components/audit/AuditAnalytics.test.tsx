@@ -1,101 +1,212 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { Dashboard, DashboardWidget } from "../../api/audit";
 import AuditAnalytics from "./AuditAnalytics";
 
-const mocks = vi.hoisted(() => ({ summary: vi.fn() }));
-vi.mock("../../api/audit", () => ({ getAuditSummary: mocks.summary }));
+const mocks = vi.hoisted(() => ({
+  summary: vi.fn(),
+  getDashboard: vi.fn(),
+  save: vi.fn(),
+  reset: vi.fn(),
+  toast: vi.fn(),
+  grid: null as null | { widgets: DashboardWidget[]; editing: boolean; onChange: (w: DashboardWidget[]) => void },
+}));
+
+vi.mock("../../api/audit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../api/audit")>()),
+  getAuditSummary: mocks.summary,
+  getDashboard: mocks.getDashboard,
+  saveDashboard: mocks.save,
+  resetDashboard: mocks.reset,
+}));
+vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.toast }) }));
+// A grade tem teste proprio; aqui ela e trocada por uma peca que mostra o que recebeu e deixa mover um visual
+vi.mock("./dashboard/DashboardGrid", () => ({
+  default: (props: { widgets: DashboardWidget[]; editing: boolean; onChange: (w: DashboardWidget[]) => void }) => {
+    mocks.grid = props;
+    return (
+      <div data-testid="grid" data-editing={String(props.editing)}>
+        {props.widgets.map((w) => (
+          <span key={w.id}>{`${w.id}@${w.x},${w.y}`}</span>
+        ))}
+        <button onClick={() => props.onChange(props.widgets.map((w) => ({ ...w, x: w.x + 1 })))}>mover tudo</button>
+      </div>
+    );
+  },
+}));
+
+const WIDGETS: DashboardWidget[] = [
+  { id: "a", type: "stat", source: "events", title: null, x: 0, y: 0, w: 4, h: 2 },
+  { id: "b", type: "line", source: "by_day", title: null, x: 0, y: 2, w: 20, h: 6 },
+];
 
 const SUMMARY = {
-  totals: { events: 1234, active_users: 8, logins_ok: 90, logins_blocked: 3, accounts_locked: 0 },
-  by_day: [
-    { date: "2026-11-08", count: 5 },
-    { date: "2026-11-09", count: 0 },
-    { date: "2026-11-10", count: 12 },
-  ],
-  by_hour: Array.from({ length: 24 }, (_, h) => (h === 9 ? 7 : 0)),
-  by_action: [
-    { action: "login", label: "Login", count: 90 },
-    { action: "view_collection", label: "Colecao visitada", count: 40 },
-  ],
-  top_users: [{ user_id: 1, name: "Ana Lima", email: "ana@example.com", count: 30 }],
-  top_collections: [{ workspace_id: 2, name: "Financeiro", visits: 25 }],
-  top_reports: [
-    { report_id: "11", name: "Vendas por regiao", collection: "Comercial", visits: 18 },
-    { report_id: "12", name: "Custo assistencial", collection: null, visits: 1 },
-  ],
-  login_methods: { password: 60, google: 30 },
-  timezone: "America/Sao_Paulo",
+  totals: { events: 10, active_users: 2, logins_ok: 4, logins_blocked: 0, accounts_locked: 0 },
+  by_day: [],
+  by_hour: Array(24).fill(0),
+  by_action: [],
+  top_users: [],
+  top_collections: [],
+  top_reports: [],
+  login_methods: { password: 0, google: 0 },
+  timezone: "UTC",
 };
 
+function dashboard(over: Partial<Dashboard> = {}): Dashboard {
+  return { widgets: WIDGETS, columns: 20, is_default: true, updated_at: null, updated_by: null, ...over };
+}
+
 beforeEach(() => {
-  mocks.summary.mockReset();
+  mocks.summary.mockReset().mockResolvedValue(SUMMARY);
+  mocks.getDashboard.mockReset().mockResolvedValue(dashboard());
+  mocks.save.mockReset();
+  mocks.reset.mockReset();
+  mocks.toast.mockReset();
+  mocks.grid = null;
 });
 
-describe("AuditAnalytics", () => {
-  it("mostra os cartoes, os rankings, as colecoes mais visitadas e a rosca de metodos", async () => {
-    mocks.summary.mockResolvedValue(SUMMARY);
-    render(<AuditAnalytics filters={{ date_from: "2026-11-01" }} />);
+const open = (canEdit = true, filters = {}) => render(<AuditAnalytics filters={filters} canEdit={canEdit} />);
 
-    expect(await screen.findByText("1.234")).toBeTruthy();
-    expect(screen.getByText("Pessoas ativas")).toBeTruthy();
-    expect(screen.getByText("Logins bloqueados")).toBeTruthy();
-    expect(screen.getByText("Colecao visitada")).toBeTruthy(); // acao mais frequente
-    expect(screen.getByText("Ana Lima")).toBeTruthy();
-    expect(screen.getByText("Financeiro")).toBeTruthy();
-    expect(screen.getByText("25 visitas")).toBeTruthy();
-    expect(screen.getByText("Relatorios mais visitados")).toBeTruthy();
-    expect(screen.getByText("Vendas por regiao")).toBeTruthy();
-    expect(screen.getByText("18 aberturas")).toBeTruthy();
-    expect(screen.getByText("1 abertura")).toBeTruthy();
-    expect(screen.getByText("Vendas por regiao").closest("li")?.getAttribute("title")).toBe("Colecao: Comercial");
-    expect(screen.getByText("Email e senha")).toBeTruthy();
-    expect(screen.getByText("Google")).toBeTruthy();
-    expect(screen.getByText("Horario de pico")).toBeTruthy();
+describe("AuditAnalytics - carregamento", () => {
+  it("busca o resumo com os filtros e o painel salvo, e entrega os visuais a grade", async () => {
+    open(true, { date_from: "2026-11-01" });
+
+    expect(await screen.findByTestId("grid")).toBeTruthy();
     expect(mocks.summary).toHaveBeenCalledWith({ date_from: "2026-11-01" });
+    expect(screen.getByText("a@0,0")).toBeTruthy();
+    expect(screen.getByText("b@0,2")).toBeTruthy();
   });
 
-  it("cartao de bloqueio so ganha destaque quando ha ocorrencia", async () => {
-    mocks.summary.mockResolvedValue(SUMMARY);
-    const { container } = render(<AuditAnalytics filters={{}} />);
-    await screen.findByText("1.234");
+  it("busca o resumo de novo quando os filtros mudam, mas o painel e carregado uma vez so", async () => {
+    const { rerender } = open();
+    await screen.findByTestId("grid");
 
-    // 3 logins bloqueados: destacado; 0 contas travadas: normal
-    expect(container.querySelectorAll(".audit-stat-danger")).toHaveLength(1);
-  });
-
-  it("busca de novo quando os filtros mudam", async () => {
-    mocks.summary.mockResolvedValue(SUMMARY);
-    const { rerender } = render(<AuditAnalytics filters={{}} />);
-    await screen.findByText("1.234");
-
-    rerender(<AuditAnalytics filters={{ user_id: [3, 4] }} />);
+    rerender(<AuditAnalytics filters={{ user_id: [3, 4] }} canEdit />);
 
     await waitFor(() => expect(mocks.summary).toHaveBeenLastCalledWith({ user_id: [3, 4] }));
+    expect(mocks.getDashboard).toHaveBeenCalledTimes(1);
   });
 
-  it("sem eventos mostra o aviso e nao quebra os graficos", async () => {
-    mocks.summary.mockResolvedValue({
-      ...SUMMARY,
-      totals: { events: 0, active_users: 0, logins_ok: 0, logins_blocked: 0, accounts_locked: 0 },
-      by_day: [{ date: "2026-11-10", count: 0 }],
-      by_hour: Array(24).fill(0),
-      by_action: [],
-      top_users: [],
-      top_collections: [],
-      top_reports: [],
-      login_methods: { password: 0, google: 0 },
-    });
-    render(<AuditAnalytics filters={{}} />);
+  it("sem eventos mostra o aviso e o painel continua la", async () => {
+    mocks.summary.mockResolvedValue({ ...SUMMARY, totals: { ...SUMMARY.totals, events: 0 } });
+    open();
 
     expect(await screen.findByText("Nenhum evento nesse periodo e com esses filtros.")).toBeTruthy();
-    expect(screen.getByText("Nenhuma visita registrada.")).toBeTruthy();
-    expect(screen.getByText("Nenhuma abertura registrada.")).toBeTruthy();
-    expect(screen.getByText("Nenhum login no periodo.")).toBeTruthy();
+    expect(screen.getByTestId("grid")).toBeTruthy();
   });
 
-  it("erro ao carregar mostra mensagem", async () => {
+  it("erro ao carregar o resumo ou o painel mostra mensagem", async () => {
     mocks.summary.mockRejectedValue(new Error("falhou"));
-    render(<AuditAnalytics filters={{}} />);
-    expect(await screen.findByRole("alert")).toBeTruthy();
+    const first = open();
+    expect((await screen.findByRole("alert")).textContent).toContain("analiticos");
+    first.unmount();
+
+    mocks.summary.mockResolvedValue(SUMMARY);
+    mocks.getDashboard.mockRejectedValue(new Error("falhou"));
+    open();
+    expect((await screen.findByRole("alert")).textContent).toContain("painel");
+  });
+
+  it("mostra quem salvou o layout, quando ha um layout salvo", async () => {
+    mocks.getDashboard.mockResolvedValue(dashboard({ is_default: false, updated_by: "admin@example.com" }));
+    open();
+    expect(await screen.findByText("Layout salvo por admin@example.com.")).toBeTruthy();
+  });
+});
+
+describe("AuditAnalytics - edicao do painel", () => {
+  it("so quem pode editar ve o botao Editar painel", async () => {
+    const view = open(false);
+    await screen.findByTestId("grid");
+    expect(screen.queryByRole("button", { name: /Editar painel/ })).toBeNull();
+    view.unmount();
+
+    open(true);
+    expect(await screen.findByRole("button", { name: /Editar painel/ })).toBeTruthy();
+  });
+
+  it("Editar painel liga o modo de edicao e mostra Salvar, Cancelar e Restaurar padrao", async () => {
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));
+
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("true");
+    expect(screen.getByText(/Modo de edicao/)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Salvar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Cancelar" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Restaurar padrao/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Editar painel/ })).toBeNull();
+  });
+
+  it("Salvar so habilita depois de mudar algo; salva o layout novo, avisa e sai da edicao", async () => {
+    mocks.save.mockImplementation(async (widgets: DashboardWidget[]) => dashboard({ widgets, is_default: false, updated_by: "eu@x.com" }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));
+    const save = screen.getByRole("button", { name: "Salvar" }) as HTMLButtonElement;
+    expect(save.disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: "mover tudo" }));
+    expect(save.disabled).toBe(false);
+    fireEvent.click(save);
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("Painel salvo para todos."));
+    expect(mocks.save.mock.calls[0][0].map((w: DashboardWidget) => [w.id, w.x])).toEqual([["a", 1], ["b", 1]]);
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("false");
+    expect(screen.getByText("a@1,0")).toBeTruthy(); // mostra o que foi salvo
+  });
+
+  it("erro ao salvar avisa, mantem a edicao e o que foi movido", async () => {
+    mocks.save.mockRejectedValue({ response: { data: { detail: "Painel invalido" } } });
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));
+    fireEvent.click(screen.getByRole("button", { name: "mover tudo" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("Painel invalido", "error"));
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("true");
+    expect(screen.getByText("a@1,0")).toBeTruthy();
+  });
+
+  it("Cancelar sem mudar nada sai direto; com mudancas pede confirmacao e descarta", async () => {
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("false");
+
+    fireEvent.click(screen.getByRole("button", { name: /Editar painel/ }));
+    fireEvent.click(screen.getByRole("button", { name: "mover tudo" }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByText("Descartar as mudancas?")).toBeTruthy();
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("true"); // ainda editando
+
+    fireEvent.click(dialog.getByRole("button", { name: "Descartar" }));
+
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("false");
+    expect(screen.getByText("a@0,0")).toBeTruthy(); // voltou ao salvo
+    expect(mocks.save).not.toHaveBeenCalled();
+  });
+
+  it("Restaurar padrao fica desligado enquanto vale o padrao e, com layout salvo, pede confirmacao", async () => {
+    mocks.getDashboard.mockResolvedValue(dashboard({ is_default: true }));
+    const padrao = open();
+    fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));
+    expect((screen.getByRole("button", { name: /Restaurar padrao/ }) as HTMLButtonElement).disabled).toBe(true);
+    padrao.unmount();
+
+    mocks.getDashboard.mockResolvedValue(dashboard({ is_default: false, updated_by: "a@b.c" }));
+    mocks.reset.mockResolvedValue(dashboard({ is_default: true }));
+    open();
+    fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Restaurar padrao/ }));
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByText(/apagado para todos/)).toBeTruthy();
+    expect(mocks.reset).not.toHaveBeenCalled();
+
+    fireEvent.click(dialog.getByRole("button", { name: "Restaurar" }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("Painel restaurado ao padrao."));
+    expect(mocks.reset).toHaveBeenCalledTimes(1);
+    expect(screen.getByTestId("grid").getAttribute("data-editing")).toBe("false");
   });
 });

@@ -92,7 +92,7 @@ export default function Audit() {
             onFilterBy={(patch) => setFilterState((current) => ({ ...current, ...patch }))}
           />
         ) : (
-          <AuditAnalytics filters={filters} />
+          <AuditAnalytics filters={filters} canEdit={user?.is_platform_admin === true} />
         )}
       </div>
     </div>

@@ -22,6 +22,8 @@ ACTION_LABELS: dict[str, str] = {
     "set_access": "Acesso de grupo alterado",
     "remove_access": "Acesso de grupo removido",
     "revert": "Acao revertida",
+    "update_dashboard": "Painel de analiticos alterado",
+    "reset_dashboard": "Painel de analiticos restaurado",
     "set_group_permissions": "Permissoes de grupo alteradas",
     "view_collection": "Colecao visitada",
     "view_report": "Relatorio aberto",
@@ -59,6 +61,7 @@ ENTITY_LABELS: dict[str, str] = {
     "subscription": "Assinatura",
     "alert": "Alerta",
     "settings": "Configuracoes",
+    "dashboard": "Painel",
 }
 
 

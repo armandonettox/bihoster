@@ -3751,3 +3751,151 @@ table.table tr:last-child td {
   font-size: 13px;
   overflow-wrap: anywhere;
 }
+
+/* Painel de Analiticos: grade de visuais que se arrasta e redimensiona no modo de edicao */
+
+.dash-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  min-height: 36px;
+  margin-bottom: 12px;
+}
+
+.dash-toolbar-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.dash-toolbar-hint .material-symbols-outlined {
+  font-size: 18px;
+  color: var(--color-secondary);
+}
+
+.dash-toolbar-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.dash-toolbar-actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dash-grid {
+  width: 100%;
+}
+
+.dash-item {
+  box-sizing: border-box;
+}
+
+.dash-fill {
+  box-sizing: border-box;
+  height: 100%;
+  margin: 0;
+}
+
+.dash-grid .audit-panel,
+.dash-stack .audit-panel {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.dash-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.dash-header h3 {
+  margin: 0;
+}
+
+.dash-grip {
+  font-size: 18px;
+  color: var(--color-text-muted);
+}
+
+.dash-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Os graficos enchem o espaco que o visual recebeu em vez de ter altura fixa */
+.dash-body .audit-line,
+.dash-body .audit-hours {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.dash-body .audit-line svg {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.dash-body .audit-hours-bars {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}
+
+.dash-body .audit-donut {
+  height: 100%;
+  align-content: center;
+}
+
+.dash-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dash-stack .dash-item {
+  position: relative;
+}
+
+/* Modo de edicao */
+
+.dash-grid-editing .react-grid-item {
+  outline: 1px dashed var(--color-secondary);
+  outline-offset: 2px;
+  border-radius: var(--radius-md);
+}
+
+.dash-grid-editing .dash-drag {
+  cursor: grab;
+}
+
+.dash-grid-editing .react-grid-item.react-draggable-dragging .dash-drag {
+  cursor: grabbing;
+}
+
+.dash-grid-editing .react-grid-item.react-draggable-dragging,
+.dash-grid-editing .react-grid-item.resizing {
+  z-index: 5;
+  box-shadow: var(--shadow-lg);
+}
+
+.dash-grid .react-grid-placeholder {
+  background: var(--color-secondary);
+  opacity: 0.18;
+  border-radius: var(--radius-md);
+}
+
+:root[data-theme="dark"] .dash-grid .react-resizable-handle {
+  filter: invert(1);
+}

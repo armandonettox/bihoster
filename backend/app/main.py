@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
-from app.models import ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
 from app.models import permission as permission_model  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
@@ -32,6 +32,7 @@ from app.routers import (  # noqa: F401
     ai_usage,
     alerts,
     audit,
+    audit_dashboard,
     auth,
     email_settings,
     favorites,
@@ -200,6 +201,7 @@ app.include_router(powerbi.router)
 app.include_router(powerbi_catalog.router)
 app.include_router(powerbi_connections.router)
 app.include_router(audit.router)
+app.include_router(audit_dashboard.router)
 app.include_router(audit.workspace_router)
 app.include_router(settings_router.router)
 app.include_router(email_settings.router)

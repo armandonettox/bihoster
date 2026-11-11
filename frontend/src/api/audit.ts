@@ -131,3 +131,45 @@ export function revertConflictOf(err: unknown): RevertConflict | null {
   const code = (detail as { code?: string }).code;
   return code === "conflict" || code === "gone" ? (detail as RevertConflict) : null;
 }
+
+// --- Painel de Analiticos (compartilhado, editavel) ---
+
+export type WidgetType = "stat" | "line" | "bars" | "hours" | "donut";
+
+/** Um visual do painel: o que mostrar (`type` e `source`) e onde fica na grade (x, y, w, h em celulas). */
+export interface DashboardWidget {
+  id: string;
+  type: WidgetType;
+  /** Chave do resumo de /audit/summary: "events", "by_day", "top_users"... */
+  source: string;
+  title: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface Dashboard {
+  widgets: DashboardWidget[];
+  /** Colunas da grade */
+  columns: number;
+  /** Ninguem salvou um layout proprio ainda: vale o padrao */
+  is_default: boolean;
+  updated_at: string | null;
+  updated_by: string | null;
+}
+
+export async function getDashboard(): Promise<Dashboard> {
+  const { data } = await api.get("/audit/dashboard");
+  return data;
+}
+
+export async function saveDashboard(widgets: DashboardWidget[]): Promise<Dashboard> {
+  const { data } = await api.put("/audit/dashboard", { widgets });
+  return data;
+}
+
+export async function resetDashboard(): Promise<Dashboard> {
+  const { data } = await api.delete("/audit/dashboard");
+  return data;
+}
