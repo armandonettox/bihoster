@@ -6,7 +6,7 @@ import logging
 import threading
 from typing import Optional
 
-from app.core import chat_history
+from app.core import chat_history, chat_log
 from app.core.database import SessionLocal
 
 logger = logging.getLogger(__name__)
@@ -24,6 +24,10 @@ def run_once() -> int:
         removed = chat_history.purge_expired(db)
         if removed:
             logger.info("historico do chat de IA: %d conversas vencidas apagadas", removed)
+        # O registro do admin tem prazo proprio (chat_log.LOG_RETENTION_DAYS) e nao depende do historico de ninguem
+        removed_log = chat_log.purge_expired(db)
+        if removed_log:
+            logger.info("registro do chat de IA: %d linhas vencidas apagadas", removed_log)
         return removed
     finally:
         db.close()

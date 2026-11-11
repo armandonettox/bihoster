@@ -37,8 +37,12 @@ export default function ChatThread() {
           <div className="chat-empty">
             <h2>Pergunte sobre os dados dos seus relatorios</h2>
             <p>
-              Eu respondo so com base nos relatorios que voce pode ver. Cada resposta mostra de qual relatorio veio e a
-              consulta usada. Relatorios com seguranca por linha (RLS) ainda nao sao consultados.
+              Eu respondo so com base nos relatorios que voce pode ver, e cada resposta diz de qual relatorio veio.
+              Relatorios com acesso restrito por pessoa ainda nao podem ser consultados aqui.
+            </p>
+            <p className="chat-hint">
+              Suas perguntas e as respostas ficam registradas por ate 30 dias, para o administrador melhorar o chat. Evite
+              escrever dados pessoais de beneficiarios nas perguntas.
             </p>
           </div>
         )}

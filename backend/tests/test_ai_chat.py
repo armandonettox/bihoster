@@ -71,7 +71,7 @@ def ia(monkeypatch):
         "mensagens": [],  # as mensagens de cada chamada a IA, na ordem
     }
 
-    def fake_complete(provider, api_key, model, messages, max_tokens=1024):
+    def fake_complete(provider, api_key, model, messages, max_tokens=1024, json_mode=False):
         estado["chamadas"] += 1
         estado["mensagens"].append(messages)
         resposta = estado["respostas"].pop(0)

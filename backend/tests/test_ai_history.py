@@ -74,7 +74,7 @@ def ia(client, admin, monkeypatch):
     )
     estado = {"chamadas": [], "dax_first": True}
 
-    def fake_complete(provider, api_key, model, messages, max_tokens=1024):
+    def fake_complete(provider, api_key, model, messages, max_tokens=1024, json_mode=False):
         estado["chamadas"].append(messages)
         if isinstance(estado.get("erro"), Exception):
             raise estado["erro"]

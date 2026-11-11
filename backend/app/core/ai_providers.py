@@ -5,6 +5,7 @@ A URL de cada provedor e fixa no codigo, de proposito: sem campo de URL personal
 consegue usar o servidor para chamar enderecos internos (SSRF)."""
 
 from dataclasses import dataclass
+from typing import Optional
 
 import httpx
 
@@ -15,7 +16,12 @@ _http = httpx.Client(timeout=httpx.Timeout(60.0, connect=10.0))
 
 
 class AIError(Exception):
-    """Falha ao falar com o provedor. A mensagem e segura para mostrar na tela (nunca leva a chave)."""
+    """Falha ao falar com o provedor. A mensagem e segura para mostrar na tela (nunca leva a chave).
+    `status` e o codigo HTTP do provedor, quando houve resposta."""
+
+    def __init__(self, message: str, status: Optional[int] = None):
+        super().__init__(message)
+        self.status = status
 
 
 @dataclass(frozen=True)
@@ -75,6 +81,10 @@ class AIResult:
     text: str
     input_tokens: int
     output_tokens: int
+    # Por que o modelo parou ("stop", "length" quando o limite de resposta acabou...) e quantos tokens foram
+    # gastos pensando. Servem para entender uma resposta vazia: modelo que raciocina gasta o limite pensando.
+    finish_reason: str = ""
+    reasoning_tokens: int = 0
 
 
 def http_get_json(url: str, timeout: float = 10.0):
@@ -119,15 +129,16 @@ def _safe_detail(response: httpx.Response, api_key: str) -> str:
 def _raise_for_status(response: httpx.Response, api_key: str) -> None:
     if response.status_code < 400:
         return
-    if response.status_code in (401, 403):
-        raise AIError("O provedor recusou a chave de API. Confira se ela esta correta e ativa.")
-    if response.status_code == 404:
-        raise AIError("Modelo nao encontrado nesse provedor. Confira o nome do modelo.")
-    if response.status_code == 429:
-        raise AIError("O provedor recusou por limite de uso ou falta de saldo.")
+    status = response.status_code
+    if status in (401, 403):
+        raise AIError("O provedor recusou a chave de API. Confira se ela esta correta e ativa.", status)
+    if status == 404:
+        raise AIError("Modelo nao encontrado nesse provedor. Confira o nome do modelo.", status)
+    if status == 429:
+        raise AIError("O provedor recusou por limite de uso ou falta de saldo.", status)
     detail = _safe_detail(response, api_key)
-    message = f"O provedor respondeu com erro {response.status_code}."
-    raise AIError(f"{message} {detail}".strip())
+    message = f"O provedor respondeu com erro {status}."
+    raise AIError(f"{message} {detail}".strip(), status)
 
 
 def _int(value) -> int:
@@ -163,11 +174,35 @@ def _anthropic_content(content):
     return blocks
 
 
-def _complete_openai_compat(
-    info: ProviderInfo, api_key: str, model: str, messages: list[dict], max_tokens: int
-) -> AIResult:
-    converted = [{"role": m["role"], "content": _openai_content(m["content"])} for m in messages]
-    body = {"model": model, "messages": converted, info.max_tokens_field: max_tokens}
+# (provedor, modelo) que recusaram os parametros extras abaixo: dali em diante vai o pedido simples, sem insistir
+_plain_models: set[tuple[str, str]] = set()
+
+
+def _extra_params(info: ProviderInfo, model: str, json_mode: bool) -> dict:
+    """Parametros alem do basico. Pedem resposta em JSON valido (passos do chat que exigem JSON) e, no
+    OpenRouter, raciocinio desligado: modelos que raciocinam (DeepSeek, por exemplo) gastam o limite de resposta
+    pensando e devolvem texto vazio, alem de demorar. Se o modelo recusar algum, o pedido e refeito sem eles."""
+    if (info.key, model) in _plain_models:
+        return {}
+    extra: dict = {}
+    if json_mode:
+        extra["response_format"] = {"type": "json_object"}
+    if info.key == "openrouter":
+        extra["reasoning"] = {"effort": "none"}
+    return extra
+
+
+def _openai_text(content) -> str:
+    """O conteudo vem como texto; alguns provedores mandam uma lista de partes."""
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        return "".join(part.get("text", "") for part in content if isinstance(part, dict) and part.get("type") == "text")
+    return ""
+
+
+def _post_openai(info: ProviderInfo, api_key: str, model: str, converted: list[dict], max_tokens: int, extra: dict) -> AIResult:
+    body = {"model": model, "messages": converted, info.max_tokens_field: max_tokens, **extra}
     response = _http.post(
         f"{info.base_url}/chat/completions",
         headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
@@ -176,15 +211,41 @@ def _complete_openai_compat(
     _raise_for_status(response, api_key)
     try:
         data = response.json()
-        text = data["choices"][0]["message"].get("content") or ""
+        choice = data["choices"][0]
+        text = _openai_text(choice["message"].get("content"))
     except (ValueError, KeyError, IndexError, TypeError, AttributeError):
         raise AIError("Resposta inesperada do provedor.")
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-    return AIResult(text=text, input_tokens=_int(usage.get("prompt_tokens")), output_tokens=_int(usage.get("completion_tokens")))
+    details = usage.get("completion_tokens_details") if isinstance(usage.get("completion_tokens_details"), dict) else {}
+    finish = choice.get("finish_reason")
+    return AIResult(
+        text=text,
+        input_tokens=_int(usage.get("prompt_tokens")),
+        output_tokens=_int(usage.get("completion_tokens")),
+        finish_reason=finish if isinstance(finish, str) else "",
+        reasoning_tokens=_int(details.get("reasoning_tokens")),
+    )
+
+
+def _complete_openai_compat(
+    info: ProviderInfo, api_key: str, model: str, messages: list[dict], max_tokens: int, json_mode: bool = False
+) -> AIResult:
+    converted = [{"role": m["role"], "content": _openai_content(m["content"])} for m in messages]
+    extra = _extra_params(info, model, json_mode)
+    try:
+        return _post_openai(info, api_key, model, converted, max_tokens, extra)
+    except AIError as exc:
+        # 400 e 422: o modelo ou o provedor nao aceita um dos parametros extras. Refaz o pedido simples e,
+        # se ele funcionar, lembra disso para esse modelo.
+        if not extra or exc.status not in (400, 422):
+            raise
+    result = _post_openai(info, api_key, model, converted, max_tokens, {})
+    _plain_models.add((info.key, model))
+    return result
 
 
 def _complete_anthropic(
-    info: ProviderInfo, api_key: str, model: str, messages: list[dict], max_tokens: int
+    info: ProviderInfo, api_key: str, model: str, messages: list[dict], max_tokens: int, json_mode: bool = False
 ) -> AIResult:
     # A Anthropic nao aceita papel "system" dentro das mensagens: o texto vai num campo proprio
     system = "\n\n".join(m["content"] for m in messages if m["role"] == "system")
@@ -208,7 +269,13 @@ def _complete_anthropic(
     except (ValueError, KeyError, TypeError, AttributeError):
         raise AIError("Resposta inesperada do provedor.")
     usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
-    return AIResult(text=text, input_tokens=_int(usage.get("input_tokens")), output_tokens=_int(usage.get("output_tokens")))
+    stop = data.get("stop_reason")
+    return AIResult(
+        text=text,
+        input_tokens=_int(usage.get("input_tokens")),
+        output_tokens=_int(usage.get("output_tokens")),
+        finish_reason=stop if isinstance(stop, str) else "",
+    )
 
 
 # Nomes que marcam modelo que nao serve para conversa (vetores, voz, imagem). Os provedores misturam
@@ -281,13 +348,15 @@ def complete(
     model: str,
     messages: list[dict],
     max_tokens: int = 1024,
+    json_mode: bool = False,
 ) -> AIResult:
     """Envia as mensagens ([{"role": "system"|"user"|"assistant", "content": "..."}]) ao provedor e
-    devolve o texto e o uso de tokens. Qualquer falha vira AIError com mensagem segura."""
+    devolve o texto e o uso de tokens. `json_mode` pede resposta em JSON valido, nos provedores que sabem
+    (a Anthropic nao tem esse modo e ignora). Qualquer falha vira AIError com mensagem segura."""
     info = get_provider_info(provider)
     adapter = _complete_anthropic if info.kind == "anthropic" else _complete_openai_compat
     try:
-        return adapter(info, api_key, model, messages, max_tokens)
+        return adapter(info, api_key, model, messages, max_tokens, json_mode)
     except httpx.TimeoutException:
         raise AIError("O provedor demorou demais para responder.")
     except httpx.HTTPError:

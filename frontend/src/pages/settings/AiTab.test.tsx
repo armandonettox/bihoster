@@ -10,6 +10,7 @@ vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: moc
 // O bloco de opcoes do chat e o de consumo tem teste proprio; aqui so interessa o provedor
 vi.mock("../../components/AiOptionsCard", () => ({ default: () => null }));
 vi.mock("../../components/AiReportCard", () => ({ default: () => null }));
+vi.mock("../../components/AiLogCard", () => ({ default: () => null }));
 vi.mock("../../components/AiUsageCard", () => ({ default: () => null }));
 vi.mock("../../api/aiSettings", () => ({
   listAIProviders: vi.fn(),

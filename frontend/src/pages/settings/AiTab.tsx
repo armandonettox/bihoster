@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import * as aiApi from "../../api/aiSettings";
 import type { AIProvider } from "../../api/aiSettings";
 import { SkeletonList } from "../../components/Skeleton";
+import AiLogCard from "../../components/AiLogCard";
 import AiOptionsCard from "../../components/AiOptionsCard";
 import AiProviderPanel from "../../components/AiProviderPanel";
 import AiReportCard from "../../components/AiReportCard";
@@ -96,6 +97,7 @@ export default function AiTab() {
           />
         </div>
       </section>
+      <AiLogCard />
       <AiReportCard />
       <AiOptionsCard />
       <AiUsageCard />

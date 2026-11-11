@@ -381,7 +381,7 @@ def ia(client, admin, monkeypatch):
     )
     estado = {"chamadas": 0}
 
-    def fake_complete(provider, api_key, model, messages, max_tokens=1024):
+    def fake_complete(provider, api_key, model, messages, max_tokens=1024, json_mode=False):
         estado["chamadas"] += 1
         if "Modelo de dados" in messages[0]["content"]:
             return AIResult(json.dumps({"dax": 'EVALUATE ROW("t", [Total])'}), 12, 4)
@@ -494,7 +494,7 @@ class TestNoChat:
         assert db_session.query(AIUsage).count() == 0
 
     def test_falha_da_ia_nao_gasta_a_cota(self, client, admin, ana, liberados, relatorio, ia, monkeypatch, db_session):
-        def quebra(provider, api_key, model, messages, max_tokens=1024):
+        def quebra(provider, api_key, model, messages, max_tokens=1024, json_mode=False):
             raise ai_providers.AIError("fora do ar")
 
         monkeypatch.setattr(ai_providers, "complete", quebra)

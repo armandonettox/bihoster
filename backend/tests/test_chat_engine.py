@@ -30,13 +30,17 @@ class FakeLLM:
         self.replies = list(replies)
         self.calls = []
 
-    def __call__(self, provider, api_key, model, messages, max_tokens=1024):
+    def __call__(self, provider, api_key, model, messages, max_tokens=1024, json_mode=False):
         self.calls.append(
-            SimpleNamespace(provider=provider, api_key=api_key, model=model, messages=messages, max_tokens=max_tokens)
+            SimpleNamespace(
+                provider=provider, api_key=api_key, model=model, messages=messages, max_tokens=max_tokens, json_mode=json_mode
+            )
         )
         reply = self.replies.pop(0)
         if isinstance(reply, Exception):
             raise reply
+        if isinstance(reply, AIResult):  # resposta pronta, com motivo de parada e tokens de raciocinio
+            return reply
         return AIResult(reply, 10, 5)
 
     def system(self, i):
@@ -728,6 +732,222 @@ class TestImagemNoMotor:
             self._perguntar(cenario)
 
         assert len(llm.calls) == 1
+
+
+class TestDiagnosticoDoMotor:
+    def _trace(self, cenario, *textos, hint=None):
+        trace = []
+        chat_engine.answer_question(cenario.db, cenario.usuario.id, _msgs(*textos), hint, None, trace)
+        return trace
+
+    def test_cada_passo_fica_anotado_com_tempo_tokens_e_motivo_da_parada(self, cenario, pbi, monkeypatch):
+        _llm(
+            monkeypatch,
+            AIResult(_json(dax="EVALUATE x"), 100, 20, finish_reason="stop", reasoning_tokens=0),
+            AIResult("O total foi 10.", 50, 8, finish_reason="stop"),
+        )
+
+        trace = self._trace(cenario, "Total?")
+
+        assert [t["step"] for t in trace] == ["ler_esquema", "gerar_consulta", "power_bi", "escrever_resposta"]
+        gerar = trace[1]
+        assert gerar["input_tokens"] == 100 and gerar["output_tokens"] == 20 and gerar["finish_reason"] == "stop"
+        assert gerar["max_tokens"] == chat_engine.DAX_MAX_TOKENS and gerar["json_ok"] is True and gerar["ms"] >= 0
+        assert trace[2]["rows"] == RESULTADO.total_rows
+        assert all("ms" in t for t in trace)
+
+    def test_o_trace_nunca_guarda_o_texto_da_ia_nem_os_dados(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, _json(dax="EVALUATE segredo_na_consulta"), "A resposta com 1234,5 reais")
+
+        texto = json.dumps(self._trace(cenario, "Total?"))
+
+        assert "segredo_na_consulta" not in texto and "1234,5" not in texto
+
+    def test_resposta_vazia_por_limite_de_tokens_aparece_como_length_com_o_raciocinio(self, cenario, pbi, monkeypatch):
+        vazia = AIResult("", 100, 2500, finish_reason="length", reasoning_tokens=2500)
+        trace = []
+        _llm(monkeypatch, vazia, vazia)
+
+        with pytest.raises(ChatEngineError, match="vazia"):
+            chat_engine.answer_question(cenario.db, cenario.usuario.id, _msgs("Total?"), None, None, trace)
+
+        chamadas = [t for t in trace if t["step"].startswith("gerar_consulta")]
+        assert [t["step"] for t in chamadas] == ["gerar_consulta", "gerar_consulta (nova tentativa)"]
+        assert all(t["finish_reason"] == "length" and t["reasoning_tokens"] == 2500 and t["text_chars"] == 0 for t in chamadas)
+        assert chamadas[0]["json_ok"] is False and chamadas[1]["max_tokens"] == chat_engine.DAX_MAX_TOKENS * 2
+
+    def test_falha_do_provedor_fica_no_trace_mesmo_com_o_erro_subindo(self, cenario, pbi, monkeypatch):
+        trace = []
+        _llm(monkeypatch, AIError("O provedor demorou demais para responder."))
+
+        with pytest.raises(AIError):
+            chat_engine.answer_question(cenario.db, cenario.usuario.id, _msgs("Total?"), None, None, trace)
+
+        assert trace[-1]["step"] == "gerar_consulta" and "demorou demais" in trace[-1]["error"]
+
+    def test_consulta_que_o_power_bi_recusa_fica_anotada_com_o_erro(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [ChatDataError("coluna Foo nao existe", fixable=True)]
+        _llm(monkeypatch, _json(dax="EVALUATE a"), _json(dax="EVALUATE b"), "ok")
+
+        trace = self._trace(cenario, "Total?")
+
+        passos = [(t["step"], "error" in t) for t in trace]
+        assert passos == [
+            ("ler_esquema", False),
+            ("gerar_consulta", False),
+            ("power_bi", True),
+            ("refazer_consulta", False),
+            ("power_bi", False),
+            ("escrever_resposta", False),
+        ]
+
+    def test_json_mode_so_nos_passos_que_exigem_json(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "Total?")
+
+        assert [c.json_mode for c in llm.calls] == [True, False]
+
+    def test_raciocinio_no_texto_entre_think_nao_atrapalha_o_json(self, cenario, pbi, monkeypatch):
+        pensado = '<think>vou usar {"dax": "errado"} ou nao</think>\n' + _json(dax="EVALUATE certo")
+        _llm(monkeypatch, pensado, "ok")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.dax == "EVALUATE certo"
+
+
+class TestDesfechos:
+    def test_pergunta_respondida(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        assert _perguntar(cenario, "Total?").outcome == "answered"
+
+    def test_resposta_final_sem_texto(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, _json(dax="EVALUATE x"), "   ")
+
+        resposta = _perguntar(cenario, "Total?")
+
+        assert resposta.outcome == "empty_answer" and resposta.reply == chat_engine.REPLY_NO_ANSWER
+
+    def test_a_ia_explicou_sem_consultar(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, _json(reply="Esse dado nao existe no relatorio."))
+
+        assert _perguntar(cenario, "Total?").outcome == "model_reply"
+
+    def test_sem_relatorios(self, db_session, make_user, monkeypatch, cenario):
+        outra = make_user("sem-acesso@example.com")
+        _llm(monkeypatch)
+
+        resposta = chat_engine.answer_question(db_session, outra.id, _msgs("Total?"))
+
+        assert resposta.outcome == "no_reports"
+
+    def test_tres_consultas_que_falham(self, cenario, pbi, monkeypatch):
+        erro = ChatDataError("DAX invalida", fixable=True)
+        pbi.resultados = [erro, erro, erro]
+        _llm(monkeypatch, _json(dax="EVALUATE a"), _json(dax="EVALUATE b"), _json(dax="EVALUATE c"))
+
+        assert _perguntar(cenario, "Total?").outcome == "no_dax"
+
+    def test_bloqueio_do_relatorio_e_do_esquema(self, cenario, pbi, monkeypatch):
+        pbi.esquema = ChatDataError("Este relatorio usa seguranca por linha (RLS).")
+        _llm(monkeypatch)
+
+        assert _perguntar(cenario, "Total?").outcome == "blocked"
+
+    def test_erro_nao_corrigivel_da_consulta_e_bloqueio(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [ChatDataError("Muitas consultas ao mesmo tempo.")]
+        _llm(monkeypatch, _json(dax="EVALUATE x"))
+
+        assert _perguntar(cenario, "Total?").outcome == "blocked"
+
+
+class TestMensagemQueNaoEPergunta:
+    """"Esta errado" e "confere de novo" nao sao assunto fora dos relatorios: nao podem virar a recusa padrao."""
+
+    @pytest.fixture
+    def dois(self, cenario):
+        outro = Report(
+            collection_id=cenario.colecao.id,
+            name="Estoque",
+            powerbi_connection_id=cenario.conexao.id,
+            pbi_workspace_id="ws",
+            pbi_report_id="rep-2",
+            pbi_dataset_id="ds-2",
+        )
+        cenario.db.add(outro)
+        cenario.db.commit()
+        cenario.outro = outro
+        return cenario
+
+    def test_sem_relatorio_escolhido_e_sem_texto_da_ia_vale_a_recusa_padrao(self, dois, pbi, monkeypatch):
+        _llm(monkeypatch, _json(report_id=None))
+
+        resposta = _perguntar(dois, "Conte uma piada")
+
+        assert resposta.reply == chat_engine.REPLY_OFF_TOPIC and resposta.outcome == "off_topic"
+
+    def test_com_relatorio_na_conversa_a_ia_que_nao_escolhe_nada_segue_no_mesmo_relatorio(self, dois, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(report_id=None), _json(dax="EVALUATE conferido"), "Conferi: sao 10.")
+
+        resposta = _perguntar(dois, "Total?", "Sao 99.", "esta errado", hint=dois.outro.id)
+
+        assert resposta.report.id == dois.outro.id and resposta.dax == "EVALUATE conferido"
+        assert resposta.outcome == "answered" and len(llm.calls) == 3
+
+    def test_com_texto_da_ia_o_texto_vale_mesmo_com_relatorio_na_conversa(self, dois, pbi, monkeypatch):
+        _llm(monkeypatch, _json(report_id=None, reply="Nao entendi, pode explicar?"))
+
+        resposta = _perguntar(dois, "Total?", "Sao 99.", "hmm", hint=dois.outro.id)
+
+        assert resposta.reply == "Nao entendi, pode explicar?" and resposta.outcome == "model_reply"
+
+    def test_o_prompt_de_escolha_manda_manter_o_relatorio_ao_corrigir(self, dois, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(report_id=dois.relatorio.id), _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(dois, "Total?")
+
+        assert "esta errado" in llm.system(0) and "mesmo relatorio da conversa" in llm.system(0)
+
+    def test_o_prompt_do_dax_manda_conferir_de_novo_e_nao_somar_meses(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "Total?")
+
+        prompt = llm.system(0)
+        assert "esta errada" in prompt and "Nao recuse so porque" in prompt
+        assert "uma linha por mes" in prompt and "nao podem ser somadas sem filtrar o periodo" in prompt
+
+    def test_dax_sem_consulta_e_sem_texto_numa_conversa_pede_o_detalhe(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, _json())
+
+        resposta = _perguntar(cenario, "Total?", "Sao 99.", "esta errado")
+
+        assert resposta.reply == chat_engine.REPLY_NEEDS_DETAIL and resposta.outcome == "needs_detail"
+        assert resposta.report.id == cenario.relatorio.id
+
+    def test_dax_sem_consulta_e_sem_texto_na_primeira_mensagem_e_a_recusa_padrao(self, cenario, pbi, monkeypatch):
+        _llm(monkeypatch, _json())
+
+        resposta = _perguntar(cenario, "Conte uma piada")
+
+        assert resposta.reply == chat_engine.REPLY_OFF_TOPIC and resposta.outcome == "off_topic"
+
+
+class TestLinguagemParaPessoasDeNegocio:
+    def test_o_passo_final_proibe_jargao_e_so_fala_de_corte_quando_houve(self):
+        texto = chat_engine._ANSWER_SYSTEM
+
+        assert "pessoa de negocio" in texto and "nunca cite DAX" in texto
+        assert "se for falso, nao fale de corte" in texto
+
+    def test_o_prompt_do_dax_pede_reply_sem_nomes_tecnicos(self, cenario, pbi, monkeypatch):
+        llm = _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")
+
+        _perguntar(cenario, "Total?")
+
+        assert "pessoa de negocio" in llm.system(0)
 
 
 class TestBloqueios:

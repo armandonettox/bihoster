@@ -171,6 +171,170 @@ class TestFormatoAnthropic:
             ai_providers.complete("anthropic", KEY, "m", MESSAGES)
 
 
+@pytest.fixture(autouse=True)
+def _modelos_simples_limpos():
+    ai_providers._plain_models.clear()
+    yield
+    ai_providers._plain_models.clear()
+
+
+def _resposta_com_pensamento(texto, finish="stop", pensando=0):
+    return httpx.Response(
+        200,
+        json={
+            "choices": [{"message": {"content": texto}, "finish_reason": finish}],
+            "usage": {
+                "prompt_tokens": 30,
+                "completion_tokens": 200,
+                "completion_tokens_details": {"reasoning_tokens": pensando},
+            },
+        },
+    )
+
+
+def _corpo(chamadas, indice=0):
+    return json.loads(chamadas["requisicoes"][indice].content)
+
+
+class TestParametrosExtras:
+    def test_openrouter_manda_o_raciocinio_desligado(self, chamadas):
+        chamadas["resposta"] = _openai_ok()
+
+        ai_providers.complete("openrouter", KEY, "deepseek/deepseek-v4-pro", MESSAGES)
+
+        assert _corpo(chamadas)["reasoning"] == {"effort": "none"}
+
+    @pytest.mark.parametrize("provedor", ["openai", "gemini", "nvidia"])
+    def test_os_outros_provedores_nao_recebem_o_parametro_de_raciocinio(self, chamadas, provedor):
+        chamadas["resposta"] = _openai_ok()
+
+        ai_providers.complete(provedor, KEY, "m", MESSAGES)
+
+        assert "reasoning" not in _corpo(chamadas)
+
+    @pytest.mark.parametrize("provedor", ["openai", "gemini", "openrouter", "nvidia"])
+    def test_json_mode_pede_resposta_em_json_valido(self, chamadas, provedor):
+        chamadas["resposta"] = _openai_ok('{"a": 1}')
+
+        ai_providers.complete(provedor, KEY, "m", MESSAGES, json_mode=True)
+
+        assert _corpo(chamadas)["response_format"] == {"type": "json_object"}
+
+    def test_sem_json_mode_nao_manda_response_format(self, chamadas):
+        chamadas["resposta"] = _openai_ok()
+
+        ai_providers.complete("openrouter", KEY, "m", MESSAGES)
+
+        assert "response_format" not in _corpo(chamadas)
+
+    def test_anthropic_ignora_json_mode(self, chamadas):
+        chamadas["resposta"] = _anthropic_ok()
+
+        ai_providers.complete("anthropic", KEY, "m", MESSAGES, json_mode=True)
+
+        corpo = _corpo(chamadas)
+        assert "response_format" not in corpo and "reasoning" not in corpo
+
+    def test_modelo_que_recusa_os_extras_e_refeito_sem_eles_e_lembrado(self, chamadas):
+        respostas = [
+            httpx.Response(400, json={"error": {"message": "reasoning nao suportado"}}),
+            _openai_ok("ok"),
+            _openai_ok("ok de novo"),
+        ]
+        chamadas["resposta"] = None
+        original = ai_providers._http
+
+        def handler(request):
+            chamadas["requisicoes"].append(request)
+            return respostas.pop(0)
+
+        ai_providers._http = httpx.Client(transport=httpx.MockTransport(handler))
+        try:
+            primeira = ai_providers.complete("openrouter", KEY, "modelo-x", MESSAGES, json_mode=True)
+            segunda = ai_providers.complete("openrouter", KEY, "modelo-x", MESSAGES, json_mode=True)
+        finally:
+            ai_providers._http = original
+
+        assert (primeira.text, segunda.text) == ("ok", "ok de novo")
+        assert "reasoning" in _corpo(chamadas, 0) and "response_format" in _corpo(chamadas, 0)
+        assert "reasoning" not in _corpo(chamadas, 1) and "response_format" not in _corpo(chamadas, 1)
+        assert "reasoning" not in _corpo(chamadas, 2)  # lembrou: nem tentou os extras de novo
+        assert len(chamadas["requisicoes"]) == 3
+
+    def test_erro_422_tambem_refaz_o_pedido_simples(self, chamadas):
+        respostas = [httpx.Response(422, json={}), _openai_ok("ok")]
+        original = ai_providers._http
+        ai_providers._http = httpx.Client(transport=httpx.MockTransport(lambda req: respostas.pop(0)))
+        try:
+            assert ai_providers.complete("openrouter", KEY, "m", MESSAGES).text == "ok"
+        finally:
+            ai_providers._http = original
+
+    @pytest.mark.parametrize("status", [401, 403, 404, 429, 500])
+    def test_outros_erros_nao_refazem_o_pedido(self, chamadas, status):
+        chamadas["resposta"] = httpx.Response(status, json={"error": {"message": "x"}})
+
+        with pytest.raises(AIError) as erro:
+            ai_providers.complete("openrouter", KEY, "m", MESSAGES, json_mode=True)
+
+        assert len(chamadas["requisicoes"]) == 1 and erro.value.status == status
+
+    def test_falha_tambem_no_pedido_simples_sobe_o_erro_e_nao_marca_o_modelo(self, chamadas):
+        chamadas["resposta"] = httpx.Response(400, json={"error": {"message": "pedido invalido"}})
+
+        with pytest.raises(AIError, match="pedido invalido"):
+            ai_providers.complete("openrouter", KEY, "m", MESSAGES, json_mode=True)
+
+        assert len(chamadas["requisicoes"]) == 2 and ("openrouter", "m") not in ai_providers._plain_models
+
+    def test_provedor_sem_extras_nao_refaz_em_400(self, chamadas):
+        chamadas["resposta"] = httpx.Response(400, json={"error": {"message": "ruim"}})
+
+        with pytest.raises(AIError):
+            ai_providers.complete("openai", KEY, "m", MESSAGES)
+
+        assert len(chamadas["requisicoes"]) == 1
+
+
+class TestDiagnosticoDaResposta:
+    def test_le_o_motivo_da_parada_e_os_tokens_de_raciocinio(self, chamadas):
+        chamadas["resposta"] = _resposta_com_pensamento("", finish="length", pensando=200)
+
+        resultado = ai_providers.complete("openrouter", KEY, "m", MESSAGES)
+
+        assert resultado.text == "" and resultado.finish_reason == "length" and resultado.reasoning_tokens == 200
+
+    def test_sem_esses_campos_ficam_vazios_e_zerados(self, chamadas):
+        chamadas["resposta"] = _openai_ok()
+
+        resultado = ai_providers.complete("openai", KEY, "m", MESSAGES)
+
+        assert (resultado.finish_reason, resultado.reasoning_tokens) == ("", 0)
+
+    def test_conteudo_em_lista_de_partes_vira_texto(self, chamadas):
+        chamadas["resposta"] = httpx.Response(
+            200,
+            json={"choices": [{"message": {"content": [{"type": "text", "text": "a"}, {"type": "x"}, {"type": "text", "text": "b"}]}}]},
+        )
+
+        assert ai_providers.complete("openrouter", KEY, "m", MESSAGES).text == "ab"
+
+    def test_anthropic_devolve_o_stop_reason(self, chamadas):
+        chamadas["resposta"] = httpx.Response(
+            200, json={"content": [{"type": "text", "text": "oi"}], "stop_reason": "max_tokens", "usage": {}}
+        )
+
+        assert ai_providers.complete("anthropic", KEY, "m", MESSAGES).finish_reason == "max_tokens"
+
+    def test_o_erro_leva_o_codigo_http(self, chamadas):
+        chamadas["resposta"] = httpx.Response(429, json={})
+
+        with pytest.raises(AIError) as erro:
+            ai_providers.complete("openai", KEY, "m", MESSAGES)
+
+        assert erro.value.status == 429
+
+
 COM_IMAGEM = [
     {"role": "system", "content": "Voce responde sobre dados."},
     {

@@ -91,12 +91,20 @@ describe("ChatPage - acesso", () => {
 });
 
 describe("ChatPage - tela inicial", () => {
-  it("mostra a orientacao e o aviso de RLS quando nao ha mensagens", async () => {
+  it("mostra a orientacao e o aviso de acesso restrito, sem jargao, quando nao ha mensagens", async () => {
     await abrir();
 
     expect(screen.getByText("Pergunte sobre os dados dos seus relatorios")).toBeTruthy();
-    expect(screen.getByText(/seguranca por linha/)).toBeTruthy();
+    expect(screen.getByText(/acesso restrito por pessoa/)).toBeTruthy();
+    expect(screen.queryByText(/RLS|consulta usada|seguranca por linha/)).toBeNull();
     expect(screen.getByText("Nenhuma conversa ainda.")).toBeTruthy();
+  });
+
+  it("avisa que as perguntas ficam registradas por 30 dias para o administrador", async () => {
+    await abrir();
+
+    expect(screen.getByText(/ficam registradas por ate 30 dias, para o administrador melhorar o chat/)).toBeTruthy();
+    expect(screen.getByText(/Evite escrever dados pessoais de beneficiarios/)).toBeTruthy();
   });
 
   it("lista as conversas do historico", async () => {

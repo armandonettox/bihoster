@@ -2834,6 +2834,56 @@ table.table tr:last-child td {
   border-bottom: 1px solid var(--color-border);
 }
 
+/* Aba IA: registro das respostas */
+.ai-log-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: flex-end;
+  margin-bottom: 12px;
+}
+
+.ai-log-list {
+  margin-top: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.ai-log-list:empty {
+  display: none;
+}
+
+.ai-log-entry {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ai-log-entry:last-child {
+  border-bottom: none;
+}
+
+.ai-log-entry-problem {
+  border-left: 3px solid var(--color-danger);
+}
+
+.ai-log-entry summary {
+  cursor: pointer;
+}
+
+.ai-log-when,
+.ai-log-question {
+  color: var(--color-text-muted);
+}
+
+.ai-log-body {
+  padding: 8px 0 4px;
+}
+
+.ai-log-body p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+
 .usage-summary {
   margin: 12px 0;
   padding-left: 18px;

@@ -1,7 +1,9 @@
+import time
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core import ai_pricing, ai_usage, chat_engine, chat_history
+from app.core import ai_pricing, ai_usage, chat_engine, chat_history, chat_log
 from app.core.ai_access import require_ai_use
 from app.core.ai_providers import AIError
 from app.core.audit import log_action
@@ -54,19 +56,39 @@ def chat(
                 chat_engine.PageVisual(title=v.title, kind=v.type, fields=tuple(v.fields)) for v in data.open_page.visuals
             ),
         )
+    trace: list = []  # cada passo da pergunta, anotado pelo motor (tempo, tokens, motivo da parada)
+    started = time.monotonic()
+
+    def log_entry(**extra) -> None:
+        chat_log.record(
+            db,
+            user=current_user,
+            conversation_id=conversation.id if conversation else None,
+            provider=provider.provider,
+            model=provider.model,
+            question=data.message,
+            duration_ms=int((time.monotonic() - started) * 1000),
+            trace=trace,
+            **extra,
+        )
+
     try:
         answer = chat_engine.answer_question(
-            db, current_user.id, messages, conversation.last_report_id if conversation else None, open_page
+            db, current_user.id, messages, conversation.last_report_id if conversation else None, open_page, trace
         )
     except chat_engine.ChatUnavailable as exc:
         raise HTTPException(status_code=503, detail=str(exc))
-    except (AIError, chat_engine.ChatEngineError) as exc:
-        raise HTTPException(status_code=502, detail=str(exc))
+    except Exception as exc:  # noqa: BLE001 -- registra a falha (IA, formato ou Power BI) e deixa o erro seguir
+        log_entry(error=str(exc))
+        if isinstance(exc, (AIError, chat_engine.ChatEngineError)):
+            raise HTTPException(status_code=502, detail=str(exc))
+        raise
 
     # So guarda depois de a resposta existir: erro no meio nao deixa pergunta solta no historico
     if conversation is None:
         conversation = chat_history.start_conversation(db, current_user.id, data.message)
     chat_history.save_exchange(db, conversation, data.message, answer)
+    log_entry(answer=answer)
 
     # Conta como pergunta so quando a IA foi chamada: bloqueio e recusa sem chamada nao gastam a cota
     cost = None
