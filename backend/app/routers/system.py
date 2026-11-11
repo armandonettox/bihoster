@@ -8,8 +8,16 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.core.workspace_deps import require_platform_admin
 from app.models.user import User
+from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/system", tags=["system"])
+
+
+@router.get("/current-version")
+def get_current_version(_=Depends(get_current_user)):
+    # Versao em producao, sem consultar o GitHub. Qualquer usuario logado pode ver
+    # (a sidebar mostra pra todos), diferente do /version que e so do admin.
+    return {"current_version": settings.app_version}
 
 
 @router.get("/version")

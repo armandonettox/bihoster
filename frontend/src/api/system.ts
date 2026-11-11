@@ -24,6 +24,11 @@ export interface ApplyUpdateResult {
   message: string;
 }
 
+export async function getCurrentVersion(): Promise<string> {
+  const { data } = await api.get("/system/current-version");
+  return data.current_version;
+}
+
 export async function getVersionStatus(): Promise<VersionStatus> {
   const { data } = await api.get("/system/version");
   return data;

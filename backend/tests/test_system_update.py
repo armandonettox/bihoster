@@ -31,6 +31,24 @@ def test_is_newer_nunca_oferece_atualizacao_em_build_dev():
     assert not system_update.is_newer("99.0.0", "dev")
 
 
+def test_current_version_qualquer_usuario_logado_ve_sem_consultar_github(client, monkeypatch):
+    _register_and_login(client, "admin@example.com")
+    # segundo usuario nao e admin da plataforma
+    user_token = _register_and_login(client, "leitor@example.com", name="Leitor")
+
+    monkeypatch.setattr(system_update.settings, "app_version", "1.7.5")
+    with patch.object(system_update, "fetch_latest_release") as fetch:
+        resp = client.get("/system/current-version", headers=_auth_headers(user_token))
+
+    assert resp.status_code == 200
+    assert resp.json() == {"current_version": "1.7.5"}
+    fetch.assert_not_called()
+
+
+def test_current_version_exige_login(client):
+    assert client.get("/system/current-version").status_code in (401, 403)
+
+
 def test_version_status_sem_atualizacao_disponivel(client, monkeypatch):
     admin_token = _register_and_login(client, "admin@example.com")
     headers = _auth_headers(admin_token)

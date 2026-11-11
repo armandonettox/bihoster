@@ -12,6 +12,7 @@ import ChatPanel from "../components/ChatPanel";
 import ChatPanelToggle from "../components/ChatPanelToggle";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import { assetUrl } from "../api/client";
+import { getCurrentVersion } from "../api/system";
 import { safeStorage } from "../utils/safeStorage";
 import { useTheme } from "../context/ThemeContext";
 
@@ -25,6 +26,15 @@ export default function Layout() {
   const navigate = useNavigate();
 
   const { favorites, toggleFavorite } = useFavorites();
+  const [version, setVersion] = useState("");
+
+  // Versao em producao, mostrada no rodape da sidebar. Se falhar, so nao aparece.
+  useEffect(() => {
+    getCurrentVersion()
+      .then(setVersion)
+      .catch(() => setVersion(""));
+  }, []);
+
   const [collapsed, setCollapsed] = useState(() => {
     const stored = safeStorage.getItem(SIDEBAR_COLLAPSED_KEY);
     if (stored !== null) return stored === "1";
@@ -146,6 +156,7 @@ export default function Layout() {
                 <CollectionList />
               </div>
             </div>
+            {version && <p className="sidebar-version">{version === "dev" ? "dev" : `v${version}`}</p>}
           </aside>
         )}
 
