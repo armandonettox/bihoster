@@ -3,6 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import log_action
+from app.core.audit_revert import ACCESS, WORKSPACE_UPDATE, changed_fields
 from app.core.database import get_db
 from app.core.slug import slugify
 from app.core.workspace_deps import (
@@ -133,12 +134,23 @@ def update_workspace(
     if not workspace:
         raise HTTPException(status_code=404, detail="Colecao nao encontrada")
 
-    for field, value in data.model_dump(exclude_unset=True).items():
+    updates = data.model_dump(exclude_unset=True)
+    before = {field: getattr(workspace, field) for field in updates}
+    for field, value in updates.items():
         setattr(workspace, field, value)
     db.commit()
     db.refresh(workspace)
+    fields = changed_fields(before, {field: getattr(workspace, field) for field in updates})
 
-    log_action(db, action="update", entity="workspace", user_id=current_user.id, workspace_id=workspace_id, details=workspace.name)
+    log_action(
+        db,
+        action="update",
+        entity="workspace",
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        details=workspace.name,
+        change={"kind": WORKSPACE_UPDATE, "fields": fields} if fields else None,
+    )
     return _to_out(workspace, UserRole.admin)
 
 
@@ -206,7 +218,8 @@ def set_workspace_access(
     group = db.query(Group).get(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Grupo nao encontrado")
-    if not db.query(Workspace).get(workspace_id):
+    workspace = db.query(Workspace).get(workspace_id)
+    if not workspace:
         raise HTTPException(status_code=404, detail="Colecao nao encontrada")
 
     access = (
@@ -214,6 +227,7 @@ def set_workspace_access(
         .filter(GroupWorkspaceAccess.group_id == group_id, GroupWorkspaceAccess.workspace_id == workspace_id)
         .first()
     )
+    role_before = access.role.value if access else None
     if access:
         access.role = data.role
     else:
@@ -229,6 +243,18 @@ def set_workspace_access(
         workspace_id=workspace_id,
         entity_id=group_id,
         details=f"{group.name} -> {data.role.value}",
+        change=(
+            {
+                "kind": ACCESS,
+                "group_id": group_id,
+                "group_name": group.name,
+                "workspace_name": workspace.name,
+                "before": role_before,
+                "after": data.role.value,
+            }
+            if role_before != data.role.value
+            else None
+        ),
     )
     return WorkspaceAccessOut(
         group_id=group.id, group_name=group.name, is_default=group.is_default, is_admin_group=group.is_admin_group, role=data.role
@@ -240,7 +266,7 @@ def remove_workspace_access(
     workspace_id: int,
     group_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    current_user: User = Depends(require_platform_admin),
 ):
     group = db.query(Group).get(group_id)
     if not group:
@@ -252,8 +278,28 @@ def remove_workspace_access(
         .first()
     )
     if access:
+        role_before = access.role.value
         db.delete(access)
         db.commit()
+        workspace = db.query(Workspace).get(workspace_id)
+        # Antes a remocao nao deixava rastro; agora aparece na auditoria e pode ser revertida
+        log_action(
+            db,
+            action="remove_access",
+            entity="workspace",
+            user_id=current_user.id,
+            workspace_id=workspace_id,
+            entity_id=group_id,
+            details=f"{group.name} -> sem acesso",
+            change={
+                "kind": ACCESS,
+                "group_id": group_id,
+                "group_name": group.name,
+                "workspace_name": workspace.name if workspace else "",
+                "before": role_before,
+                "after": None,
+            },
+        )
 
     return WorkspaceAccessOut(
         group_id=group.id, group_name=group.name, is_default=group.is_default, is_admin_group=group.is_admin_group, role=None

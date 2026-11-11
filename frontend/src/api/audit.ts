@@ -17,6 +17,12 @@ export interface AuditLogEntry {
   entity_id: string | null;
   details: string | null;
   created_at: string;
+  /** Pode ser revertida pela auditoria: guardou o estado de antes e ainda nao foi revertida */
+  revertible: boolean;
+  /** O que acontece se for revertida (texto da confirmacao) */
+  revert_summary: string | null;
+  reverted_at: string | null;
+  reverted_by_name: string | null;
 }
 
 /** Filtros comuns da tabela e dos analiticos. Datas no formato YYYY-MM-DD, no fuso do sistema. */
@@ -97,4 +103,31 @@ export async function getAuditOptions(): Promise<AuditOptions> {
 export async function getAuditSummary(filters: AuditFilters): Promise<AuditSummary> {
   const { data } = await api.get("/audit/summary", { params: filters, paramsSerializer: REPEAT_PARAMS });
   return data;
+}
+
+/** Aviso do servidor quando a reversao nao pode seguir direto (HTTP 409) */
+export interface RevertConflict {
+  /** "conflict": o item mudou depois da acao; "gone": o item nao existe mais */
+  code: "conflict" | "gone";
+  message: string;
+  /** Como o item estava logo depois da acao */
+  expected?: string;
+  /** Como esta agora */
+  current?: string;
+  /** Como ficara se a reversao seguir */
+  after_revert?: string;
+}
+
+export async function revertAuditAction(id: number, force = false): Promise<{ status: string; summary: string }> {
+  const { data } = await api.post(`/audit/${id}/revert`, { force });
+  return data;
+}
+
+/** O aviso de conflito que veio num erro do axios, ou null se o erro for de outro tipo. */
+export function revertConflictOf(err: unknown): RevertConflict | null {
+  const response = (err as { response?: { status?: number; data?: { detail?: unknown } } })?.response;
+  const detail = response?.data?.detail;
+  if (response?.status !== 409 || typeof detail !== "object" || detail === null) return null;
+  const code = (detail as { code?: string }).code;
+  return code === "conflict" || code === "gone" ? (detail as RevertConflict) : null;
 }

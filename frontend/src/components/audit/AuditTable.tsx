@@ -7,13 +7,40 @@ import {
   type AuditPerson,
 } from "../../api/audit";
 import { SkeletonList } from "../Skeleton";
+import { useToast } from "../../context/ToastContext";
 import { formatDateTime } from "../../utils/datetime";
 import type { AuditFilterState } from "../../utils/auditFilterState";
 import { todayIn } from "../../utils/auditPeriod";
 import FilterValue from "./FilterValue";
 import PersonHover from "./PersonHover";
+import RevertDialog from "./RevertDialog";
 
 const PAGE_SIZE = 25;
+
+// Acoes que alteram algo. Quando uma delas nao tem como ser revertida (excluir, configuracao com
+// segredo, historico de antes da reversao existir), a coluna avisa em vez de ficar em branco.
+const CHANGING_ACTIONS = new Set([
+  "create",
+  "update",
+  "delete",
+  "delete_user",
+  "set_access",
+  "remove_access",
+  "set_group_permissions",
+  "add_group_member",
+  "invite_group_member",
+  "update_auth_settings",
+  "update_email_settings",
+  "update_ai_provider",
+  "update_ai_options",
+  "update_ai_report_settings",
+  "subscription_created",
+  "subscription_updated",
+  "subscription_deleted",
+  "alert_created",
+  "alert_updated",
+  "alert_deleted",
+]);
 
 interface Props {
   filters: AuditFilters;
@@ -39,6 +66,10 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
   const [query, setQuery] = useState("");
   const [pageState, setPageState] = useState({ scope: "", page: 1 });
   const [result, setResult] = useState<Result | null>(null);
+  const [reverting, setReverting] = useState<AuditLogEntry | null>(null);
+  // Sobe a cada reversao feita para a tabela buscar de novo e mostrar a acao como revertida
+  const [refresh, setRefresh] = useState(0);
+  const { showToast } = useToast();
 
   // Espera a pessoa parar de digitar para nao buscar a cada letra
   useEffect(() => {
@@ -49,7 +80,7 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
   // Mudou filtro ou busca: volta para a pagina 1 (derivado, sem efeito extra)
   const scope = `${JSON.stringify(filters)}|${query}`;
   const page = pageState.scope === scope ? pageState.page : 1;
-  const requestKey = `${scope}|${page}`;
+  const requestKey = `${scope}|${page}|${refresh}`;
 
   useEffect(() => {
     let cancelled = false;
@@ -101,6 +132,7 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
                 <th>Recurso</th>
                 <th>Onde</th>
                 <th>Detalhes</th>
+                <th>Reversao</th>
               </tr>
             </thead>
             <tbody>
@@ -157,6 +189,30 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
                       describe(log)
                     )}
                   </td>
+                  <td className="audit-revert-cell">
+                    {log.revertible ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost audit-revert"
+                        title={log.revert_summary ?? undefined}
+                        onClick={() => setReverting(log)}
+                      >
+                        <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">undo</span>
+                        Reverter
+                      </button>
+                    ) : log.reverted_at ? (
+                      <span
+                        className="audit-reverted"
+                        title={`Revertida em ${formatDateTime(log.reverted_at, timezone)}`}
+                      >
+                        Revertida{log.reverted_by_name ? ` por ${log.reverted_by_name}` : ""}
+                      </span>
+                    ) : CHANGING_ACTIONS.has(log.action) ? (
+                      <span className="audit-muted" title="Esta acao nao guardou o estado anterior ou nao e do tipo que se reverte">
+                        Nao reversivel
+                      </span>
+                    ) : null}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -186,6 +242,18 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
             </button>
           </div>
         </div>
+      )}
+
+      {reverting && (
+        <RevertDialog
+          entry={reverting}
+          onClose={() => setReverting(null)}
+          onReverted={(summary) => {
+            setReverting(null);
+            setRefresh((tick) => tick + 1);
+            showToast(`Acao revertida. ${summary}`);
+          }}
+        />
       )}
     </div>
   );

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -18,7 +19,10 @@ def log_action(
     workspace_id: Optional[int] = None,
     entity_id: Optional[str] = None,
     details: Optional[str] = None,
+    change: Optional[dict] = None,
 ) -> None:
+    """`change` guarda o antes e o depois da acao (ver core/audit_revert.py) para ela poder ser
+    revertida pela pagina de auditoria. Sem `change`, a acao fica como nao reversivel."""
     user_email = None
     if user_id is not None:
         # Import local: app.models.user importa modelos que podem importar este modulo
@@ -35,6 +39,7 @@ def log_action(
         entity=entity,
         entity_id=str(entity_id) if entity_id is not None else None,
         details=details,
+        change=json.dumps(change, ensure_ascii=False) if change else None,
     )
     db.add(entry)
     db.commit()

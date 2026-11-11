@@ -1,9 +1,14 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AuditTable from "./AuditTable";
 
-const mocks = vi.hoisted(() => ({ search: vi.fn() }));
-vi.mock("../../api/audit", () => ({ searchAuditLogs: mocks.search }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), revert: vi.fn(), toast: vi.fn() }));
+vi.mock("../../api/audit", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../api/audit")>()),
+  searchAuditLogs: mocks.search,
+  revertAuditAction: mocks.revert,
+}));
+vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.toast }) }));
 
 function entry(id: number, over: Record<string, unknown> = {}) {
   return {
@@ -20,6 +25,10 @@ function entry(id: number, over: Record<string, unknown> = {}) {
     entity_id: "1",
     details: null,
     created_at: "2026-11-10T15:00:00Z",
+    revertible: false,
+    revert_summary: null,
+    reverted_at: null,
+    reverted_by_name: null,
     ...over,
   };
 }
@@ -30,6 +39,8 @@ function page(items: ReturnType<typeof entry>[], total = items.length, pageNumbe
 
 beforeEach(() => {
   mocks.search.mockReset();
+  mocks.revert.mockReset();
+  mocks.toast.mockReset();
 });
 
 describe("AuditTable", () => {
@@ -64,7 +75,7 @@ describe("AuditTable", () => {
     await screen.findByText("Relatorio aberto");
 
     const headers = screen.getAllByRole("columnheader").map((h) => h.textContent);
-    expect(headers).toEqual(["Quando", "Quem", "Acao", "Recurso", "Onde", "Detalhes"]);
+    expect(headers).toEqual(["Quando", "Quem", "Acao", "Recurso", "Onde", "Detalhes", "Reversao"]);
 
     const rows = screen.getAllByRole("row").slice(1);
     const cells = (row: HTMLElement) => Array.from(row.querySelectorAll("td")).map((td) => td.textContent);
@@ -161,6 +172,60 @@ describe("AuditTable", () => {
 
     expect(screen.getByText("--")).toBeTruthy();
     expect(screen.queryByTitle("Filtrar por esta colecao")).toBeNull();
+  });
+
+  it("so as acoes revertiveis tem o botao Reverter; as ja revertidas dizem por quem", async () => {
+    mocks.search.mockResolvedValue(
+      page([
+        entry(1, { action: "update", action_label: "Atualizado", revertible: true, revert_summary: "Voltar o nome" }),
+        entry(2, { action: "update", action_label: "Atualizado", reverted_at: "2026-11-10T18:00:00Z", reverted_by_name: "Admin" }),
+        entry(3, { action: "delete", action_label: "Excluido" }),
+        entry(4, { action: "login", action_label: "Login" }),
+      ]),
+    );
+    render(<AuditTable filters={{}} timezone="America/Sao_Paulo" />);
+    await screen.findAllByText("Atualizado");
+
+    expect(screen.getAllByRole("button", { name: /Reverter/ })).toHaveLength(1);
+    expect(screen.getByText("Revertida por Admin")).toBeTruthy();
+    expect(screen.getByText("Nao reversivel")).toBeTruthy(); // exclusao: altera algo e nao tem como voltar
+    // Login nao altera nada: a celula fica em branco, sem "nao reversivel"
+    expect(screen.getAllByText("Nao reversivel")).toHaveLength(1);
+  });
+
+  it("Reverter abre a confirmacao; confirmar reverte, avisa e busca a tabela de novo", async () => {
+    mocks.search.mockResolvedValue(
+      page([entry(7, { action: "update", action_label: "Atualizado", revertible: true, revert_summary: "Voltar o nome" })]),
+    );
+    mocks.revert.mockResolvedValue({ status: "reverted", summary: "Voltou o nome" });
+    render(<AuditTable filters={{}} />);
+    await screen.findByText("Atualizado");
+    expect(mocks.search).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByRole("button", { name: /Reverter/ }));
+    expect(screen.getByText("Reverter esta acao?")).toBeTruthy();
+    const dialog = within(screen.getByRole("dialog"));
+    expect(dialog.getByText("Voltar o nome")).toBeTruthy();
+    fireEvent.click(dialog.getByRole("button", { name: "Reverter" }));
+
+    await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("Acao revertida. Voltou o nome"));
+    expect(mocks.revert).toHaveBeenCalledWith(7, false);
+    await waitFor(() => expect(mocks.search).toHaveBeenCalledTimes(2)); // tabela recarregada
+    expect(screen.queryByText("Reverter esta acao?")).toBeNull();
+  });
+
+  it("cancelar a confirmacao nao reverte nada", async () => {
+    mocks.search.mockResolvedValue(
+      page([entry(7, { action: "update", action_label: "Atualizado", revertible: true, revert_summary: "Voltar o nome" })]),
+    );
+    render(<AuditTable filters={{}} />);
+    await screen.findByText("Atualizado");
+
+    fireEvent.click(screen.getByRole("button", { name: /Reverter/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(mocks.revert).not.toHaveBeenCalled();
+    expect(screen.queryByText("Reverter esta acao?")).toBeNull();
   });
 
   it("clicar no detalhe poe o texto na busca e busca por ele", async () => {

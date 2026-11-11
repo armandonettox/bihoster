@@ -21,9 +21,25 @@ class AuditLogOut(BaseModel):
     entity_id: Optional[str]
     details: Optional[str]
     created_at: UtcDatetime
+    # Reversao pela auditoria: so as acoes que guardaram o estado de antes e ainda nao foram revertidas
+    revertible: bool = False
+    # O que acontece se a acao for revertida (texto da confirmacao)
+    revert_summary: Optional[str] = None
+    reverted_at: Optional[UtcDatetime] = None
+    reverted_by_name: Optional[str] = None
 
     class Config:
         from_attributes = True
+
+
+class AuditRevertIn(BaseModel):
+    # Segue mesmo que o item tenha sido alterado depois da acao (so apos a pessoa confirmar o aviso)
+    force: bool = False
+
+
+class AuditRevertOut(BaseModel):
+    status: str = "reverted"
+    summary: str
 
 
 class AuditPageOut(BaseModel):

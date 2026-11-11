@@ -20,6 +20,8 @@ ACTION_LABELS: dict[str, str] = {
     "add_group_member": "Membro adicionado ao grupo",
     "invite_group_member": "Convite de grupo criado",
     "set_access": "Acesso de grupo alterado",
+    "remove_access": "Acesso de grupo removido",
+    "revert": "Acao revertida",
     "set_group_permissions": "Permissoes de grupo alteradas",
     "view_collection": "Colecao visitada",
     "view_report": "Relatorio aberto",

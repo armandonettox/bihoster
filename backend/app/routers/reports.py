@@ -7,6 +7,8 @@ from sqlalchemy.orm import Session
 
 from app.core import powerbi, report_delivery
 from app.core.audit import log_action
+from app.core.audit_revert import PAGE_NAMES_FIELD, REPORT_UPDATE
+from app.core.audit_revert import changed_fields as audit_changed_fields
 from app.core.database import get_db
 from app.core.workspace_deps import require_workspace_member, require_workspace_role
 from app.models.favorite import Favorite
@@ -97,17 +99,36 @@ def update_report(
     changed_fields = data.model_dump(exclude_unset=True, exclude=_PAGE_FIELDS)
     if "powerbi_connection_id" in changed_fields:
         _validate_connection_exists(db, changed_fields["powerbi_connection_id"])
+    page_names = resolve_page_names(data)
+
+    # Estado de antes dos campos que esta chamada mexe, para a auditoria poder reverter
+    def snapshot() -> dict:
+        values = {field: getattr(report, field) for field in changed_fields}
+        if page_names is not None:
+            values[PAGE_NAMES_FIELD] = list(report.pbi_page_names)
+        return values
+
+    before = snapshot()
     for field, value in changed_fields.items():
         setattr(report, field, value)
-    page_names = resolve_page_names(data)
     if page_names is not None:
         report.set_page_names(page_names)
 
     db.commit()
     db.refresh(report)
     invalidate_embed_cache(workspace_id, report_id)
+    fields = audit_changed_fields(before, snapshot())
 
-    log_action(db, action="update", entity="report", user_id=current_user.id, workspace_id=workspace_id, entity_id=report.id, details=report.name)
+    log_action(
+        db,
+        action="update",
+        entity="report",
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        entity_id=report.id,
+        details=report.name,
+        change={"kind": REPORT_UPDATE, "fields": fields} if fields else None,
+    )
     return report
 
 

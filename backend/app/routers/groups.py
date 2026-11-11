@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core.ai_access import AI_PERMISSIONS
 from app.core.audit import log_action
+from app.core.audit_revert import GROUP_MEMBER, GROUP_PERMISSIONS
 from app.core.database import get_db
 from app.core.workspace_deps import (
     admin_group_lock,
@@ -119,6 +120,12 @@ def set_group_permissions(
     if group.is_admin_group:
         raise HTTPException(status_code=400, detail="O grupo Administradores sempre tem todas as permissoes.")
 
+    permissions_before = sorted(
+        row.permission_key
+        for row in db.query(GroupPermission.permission_key)
+        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS))
+        .all()
+    )
     # Troca so as chaves de IA: qualquer outra permissao que o grupo venha a ter nao e tocada
     db.query(GroupPermission).filter(
         GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS)
@@ -134,6 +141,17 @@ def set_group_permissions(
         user_id=current_user.id,
         entity_id=group_id,
         details=", ".join(data.permissions) or "nenhuma",
+        change=(
+            {
+                "kind": GROUP_PERMISSIONS,
+                "group_id": group_id,
+                "group_name": group.name,
+                "before": permissions_before,
+                "after": sorted(set(data.permissions)),
+            }
+            if permissions_before != sorted(set(data.permissions))
+            else None
+        ),
     )
     return GroupPermissionsOut(permissions=data.permissions, editable=True)
 
@@ -150,6 +168,19 @@ def list_group_members(
 
     members = db.query(GroupMember).filter(GroupMember.group_id == group_id).all()
     return [GroupMemberOut(user_id=m.user.id, name=m.user.name, email=m.user.email) for m in members]
+
+
+def _member_added(group: Group, user: User) -> dict:
+    """Estado de antes e de depois de adicionar alguem ao grupo, para a auditoria reverter."""
+    return {
+        "kind": GROUP_MEMBER,
+        "group_id": group.id,
+        "group_name": group.name,
+        "user_id": user.id,
+        "email": user.email,
+        "before": False,
+        "after": True,
+    }
 
 
 @router.post("/{group_id}/members", response_model=GroupMemberOut, status_code=status.HTTP_201_CREATED)
@@ -187,6 +218,7 @@ def add_group_member(
         user_id=current_user.id,
         entity_id=group_id,
         details=user.email,
+        change=_member_added(group, user),
     )
     return GroupMemberOut(user_id=user.id, name=user.name, email=user.email)
 
@@ -215,7 +247,15 @@ def invite_group_member(
         except IntegrityError:
             db.rollback()
             raise HTTPException(status_code=400, detail="Usuario ja esta no grupo")
-        log_action(db, action="add_group_member", entity="group", user_id=current_user.id, entity_id=group_id, details=user.email)
+        log_action(
+            db,
+            action="add_group_member",
+            entity="group",
+            user_id=current_user.id,
+            entity_id=group_id,
+            details=user.email,
+            change=_member_added(group, user),
+        )
         return {"status": "added", "email": user.email}
 
     existing_invite = db.query(GroupInvite).filter(GroupInvite.group_id == group_id, GroupInvite.email == data.email).first()

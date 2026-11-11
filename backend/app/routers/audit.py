@@ -1,11 +1,14 @@
 from datetime import date, datetime, time, timedelta, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core import audit_revert
+from app.core.audit import log_action
 from app.core.audit_labels import action_label, actions_matching, entity_label
+from app.core.audit_revert import parse_change, summarize
 from app.core.database import get_db
 from app.core.workspace_deps import require_platform_admin, require_workspace_role
 from app.models.audit_log import AuditLog
@@ -26,6 +29,8 @@ from app.schemas.audit_log import (
     AuditPageOut,
     AuditReportCount,
     AuditReportOption,
+    AuditRevertIn,
+    AuditRevertOut,
     AuditSummaryOut,
     AuditTotals,
     AuditUserCount,
@@ -39,8 +44,15 @@ workspace_router = APIRouter(prefix="/workspaces/{workspace_id}/audit", tags=["a
 MAX_DAYS_IN_CHART = 366
 
 
-def _to_out(entry: AuditLog, user_name: str | None, workspace_name: str | None) -> AuditLogOut:
+def _to_out(
+    entry: AuditLog, user_name: str | None, workspace_name: str | None, reverted_by_name: str | None = None
+) -> AuditLogOut:
+    change = parse_change(entry.change)
     return AuditLogOut(
+        revertible=change is not None and entry.reverted_at is None,
+        revert_summary=summarize(change) if change is not None and entry.reverted_at is None else None,
+        reverted_at=entry.reverted_at,
+        reverted_by_name=(reverted_by_name or entry.reverted_by_email) if entry.reverted_at else None,
         id=entry.id,
         user_id=entry.user_id,
         user_name=user_name,
@@ -139,14 +151,19 @@ def list_all_audit_logs(
 
 
 def _with_names(db: Session, entries: list[AuditLog]) -> list[AuditLogOut]:
-    user_ids = {e.user_id for e in entries if e.user_id}
+    user_ids = {e.user_id for e in entries if e.user_id} | {e.reverted_by_id for e in entries if e.reverted_by_id}
     workspace_ids = {e.workspace_id for e in entries if e.workspace_id}
     names_by_user = dict(db.query(User.id, User.name).filter(User.id.in_(user_ids)).all()) if user_ids else {}
     names_by_workspace = (
         dict(db.query(Workspace.id, Workspace.name).filter(Workspace.id.in_(workspace_ids)).all()) if workspace_ids else {}
     )
     return [
-        _to_out(entry, names_by_user.get(entry.user_id), names_by_workspace.get(entry.workspace_id))
+        _to_out(
+            entry,
+            names_by_user.get(entry.user_id),
+            names_by_workspace.get(entry.workspace_id),
+            names_by_user.get(entry.reverted_by_id),
+        )
         for entry in entries
     ]
 
@@ -396,6 +413,82 @@ def audit_summary(
         login_methods=AuditLoginMethods(password=max(logins_ok - logins_google, 0), google=logins_google),
         timezone=tz_name,
     )
+
+
+@router.post("/audit/{log_id}/revert", response_model=AuditRevertOut)
+def revert_audit_action(
+    log_id: int,
+    data: AuditRevertIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_platform_admin),
+):
+    """Volta uma acao ao estado de antes. Se o item mudou de novo depois da acao, responde 409
+    com o que esta valendo agora; a pessoa confirma e a chamada vem repetida com force=true."""
+    entry = db.query(AuditLog).get(log_id)
+    if not entry:
+        raise HTTPException(status_code=404, detail="Registro nao encontrado")
+    change = parse_change(entry.change)
+    if change is None:
+        raise HTTPException(status_code=400, detail="Esta acao nao pode ser revertida")
+    if entry.reverted_at is not None:
+        raise HTTPException(status_code=400, detail="Esta acao ja foi revertida")
+
+    try:
+        current = audit_revert.current_state(db, entry, change)
+    except audit_revert.RevertGone as exc:
+        raise HTTPException(status_code=409, detail={"code": "gone", "message": f"{exc}: nao ha o que reverter."})
+
+    expected = audit_revert.expected_state(change)
+    if current != expected and not data.force:
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "code": "conflict",
+                "message": "Este item foi alterado depois dessa acao.",
+                "expected": audit_revert.describe_state(change, expected),
+                "current": audit_revert.describe_state(change, current),
+                "after_revert": audit_revert.describe_state(change, _before_state(change)),
+            },
+        )
+
+    try:
+        audit_revert.apply_revert(db, entry, change)
+    except audit_revert.RevertGone as exc:
+        db.rollback()
+        raise HTTPException(status_code=409, detail={"code": "gone", "message": f"{exc}: nao ha o que reverter."})
+    except audit_revert.RevertBlocked as exc:
+        db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    summary = summarize(change)
+    entry.reverted_at = datetime.now(timezone.utc)
+    entry.reverted_by_id = current_user.id
+    entry.reverted_by_email = current_user.email
+    db.commit()
+
+    if change["kind"] == audit_revert.REPORT_UPDATE:
+        # O token de embed guardado pode ter sido gerado com as configuracoes de antes da reversao
+        from app.routers.powerbi import invalidate_embed_cache
+
+        invalidate_embed_cache(entry.workspace_id or 0, int(entry.entity_id or 0))
+
+    log_action(
+        db,
+        action="revert",
+        entity=entry.entity,
+        user_id=current_user.id,
+        workspace_id=entry.workspace_id,
+        entity_id=entry.entity_id,
+        details=f"Reverteu o registro #{entry.id}: {summary}",
+    )
+    return AuditRevertOut(summary=summary)
+
+
+def _before_state(change: dict):
+    """O "antes" no mesmo formato do estado atual (para mostrar no aviso de conflito)."""
+    if change["kind"] in (audit_revert.WORKSPACE_UPDATE, audit_revert.REPORT_UPDATE):
+        return {name: v["before"] for name, v in change["fields"].items()}
+    return change["before"]
 
 
 @workspace_router.get("/", response_model=list[AuditLogOut])

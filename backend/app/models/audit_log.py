@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, func
+from sqlalchemy import Column, Integer, String, ForeignKey, DateTime, Text, func
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -18,5 +18,12 @@ class AuditLog(Base):
     entity_id = Column(String, nullable=True)
     details = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    # Estado de antes e de depois da acao (JSON), so nas acoes que podem ser revertidas pela
+    # auditoria. Nulo = acao nao reversivel (e toda a historia anterior a esse campo).
+    change = Column(Text, nullable=True)
+    # Preenchidos quando um administrador reverte a acao
+    reverted_at = Column(DateTime(timezone=True), nullable=True)
+    reverted_by_id = Column(Integer, nullable=True)
+    reverted_by_email = Column(String, nullable=True)
 
     user = relationship("User")
