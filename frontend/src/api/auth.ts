@@ -7,6 +7,18 @@ export interface User {
   is_platform_admin: boolean;
   /** false para conta criada pelo login com Google (nao tem senha para trocar). Ausente em backend antigo. */
   can_change_password?: boolean;
+  /** "google" quando a conta entra (ou ja entrou) pelo Google. Ausente em backend antigo. */
+  login_provider?: "google" | "password";
+  /** Foto guardada no servidor (so contas que entraram pelo Google). */
+  picture_url?: string | null;
+  /** Resumo da conta (ISO 8601). Ausentes em backend antigo. */
+  created_at?: string | null;
+  last_login_at?: string | null;
+  groups?: string[];
+  /** So contas Google: idioma (ex: pt-BR), dominio e se e conta de organizacao (Workspace). */
+  google_locale?: string | null;
+  google_domain?: string | null;
+  google_workspace?: boolean;
 }
 
 export async function login(email: string, password: string): Promise<string> {

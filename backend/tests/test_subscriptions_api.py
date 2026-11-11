@@ -88,7 +88,7 @@ class TestPermissao:
         resp = _criar(client, cenario, headers=cenario.pessoa)
 
         assert resp.status_code == 201
-        assert resp.json()["created_by_name"] == "pessoa"
+        assert resp.json()["created_by_name"] == "Pessoa"
 
     def test_leitor_da_colecao_nao_cria_nem_ve(self, client, cenario):
         resp = _criar(client, cenario, headers=cenario.pessoa, ws=cenario.ws_b, rel=cenario.rel_b)

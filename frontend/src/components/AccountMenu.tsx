@@ -1,14 +1,13 @@
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useDropdownMenu } from "../hooks/useDropdownMenu";
+import UserAvatar from "./UserAvatar";
 
-/** Foto (iniciais) do perfil na barra do topo: abre Minha conta e Sair. Os modulos ficam no AppsMenu. */
+/** Foto (ou iniciais) do perfil na barra do topo: abre Minha conta e Sair. Os modulos ficam no AppsMenu. */
 export default function AccountMenu() {
   const { open, setOpen, containerRef, triggerRef } = useDropdownMenu();
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-
-  const initials = (user?.name || "?").slice(0, 2).toUpperCase();
 
   return (
     <div ref={containerRef} className="topbar-menu">
@@ -21,13 +20,13 @@ export default function AccountMenu() {
         aria-haspopup="true"
         aria-expanded={open}
       >
-        <div className="user-avatar">{initials}</div>
+        <UserAvatar name={user?.name} pictureUrl={user?.picture_url} />
       </button>
 
       {open && (
         <div className="topbar-menu-dropdown account-menu-dropdown">
           <div className="account-menu-header">
-            <div className="user-avatar">{initials}</div>
+            <UserAvatar name={user?.name} pictureUrl={user?.picture_url} />
             <div style={{ minWidth: 0 }}>
               <div className="user-name" style={{ maxWidth: 200 }}>
                 {user?.name}

@@ -1,10 +1,19 @@
+from datetime import datetime
+
 from pydantic import BaseModel, EmailStr, Field, field_validator
+
+from app.core.names import format_person_name
 
 
 class UserCreate(BaseModel):
     name: str = Field(max_length=200)
     email: EmailStr
     password: str
+
+    @field_validator("name")
+    @classmethod
+    def format_name(cls, value: str) -> str:
+        return format_person_name(value)
 
     @field_validator("email")
     @classmethod
@@ -55,7 +64,7 @@ class ProfileUpdate(BaseModel):
     @field_validator("name")
     @classmethod
     def name_not_blank(cls, value: str) -> str:
-        value = value.strip()
+        value = format_person_name(value)
         if not value:
             raise ValueError("O nome nao pode ficar em branco")
         return value
@@ -82,6 +91,17 @@ class UserOut(BaseModel):
     is_platform_admin: bool = False
     # Conta criada pelo login com Google nao tem senha utilizavel pra trocar
     can_change_password: bool = True
+    # "google" ou "password"
+    login_provider: str = "password"
+    picture_url: str | None = None
+    # Resumo da conta (tela Minha conta)
+    created_at: datetime | None = None
+    last_login_at: datetime | None = None
+    groups: list[str] = []
+    # So para conta Google
+    google_locale: str | None = None
+    google_domain: str | None = None
+    google_workspace: bool = False
 
     class Config:
         from_attributes = True

@@ -42,6 +42,12 @@ describe("AccountMenu", () => {
     expect(screen.queryByRole("button", { name: "Chat de IA" })).toBeNull();
   });
 
+  it("sem foto mostra as iniciais no botao do perfil", () => {
+    const { container } = render(<AccountMenu />);
+    expect(container.querySelector(".user-avatar")?.textContent).toBe("MA");
+    expect(container.querySelector("img")).toBeNull();
+  });
+
   it("Sair continua funcionando", () => {
     render(<AccountMenu />);
     openMenu();

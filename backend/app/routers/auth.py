@@ -3,11 +3,14 @@ from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from jwt import PyJWTError
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.audit import log_action
+from app.core.avatar import download_avatar
 from app.core.config import settings
+from app.core.names import format_person_name
 from app.core.database import get_db
 from app.core.rate_limit import limiter
 from app.core.security import (
@@ -17,11 +20,12 @@ from app.core.security import (
     password_fingerprint,
     verify_password_constant_time,
 )
+from app.models.audit_log import AuditLog
 from app.models.invite import GroupInvite
 from app.models.password_reset import PasswordResetToken
 from app.models.settings import AppSettings
 from app.models.user import User
-from app.models.workspace import GroupMember
+from app.models.workspace import Group, GroupMember
 from app.schemas.user import (
     ChangePassword,
     GoogleLogin,
@@ -61,13 +65,41 @@ def _register_failed_attempt(db: Session, user: User) -> None:
 def _user_out(db: Session, user: User) -> UserOut:
     from app.core.workspace_deps import is_platform_admin
 
+    via_google = _is_google_account(user)
+    group_names = [
+        name
+        for (name,) in db.query(Group.name)
+        .join(GroupMember, GroupMember.group_id == Group.id)
+        .filter(GroupMember.user_id == user.id)
+        .order_by(Group.is_default.desc(), Group.name)
+        .all()
+    ]
+    last_login_at = (
+        db.query(func.max(AuditLog.created_at))
+        .filter(AuditLog.user_id == user.id, AuditLog.action == "login")
+        .scalar()
+    )
     return UserOut(
         id=user.id,
         name=user.name,
         email=user.email,
         is_platform_admin=is_platform_admin(db, user.id),
-        can_change_password=user.registered_via == "password",
+        can_change_password=not via_google,
+        login_provider="google" if via_google else "password",
+        picture_url=user.picture_url,
+        created_at=user.created_at,
+        last_login_at=last_login_at,
+        groups=group_names,
+        google_locale=user.google_locale if via_google else None,
+        google_domain=(user.google_hd or user.email.rsplit("@", 1)[-1]) if via_google else None,
+        google_workspace=bool(user.google_hd) if via_google else False,
     )
+
+
+def _is_google_account(user: User) -> bool:
+    """Conta criada pelo Google, ou criada com senha mas que ja entrou pelo Google: nos dois
+    casos a senha nao e gerenciada pelo BIHoster."""
+    return user.registered_via == "google" or user.google_linked_at is not None
 
 
 def _consume_invites(db: Session, user: User) -> None:
@@ -177,10 +209,13 @@ def login_with_google(request: Request, data: GoogleLogin, db: Session = Depends
         raise HTTPException(status_code=401, detail="Token do Google invalido")
 
     email = payload.get("email")
-    name = payload.get("name") or email
     if not email:
         raise HTTPException(status_code=401, detail="Token do Google sem email")
+    # So recusa quando o Google diz explicitamente que o email nao foi verificado
+    if payload.get("email_verified") is False:
+        raise HTTPException(status_code=401, detail="O Google nao confirmou o email desta conta")
     email = email.strip().lower()
+    name = format_person_name(payload.get("name") or email.split("@")[0])
 
     allowed_domains = [d.strip() for d in (settings_row.google_allowed_domains or "").split(",") if d.strip()]
     domain = email.rsplit("@", 1)[-1]
@@ -224,6 +259,19 @@ def login_with_google(request: Request, data: GoogleLogin, db: Session = Depends
         ensure_user_in_default_group(db, user.id)
         _consume_invites(db, user)
         log_action(db, action="register", entity="user", user_id=user.id, entity_id=user.id, details="google")
+
+    # Foto e marca de conta Google a cada entrada; falha ao baixar a foto nunca barra o login
+    if user.google_linked_at is None:
+        user.google_linked_at = datetime.now(timezone.utc)
+    # O nome nao e editavel em conta Google: acompanha o que esta no Google
+    if payload.get("name"):
+        user.name = name
+    user.google_locale = payload.get("locale") or user.google_locale
+    user.google_hd = payload.get("hd") or user.google_hd
+    new_picture = download_avatar(payload.get("picture"), user.id, user.picture_url)
+    if new_picture:
+        user.picture_url = new_picture
+    db.commit()
 
     log_action(db, action="login", entity="user", user_id=user.id, entity_id=user.id, details="google")
     token = create_access_token(subject=str(user.id), password_hash=user.hashed_password)
@@ -319,7 +367,10 @@ def me(current_user: User = Depends(get_current_user), db: Session = Depends(get
 
 @router.patch("/me", response_model=UserOut)
 def update_me(data: ProfileUpdate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """O proprio usuario troca o nome. O email e a identidade da conta e nao muda por aqui."""
+    """O proprio usuario troca o nome. O email e a identidade da conta e nao muda por aqui.
+    Conta Google nao troca o nome: ele vem do Google a cada login."""
+    if _is_google_account(current_user):
+        raise HTTPException(status_code=400, detail="Esta conta entra pelo Google e o nome vem da conta Google")
     current_user.name = data.name
     db.commit()
     db.refresh(current_user)
@@ -339,7 +390,7 @@ def change_password(
     deixa de valer (a impressao da senha mudou), entao quem trocou continua logado e as outras
     sessoes caem. Erro de senha atual e 400, nao 401: o cliente trata 401 como sessao vencida e
     deslogaria a pessoa so por errar a senha."""
-    if current_user.registered_via != "password":
+    if _is_google_account(current_user):
         raise HTTPException(status_code=400, detail="Esta conta entra pelo Google e nao tem senha para trocar")
 
     if not verify_password_constant_time(data.current_password, current_user.hashed_password):
