@@ -42,7 +42,7 @@ export default function AccountMenu() {
             className="topbar-menu-item"
             onClick={() => {
               setOpen(false);
-              navigate("/settings?tab=account");
+              navigate("/account");
             }}
           >
             <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">manage_accounts</span>

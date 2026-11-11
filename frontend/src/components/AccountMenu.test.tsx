@@ -22,13 +22,13 @@ beforeEach(() => {
 });
 
 describe("AccountMenu", () => {
-  it("Minha conta abre a aba certa de Configuracoes e fecha o menu", () => {
+  it("Minha conta abre a pagina propria da conta e fecha o menu", () => {
     render(<AccountMenu />);
     openMenu();
 
     fireEvent.click(screen.getByRole("button", { name: "Minha conta" }));
 
-    expect(mocks.navigate).toHaveBeenCalledWith("/settings?tab=account");
+    expect(mocks.navigate).toHaveBeenCalledWith("/account");
     expect(screen.queryByRole("button", { name: "Minha conta" })).toBeNull();
   });
 

@@ -1,4 +1,5 @@
 import { useRef, type KeyboardEvent } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useUrlTab } from "../hooks/useUrlTab";
 import { useAiAccess } from "../hooks/useAiAccess";
@@ -12,13 +13,12 @@ import AuthTab from "./settings/AuthTab";
 import EmailTab from "./settings/EmailTab";
 import AuditTab from "./settings/AuditTab";
 import UpdatesTab from "./settings/UpdatesTab";
-import AccountTab from "./settings/AccountTab";
 import SubscriptionsTab from "./settings/SubscriptionsTab";
 import PermissoesTab from "./settings/PermissoesTab";
 import CacheTab from "./settings/CacheTab";
 import AiTab from "./settings/AiTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "audit" | "updates" | "account" | "permissoes" | "cache";
+type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "audit" | "updates" | "permissoes" | "cache";
 
 // A aba de IA aparece para quem tem a permissao "Gerenciar IA" (grupos), administre ou nao alguma colecao
 const AI_TAB: { key: Tab; label: string } = { key: "ai", label: "IA" };
@@ -41,29 +41,30 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: "cache", label: "Cache" },
 ];
 
-// Todo usuario tem a sua conta, administre ou nao
-const ACCOUNT_TAB: { key: Tab; label: string } = { key: "account", label: "Minha conta" };
-
 export default function Settings() {
   const { workspaces, loading } = useWorkspace();
   const { canManage: canManageAi, loading: aiLoading } = useAiAccess();
+  const [searchParams] = useSearchParams();
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
   const adminTabs = ADMIN_TABS.filter((t) => t.key !== AI_TAB.key || canManageAi);
-  const tabs = isAnyAdmin ? [...adminTabs, ACCOUNT_TAB] : canManageAi ? [AI_TAB, ACCOUNT_TAB] : [ACCOUNT_TAB];
-  const showAdminHeader = tabs.length > 1;
+  // A conta da pessoa tem pagina propria (/account); aqui ficam so as abas de administracao.
+  const tabs = isAnyAdmin ? adminTabs : canManageAi ? [AI_TAB] : [];
 
   // Aba na URL (?tab=): recarregar mantem a aba e da pra compartilhar um link direto; lembra a ultima.
-  // Quem nao e admin so tem "account": qualquer outro valor na URL cai nela.
+  // Quem nao e admin so tem a aba de IA (se gerenciar): qualquer outro valor na URL cai nela.
   const [tab, setTab] = useUrlTab<Tab>(
     tabs.map((t) => t.key),
-    isAnyAdmin ? "general" : "account",
+    isAnyAdmin ? "general" : "ai",
     { storageKey: "settings_tab" },
   );
 
   // Sem saber se a pessoa administra alguma colecao nem se gerencia a IA, nao da pra decidir quais abas mostrar
   if (loading || aiLoading) return <PageLoading />;
+
+  // Sem nada para administrar, ou link antigo da aba da conta (/settings?tab=account): vai para a pagina da conta
+  if (tabs.length === 0 || searchParams.get("tab") === "account") return <Navigate to="/account" replace />;
 
   function focusTab(key: Tab) {
     setTab(key);
@@ -84,14 +85,8 @@ export default function Settings() {
   return (
     <div className="settings-page">
       <div className="settings-header">
-        <h1>{showAdminHeader ? "Configuracoes" : "Minha conta"}</h1>
-        <p>
-          {isAnyAdmin
-            ? "Gerencie a marca do sistema, colecoes, membros e grupos de acesso."
-            : canManageAi
-              ? "Gerencie a IA e a sua conta."
-              : "Gerencie o seu nome e a sua senha."}
-        </p>
+        <h1>Configuracoes</h1>
+        <p>{isAnyAdmin ? "Gerencie a marca do sistema, colecoes, membros e grupos de acesso." : "Gerencie a IA do sistema."}</p>
       </div>
 
       {tabs.length > 1 && (
@@ -130,7 +125,6 @@ export default function Settings() {
         {tab === "audit" && <AuditTab />}
         {tab === "updates" && <UpdatesTab />}
         {tab === "cache" && <CacheTab />}
-        {tab === "account" && <AccountTab />}
       </div>
     </div>
   );

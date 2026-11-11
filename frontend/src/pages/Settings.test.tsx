@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Settings from "./Settings";
 
@@ -30,19 +30,22 @@ vi.mock("./settings/AiTab", async () => (await import("../test-stubs")).tabStub(
 vi.mock("./settings/SubscriptionsTab", async () => (await import("../test-stubs")).tabStub("tab:subscriptions"));
 vi.mock("./settings/AuditTab", async () => (await import("../test-stubs")).tabStub("tab:audit"));
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
-vi.mock("./settings/AccountTab", async () => (await import("../test-stubs")).tabStub("tab:account"));
 vi.mock("./settings/PermissoesTab", async () => (await import("../test-stubs")).tabStub("tab:permissoes"));
 vi.mock("./settings/CacheTab", async () => (await import("../test-stubs")).tabStub("tab:cache"));
 
 function renderAt(url: string) {
   return render(
     <MemoryRouter initialEntries={[url]}>
-      <Settings />
+      <Routes>
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/account" element={<div data-testid="account-page">pagina da conta</div>} />
+      </Routes>
     </MemoryRouter>,
   );
 }
 
 const content = () => screen.getByTestId("tab-content").textContent;
+const onAccountPage = () => screen.queryByTestId("account-page") !== null;
 
 beforeEach(() => {
   mocks.workspaces = [];
@@ -57,41 +60,40 @@ describe("Settings - quem nao administra nenhuma colecao", () => {
     mocks.workspaces = [{ id: 1, name: "Comercial", role: "viewer" }];
   });
 
-  it("ve so a sua conta, sem abas de administracao", () => {
+  it("sem nada para administrar, /settings vai para a pagina da conta", () => {
     renderAt("/settings");
 
-    expect(content()).toBe("tab:account");
+    expect(onAccountPage()).toBe(true);
     expect(screen.queryByRole("tablist")).toBeNull();
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Minha conta");
   });
 
   it.each(["members", "general", "audit", "updates", "auth", "email", "ai", "brand", "groups", "collections"])(
-    "?tab=%s na URL cai na conta, nunca mostra a aba de administracao",
+    "?tab=%s na URL tambem vai para a conta, nunca mostra a aba de administracao",
     (tab) => {
       renderAt(`/settings?tab=${tab}`);
-      expect(content()).toBe("tab:account");
+      expect(onAccountPage()).toBe(true);
+      expect(screen.queryByTestId("tab-content")).toBeNull();
     },
   );
 
   it("uma aba de administracao lembrada de antes tambem nao vaza", () => {
     window.localStorage.setItem("settings_tab", "members");
     renderAt("/settings");
-    expect(content()).toBe("tab:account");
+    expect(onAccountPage()).toBe(true);
   });
 
-  it("editor tambem so ve a conta (so administrador ve as abas)", () => {
+  it("editor tambem vai para a conta (so administrador ve as abas)", () => {
     mocks.workspaces = [{ id: 1, name: "Comercial", role: "editor" }];
     renderAt("/settings");
-    expect(content()).toBe("tab:account");
-    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(onAccountPage()).toBe(true);
   });
 
-  it("quem so gerencia a IA ve a aba IA junto com a conta, e nenhuma outra de administracao", () => {
+  it("quem so gerencia a IA ve so a aba IA, sem Minha conta", () => {
     mocks.canManageAi = true;
     renderAt("/settings?tab=ai");
 
     expect(content()).toBe("tab:ai");
-    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["IA", "Minha conta"]);
+    expect(screen.queryByRole("tablist")).toBeNull(); // uma aba so, sem barra de abas
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Configuracoes");
   });
 
@@ -99,7 +101,7 @@ describe("Settings - quem nao administra nenhuma colecao", () => {
     mocks.canManageAi = true;
     renderAt("/settings?tab=members");
 
-    expect(content()).toBe("tab:account");
+    expect(content()).toBe("tab:ai");
   });
 });
 
@@ -116,20 +118,20 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(content()).toBe("tab:general");
     const labels = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(labels).not.toContain("IA");
-    expect(labels).toHaveLength(13);
+    expect(labels).toHaveLength(12);
   });
 
-  it("abre em Geral e tem a aba Minha conta junto com as demais", () => {
+  it("abre em Geral com as abas de administracao e sem Minha conta", () => {
     renderAt("/settings");
 
     expect(content()).toBe("tab:general");
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Configuracoes");
     const labels = screen.getAllByRole("tab").map((tab) => tab.textContent);
-    expect(labels).toContain("Minha conta");
+    expect(labels).not.toContain("Minha conta");
     expect(labels).toContain("Membros");
     expect(labels).toContain("E-mail");
     expect(labels).toContain("IA");
-    expect(labels).toHaveLength(14);
+    expect(labels).toHaveLength(13);
   });
 
   it("?tab=email abre a aba de e-mail", () => {
@@ -142,24 +144,17 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(content()).toBe("tab:ai");
   });
 
-  it("?tab=account abre a conta", () => {
+  it("link antigo ?tab=account vai para a pagina da conta", () => {
     renderAt("/settings?tab=account");
-    expect(content()).toBe("tab:account");
+    expect(onAccountPage()).toBe(true);
   });
 
-  it("clicar em Minha conta troca de aba", () => {
-    renderAt("/settings");
-    fireEvent.click(screen.getByRole("tab", { name: "Minha conta" }));
-    expect(content()).toBe("tab:account");
-  });
-
-  it("as setas do teclado percorrem inclusive Minha conta", () => {
+  it("as setas do teclado percorrem as abas e voltam ao comeco depois da ultima", () => {
     renderAt("/settings?tab=cache");
     fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
-    expect(content()).toBe("tab:account");
-    // E volta pro comeco depois da ultima
-    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowRight" });
     expect(content()).toBe("tab:general");
+    fireEvent.keyDown(screen.getByRole("tablist"), { key: "ArrowLeft" });
+    expect(content()).toBe("tab:cache");
   });
 });
 
@@ -170,6 +165,7 @@ describe("Settings - carregando", () => {
     renderAt("/settings?tab=ai");
 
     expect(screen.queryByTestId("tab-content")).toBeNull();
+    expect(onAccountPage()).toBe(false); // nao redireciona antes de saber
     expect(screen.queryByRole("tablist")).toBeNull();
   });
 
@@ -179,6 +175,7 @@ describe("Settings - carregando", () => {
     renderAt("/settings?tab=members");
 
     expect(screen.queryByTestId("tab-content")).toBeNull();
+    expect(onAccountPage()).toBe(false);
     expect(screen.queryByRole("tablist")).toBeNull();
   });
 });
