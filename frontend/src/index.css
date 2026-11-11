@@ -897,6 +897,12 @@ table.table tr:last-child td {
   padding: 4px 8px;
 }
 
+.apps-menu-trigger {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+}
+
 .account-menu-grid {
   display: grid;
   grid-template-columns: repeat(2, 5px);

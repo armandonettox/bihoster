@@ -5,15 +5,12 @@ import AccountMenu from "./AccountMenu";
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   logout: vi.fn(),
-  workspaces: [] as { id: number; role: string }[],
 }));
 
 vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("../context/AuthContext", () => ({
   useAuth: () => ({ user: { name: "Maria Souza", email: "maria@example.com" }, logout: mocks.logout }),
 }));
-vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ workspaces: mocks.workspaces }) }));
-vi.mock("../context/ThemeContext", () => ({ useTheme: () => ({ theme: "light", toggleTheme: vi.fn() }) }));
 
 function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Menu da conta" }));
@@ -22,38 +19,27 @@ function openMenu() {
 beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.logout.mockReset();
-  mocks.workspaces = [];
 });
 
 describe("AccountMenu", () => {
-  it("todo usuario tem Minha conta, que abre a aba certa de Configuracoes", () => {
-    mocks.workspaces = [{ id: 1, role: "viewer" }];
+  it("Minha conta abre a aba certa de Configuracoes e fecha o menu", () => {
     render(<AccountMenu />);
     openMenu();
 
     fireEvent.click(screen.getByRole("button", { name: "Minha conta" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/settings?tab=account");
+    expect(screen.queryByRole("button", { name: "Minha conta" })).toBeNull();
   });
 
-  it("quem nao administra nada nao ve o item Administracao", () => {
-    mocks.workspaces = [{ id: 1, role: "editor" }];
+  it("o menu do perfil tem so Minha conta e Sair, os modulos ficam no outro menu", () => {
     render(<AccountMenu />);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
     expect(screen.getByRole("button", { name: "Minha conta" })).toBeTruthy();
-  });
-
-  it("administrador ve Administracao alem de Minha conta", () => {
-    mocks.workspaces = [{ id: 1, role: "admin" }];
-    render(<AccountMenu />);
-    openMenu();
-
-    fireEvent.click(screen.getByRole("button", { name: "Administracao" }));
-
-    expect(mocks.navigate).toHaveBeenCalledWith("/settings");
-    expect(screen.queryByRole("button", { name: "Minha conta" })).toBeNull(); // menu fechou ao navegar
+    expect(screen.getByRole("button", { name: "Sair" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Chat de IA" })).toBeNull();
   });
 
   it("Sair continua funcionando", () => {
@@ -61,5 +47,12 @@ describe("AccountMenu", () => {
     openMenu();
     fireEvent.click(screen.getByRole("button", { name: "Sair" }));
     expect(mocks.logout).toHaveBeenCalled();
+  });
+
+  it("Esc fecha o menu", () => {
+    render(<AccountMenu />);
+    openMenu();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("button", { name: "Minha conta" })).toBeNull();
   });
 });

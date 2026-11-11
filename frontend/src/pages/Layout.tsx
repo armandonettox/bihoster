@@ -7,9 +7,9 @@ import type { Report } from "../api/reports";
 import CollectionList from "../components/CollectionList";
 import SearchBar from "../components/SearchBar";
 import AccountMenu from "../components/AccountMenu";
+import AppsMenu from "../components/AppsMenu";
 import ChatNavLink from "../components/ChatNavLink";
 import ChatPanel from "../components/ChatPanel";
-import ChatPanelToggle from "../components/ChatPanelToggle";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
 import { assetUrl } from "../api/client";
 import { getCurrentVersion } from "../api/system";
@@ -96,7 +96,6 @@ export default function Layout() {
           <SearchBar />
         </div>
         <div className="flex-row gap-sm">
-          <ChatPanelToggle />
           <button
             className="btn btn-ghost"
             onClick={toggleTheme}
@@ -107,6 +106,7 @@ export default function Layout() {
               {theme === "dark" ? "light_mode" : "dark_mode"}
             </span>
           </button>
+          <AppsMenu />
           <AccountMenu />
         </div>
       </header>
