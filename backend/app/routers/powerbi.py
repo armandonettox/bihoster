@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core import powerbi
+from app.core.audit import log_view_once
 from app.core.database import get_db
 from app.core.db_helpers import get_or_404
 from app.core.workspace_deps import require_workspace_member, require_workspace_role
@@ -193,6 +194,18 @@ def get_embed_config(
     # A checagem de que a pessoa pertence a colecao (dependencia acima) e a do relatorio na
     # colecao rodam ANTES de qualquer cache: o token compartilhado nunca chega a quem nao tem acesso.
     report = _get_report_or_404(db, workspace_id, report_id)
+
+    # Abrir um relatorio entra na auditoria (relatorios mais visitados). Fica antes do cache pra
+    # contar tambem quando o token vem pronto; a janela evita contar renovacao de token e TV.
+    log_view_once(
+        db,
+        action="view_report",
+        entity="report",
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        entity_id=report_id,
+        details=report.name,
+    )
 
     _prune_expired(_embed_cache)
     cached = _cached_embed_config(workspace_id, report_id, current_user.id)

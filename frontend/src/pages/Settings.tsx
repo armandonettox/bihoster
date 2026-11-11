@@ -11,14 +11,13 @@ import MembersTab from "./settings/MembersTab";
 import GroupsTab from "./settings/GroupsTab";
 import AuthTab from "./settings/AuthTab";
 import EmailTab from "./settings/EmailTab";
-import AuditTab from "./settings/AuditTab";
 import UpdatesTab from "./settings/UpdatesTab";
 import SubscriptionsTab from "./settings/SubscriptionsTab";
 import PermissoesTab from "./settings/PermissoesTab";
 import CacheTab from "./settings/CacheTab";
 import AiTab from "./settings/AiTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "audit" | "updates" | "permissoes" | "cache";
+type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "updates" | "permissoes" | "cache";
 
 // A aba de IA aparece para quem tem a permissao "Gerenciar IA" (grupos), administre ou nao alguma colecao
 const AI_TAB: { key: Tab; label: string } = { key: "ai", label: "IA" };
@@ -36,7 +35,6 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   AI_TAB,
   { key: "subscriptions", label: "Assinaturas" },
   { key: "permissoes", label: "Permissoes" },
-  { key: "audit", label: "Auditoria" },
   { key: "updates", label: "Atualizacoes" },
   { key: "cache", label: "Cache" },
 ];
@@ -65,6 +63,9 @@ export default function Settings() {
 
   // Sem nada para administrar, ou link antigo da aba da conta (/settings?tab=account): vai para a pagina da conta
   if (tabs.length === 0 || searchParams.get("tab") === "account") return <Navigate to="/account" replace />;
+
+  // Link antigo da aba de auditoria (/settings?tab=audit): a auditoria tem pagina propria
+  if (searchParams.get("tab") === "audit") return <Navigate to="/audit" replace />;
 
   function focusTab(key: Tab) {
     setTab(key);
@@ -122,7 +123,6 @@ export default function Settings() {
         {tab === "ai" && <AiTab />}
         {tab === "subscriptions" && <SubscriptionsTab />}
         {tab === "permissoes" && <PermissoesTab />}
-        {tab === "audit" && <AuditTab />}
         {tab === "updates" && <UpdatesTab />}
         {tab === "cache" && <CacheTab />}
       </div>

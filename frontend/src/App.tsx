@@ -23,6 +23,7 @@ const Home = lazy(() => import("./pages/Home"));
 const CollectionHome = lazy(() => import("./pages/CollectionHome"));
 const Settings = lazy(() => import("./pages/Settings"));
 const Account = lazy(() => import("./pages/Account"));
+const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const WorkspaceOnboarding = lazy(() => import("./pages/WorkspaceOnboarding"));
 const TvPlaylistPlayer = lazy(() => import("./pages/TvPlaylistPlayer"));
@@ -102,6 +103,7 @@ function RoutedContent() {
             <Route path="collection" element={<CollectionHome />} />
             <Route path="settings" element={<Settings />} />
             <Route path="account" element={<Account />} />
+            <Route path="audit" element={<Audit />} />
             <Route path="chat" element={<ChatPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>

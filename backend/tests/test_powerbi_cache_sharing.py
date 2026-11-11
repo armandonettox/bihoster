@@ -322,3 +322,76 @@ class TestTarefaEmSegundoPlano:
                 start.assert_called_once()
                 stop.assert_not_called()
             stop.assert_called_once()
+
+
+class TestAuditoriaDeAbertura:
+    """Abrir um relatorio entra na auditoria (relatorios mais visitados), uma vez por janela."""
+
+    @staticmethod
+    def _aberturas(db_session, user_email=None):
+        from app.models.audit_log import AuditLog
+
+        query = db_session.query(AuditLog).filter(AuditLog.action == "view_report")
+        if user_email:
+            query = query.filter(AuditLog.user_email == user_email)
+        return query.all()
+
+    def test_abrir_o_relatorio_grava_uma_visita_com_o_nome_e_a_colecao(self, client, db_session):
+        admin, workspace, (report,) = _setup(client, ["ds-1"])
+
+        resp = _embed(client, admin, workspace, report, generate=MagicMock(return_value=_token()))
+
+        assert resp.status_code == 200
+        (visita,) = self._aberturas(db_session)
+        assert visita.entity == "report"
+        assert visita.entity_id == str(report["id"])
+        assert visita.workspace_id == workspace["id"]
+        assert visita.details == report["name"]
+        assert visita.user_email == "admin@example.com"
+
+    def test_reabrir_dentro_da_janela_nao_grava_outra_linha_mesmo_com_token_em_cache(self, client, db_session):
+        admin, workspace, (report,) = _setup(client, ["ds-1"])
+        generate = MagicMock(return_value=_token())
+
+        for _ in range(3):
+            assert _embed(client, admin, workspace, report, generate=generate).status_code == 200
+
+        assert len(self._aberturas(db_session)) == 1
+        assert generate.call_count == 1  # o terceiro veio do cache e a auditoria nao quebrou isso
+
+    def test_cada_pessoa_conta_a_propria_visita(self, client, db_session):
+        admin, workspace, (report,) = _setup(client, ["ds-1"])
+        outro = _headers_de(client, "pessoa@example.com")
+        generate = MagicMock(return_value=_token())
+
+        _embed(client, admin, workspace, report, generate=generate)
+        _embed(client, outro, workspace, report, generate=generate)
+
+        assert {v.user_email for v in self._aberturas(db_session)} == {"admin@example.com", "pessoa@example.com"}
+
+    def test_depois_da_janela_uma_nova_abertura_e_contada(self, client, db_session):
+        from app.core.audit import VIEW_LOG_WINDOW
+
+        admin, workspace, (report,) = _setup(client, ["ds-1"])
+        generate = MagicMock(return_value=_token())
+        _embed(client, admin, workspace, report, generate=generate)
+        (visita,) = self._aberturas(db_session)
+        visita.created_at = datetime.now(timezone.utc) - VIEW_LOG_WINDOW - timedelta(minutes=1)
+        db_session.commit()
+
+        _embed(client, admin, workspace, report, generate=generate)
+
+        assert len(self._aberturas(db_session)) == 2
+
+    def test_quem_nao_tem_acesso_nao_gera_visita(self, client, db_session):
+        admin, workspace, (report,) = _setup(client, ["ds-1"])
+        intruso = _headers_de(client, "intruso@example.com")
+        # Tira o acesso do grupo padrao ("Todos os usuarios"): a pessoa deixa de ser membro
+        acessos = client.get(f"/workspaces/{workspace['id']}/access", headers=admin).json()
+        padrao = next(a for a in acessos if a["is_default"])
+        client.delete(f"/workspaces/{workspace['id']}/access/{padrao['group_id']}", headers=admin)
+
+        resp = _embed(client, intruso, workspace, report, generate=MagicMock(return_value=_token()))
+
+        assert resp.status_code == 403
+        assert self._aberturas(db_session, "intruso@example.com") == []

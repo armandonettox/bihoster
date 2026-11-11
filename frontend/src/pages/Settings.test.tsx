@@ -28,7 +28,6 @@ vi.mock("./settings/AuthTab", async () => (await import("../test-stubs")).tabStu
 vi.mock("./settings/EmailTab", async () => (await import("../test-stubs")).tabStub("tab:email"));
 vi.mock("./settings/AiTab", async () => (await import("../test-stubs")).tabStub("tab:ai"));
 vi.mock("./settings/SubscriptionsTab", async () => (await import("../test-stubs")).tabStub("tab:subscriptions"));
-vi.mock("./settings/AuditTab", async () => (await import("../test-stubs")).tabStub("tab:audit"));
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
 vi.mock("./settings/PermissoesTab", async () => (await import("../test-stubs")).tabStub("tab:permissoes"));
 vi.mock("./settings/CacheTab", async () => (await import("../test-stubs")).tabStub("tab:cache"));
@@ -39,6 +38,7 @@ function renderAt(url: string) {
       <Routes>
         <Route path="/settings" element={<Settings />} />
         <Route path="/account" element={<div data-testid="account-page">pagina da conta</div>} />
+        <Route path="/audit" element={<div data-testid="audit-page">pagina da auditoria</div>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -118,7 +118,7 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(content()).toBe("tab:general");
     const labels = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(labels).not.toContain("IA");
-    expect(labels).toHaveLength(12);
+    expect(labels).toHaveLength(11);
   });
 
   it("abre em Geral com as abas de administracao e sem Minha conta", () => {
@@ -131,7 +131,14 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(labels).toContain("Membros");
     expect(labels).toContain("E-mail");
     expect(labels).toContain("IA");
-    expect(labels).toHaveLength(13);
+    expect(labels).not.toContain("Auditoria"); // tem pagina propria
+    expect(labels).toHaveLength(12);
+  });
+
+  it("link antigo ?tab=audit vai para a pagina de auditoria", () => {
+    renderAt("/settings?tab=audit");
+    expect(screen.queryByTestId("audit-page")).not.toBeNull();
+    expect(screen.queryByTestId("tab-content")).toBeNull();
   });
 
   it("?tab=email abre a aba de e-mail", () => {

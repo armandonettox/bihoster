@@ -1,10 +1,8 @@
-from datetime import datetime, timedelta, timezone
-
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.audit import log_action
+from app.core.audit import log_view_once
 from app.core.database import get_db
 from app.core.workspace_deps import get_effective_roles_map
 from app.models.audit_log import AuditLog
@@ -16,8 +14,6 @@ from app.schemas.home import HomeCollectionEntry
 
 router = APIRouter(prefix="/home", tags=["home"])
 
-# Janela em que reabrir a mesma colecao nao grava nova linha de auditoria
-VIEW_LOG_WINDOW = timedelta(minutes=10)
 # Quantas colecoes candidatas ler antes de filtrar acesso; folga pra descartar apagadas/sem acesso
 RECENT_CANDIDATES = 30
 
@@ -45,27 +41,14 @@ def record_collection_view(
     # Reabrir a mesma colecao em seguida nao grava outra linha: cada abertura virava uma linha
     # de auditoria (a tabela crescia sem limite e poluia a tela de auditoria). Dentro da janela
     # a visita anterior ja representa "visto recentemente".
-    if not _viewed_within_window(db, current_user.id, workspace_id):
-        log_action(db, action="view_collection", entity="workspace", user_id=current_user.id, workspace_id=workspace_id, entity_id=workspace_id)
-
-
-def _viewed_within_window(db: Session, user_id: int, workspace_id: int) -> bool:
-    last_view = (
-        db.query(func.max(AuditLog.created_at))
-        .filter(
-            AuditLog.user_id == user_id,
-            AuditLog.action == "view_collection",
-            AuditLog.entity_id == str(workspace_id),
-        )
-        .scalar()
+    log_view_once(
+        db,
+        action="view_collection",
+        entity="workspace",
+        user_id=current_user.id,
+        workspace_id=workspace_id,
+        entity_id=workspace_id,
     )
-    if last_view is None:
-        return False
-    # O SQLite devolve datetime sem tzinfo (sempre UTC); normaliza pra comparar sem misturar
-    if last_view.tzinfo is not None:
-        last_view = last_view.astimezone(timezone.utc).replace(tzinfo=None)
-    now_utc = datetime.now(timezone.utc).replace(tzinfo=None)
-    return now_utc - last_view < VIEW_LOG_WINDOW
 
 
 @router.get("/recent", response_model=list[HomeCollectionEntry])

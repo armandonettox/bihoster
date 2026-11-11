@@ -6,10 +6,12 @@ const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setPanelOpen: vi.fn(),
   canUse: false,
+  platformAdmin: false,
   workspaces: [] as { id: number; role: string }[],
 }));
 
 vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
+vi.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { is_platform_admin: mocks.platformAdmin } }) }));
 vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ workspaces: mocks.workspaces }) }));
 vi.mock("../context/ChatContext", () => ({
   useChat: () => ({ canUse: mocks.canUse, setPanelOpen: mocks.setPanelOpen }),
@@ -23,6 +25,7 @@ beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setPanelOpen.mockReset();
   mocks.canUse = false;
+  mocks.platformAdmin = false;
   mocks.workspaces = [];
 });
 
@@ -43,6 +46,25 @@ describe("AppsMenu", () => {
 
     expect(mocks.navigate).toHaveBeenCalledWith("/settings");
     expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull(); // menu fechou
+  });
+
+  it("administrador da plataforma ve Auditoria, que abre a pagina propria", () => {
+    mocks.workspaces = [{ id: 1, role: "admin" }];
+    mocks.platformAdmin = true;
+    render(<AppsMenu />);
+    openMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Auditoria" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/audit");
+  });
+
+  it("quem so administra uma colecao nao ve Auditoria", () => {
+    mocks.workspaces = [{ id: 1, role: "admin" }];
+    render(<AppsMenu />);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Auditoria" })).toBeNull();
   });
 
   it("quem usa o chat ve Chat de IA, que abre o painel do chat", () => {
