@@ -1,6 +1,6 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Outlet, useLocation } from "react-router-dom";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import { FavoritesProvider } from "./context/FavoritesContext";
 import { BrandingProvider } from "./context/BrandingContext";
 import { ChatProvider } from "./context/ChatContext";
@@ -11,6 +11,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./pages/Layout";
 import ErrorBoundary from "./components/ErrorBoundary";
 import PageLoading from "./components/PageLoading";
+import { useAnalyticsAccess } from "./hooks/useAnalyticsAccess";
 
 // Cada rota carrega seu proprio chunk sob demanda -- sem isso, a tela de login (a primeira
 // coisa que qualquer um ve) baixava o mesmo bundle gigante que inclui Configuracoes, o player
@@ -26,18 +27,23 @@ const Account = lazy(() => import("./pages/Account"));
 const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const WorkspaceOnboarding = lazy(() => import("./pages/WorkspaceOnboarding"));
+const AnalyticsOnly = lazy(() => import("./pages/AnalyticsOnly"));
 const TvPlaylistPlayer = lazy(() => import("./pages/TvPlaylistPlayer"));
 const ReportFullscreen = lazy(() => import("./pages/ReportFullscreen"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 function WorkspaceGate() {
   const { currentWorkspace, loading } = useWorkspace();
+  const { user } = useAuth();
+  const analytics = useAnalyticsAccess();
 
-  if (loading) {
+  if (loading || (!currentWorkspace && analytics.loading)) {
     return <PageLoading />;
   }
 
   if (!currentWorkspace) {
+    // Quem so pode ver os analiticos (nao e administrador) nao precisa de colecao para usar o painel
+    if (analytics.canView && !user?.is_platform_admin) return <AnalyticsOnly />;
     return <WorkspaceOnboarding />;
   }
 
