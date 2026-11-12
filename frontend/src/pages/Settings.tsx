@@ -13,11 +13,10 @@ import AuthTab from "./settings/AuthTab";
 import EmailTab from "./settings/EmailTab";
 import UpdatesTab from "./settings/UpdatesTab";
 import SubscriptionsTab from "./settings/SubscriptionsTab";
-import PermissoesTab from "./settings/PermissoesTab";
 import CacheTab from "./settings/CacheTab";
 import AiTab from "./settings/AiTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "updates" | "permissoes" | "cache";
+type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "updates" | "cache";
 
 // A aba de IA aparece para quem tem a permissao "Gerenciar IA" (grupos), administre ou nao alguma colecao
 const AI_TAB: { key: Tab; label: string } = { key: "ai", label: "IA" };
@@ -34,7 +33,6 @@ const ADMIN_TABS: { key: Tab; label: string }[] = [
   { key: "email", label: "E-mail" },
   AI_TAB,
   { key: "subscriptions", label: "Assinaturas" },
-  { key: "permissoes", label: "Permissoes" },
   { key: "updates", label: "Atualizacoes" },
   { key: "cache", label: "Cache" },
 ];
@@ -122,7 +120,6 @@ export default function Settings() {
         {tab === "email" && <EmailTab />}
         {tab === "ai" && <AiTab />}
         {tab === "subscriptions" && <SubscriptionsTab />}
-        {tab === "permissoes" && <PermissoesTab />}
         {tab === "updates" && <UpdatesTab />}
         {tab === "cache" && <CacheTab />}
       </div>

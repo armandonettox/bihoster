@@ -29,7 +29,6 @@ vi.mock("./settings/EmailTab", async () => (await import("../test-stubs")).tabSt
 vi.mock("./settings/AiTab", async () => (await import("../test-stubs")).tabStub("tab:ai"));
 vi.mock("./settings/SubscriptionsTab", async () => (await import("../test-stubs")).tabStub("tab:subscriptions"));
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
-vi.mock("./settings/PermissoesTab", async () => (await import("../test-stubs")).tabStub("tab:permissoes"));
 vi.mock("./settings/CacheTab", async () => (await import("../test-stubs")).tabStub("tab:cache"));
 
 function renderAt(url: string) {
@@ -118,7 +117,7 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(content()).toBe("tab:general");
     const labels = screen.getAllByRole("tab").map((tab) => tab.textContent);
     expect(labels).not.toContain("IA");
-    expect(labels).toHaveLength(11);
+    expect(labels).toHaveLength(10);
   });
 
   it("abre em Geral com as abas de administracao e sem Minha conta", () => {
@@ -132,7 +131,8 @@ describe("Settings - quem administra alguma colecao", () => {
     expect(labels).toContain("E-mail");
     expect(labels).toContain("IA");
     expect(labels).not.toContain("Auditoria"); // tem pagina propria
-    expect(labels).toHaveLength(12);
+    expect(labels).not.toContain("Permissoes"); // o catalogo de niveis foi removido
+    expect(labels).toHaveLength(11);
   });
 
   it("link antigo ?tab=audit vai para a pagina de auditoria", () => {
