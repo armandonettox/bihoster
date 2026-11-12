@@ -7,12 +7,16 @@ const mocks = vi.hoisted(() => ({
   setPanelOpen: vi.fn(),
   canUse: false,
   platformAdmin: false,
+  canViewAnalytics: false,
   workspaces: [] as { id: number; role: string }[],
 }));
 
 vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
 vi.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { is_platform_admin: mocks.platformAdmin } }) }));
 vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ workspaces: mocks.workspaces }) }));
+vi.mock("../hooks/useAnalyticsAccess", () => ({
+  useAnalyticsAccess: () => ({ canView: mocks.canViewAnalytics, canCreate: false, canEdit: false, canDelete: false, loading: false }),
+}));
 vi.mock("../context/ChatContext", () => ({
   useChat: () => ({ canUse: mocks.canUse, setPanelOpen: mocks.setPanelOpen }),
 }));
@@ -26,6 +30,7 @@ beforeEach(() => {
   mocks.setPanelOpen.mockReset();
   mocks.canUse = false;
   mocks.platformAdmin = false;
+  mocks.canViewAnalytics = false;
   mocks.workspaces = [];
 });
 
@@ -87,5 +92,14 @@ describe("AppsMenu", () => {
 
     expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Chat de IA" })).toBeTruthy();
+  });
+
+  it("quem so pode ver analiticos ve o item Analiticos, que abre a pagina", () => {
+    mocks.canViewAnalytics = true;
+    render(<AppsMenu />);
+    openMenu();
+    expect(screen.queryByText("Auditoria")).toBeNull();
+    fireEvent.click(screen.getByText("Analiticos"));
+    expect(mocks.navigate).toHaveBeenCalledWith("/audit");
   });
 });

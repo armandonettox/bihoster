@@ -13,6 +13,11 @@ interface Props {
   /** Filtros da pagina, repassados aos visuais personalizados */
   filters?: AuditFilters;
   editing: boolean;
+  /** Quem pode editar mas nao tem a permissao de mover ve o painel parado no modo de edicao */
+  canMove?: boolean;
+  /** Permissoes dos botoes de cada visual no modo de edicao */
+  canConfigure?: boolean;
+  canRemove?: boolean;
   onEditWidget?: (id: string) => void;
   onRemoveWidget?: (id: string) => void;
   /** Clicar num item de um visual pede este filtro a pagina (so fora do modo de edicao) */
@@ -28,6 +33,9 @@ export default function DashboardGrid({
   summary,
   filters,
   editing,
+  canMove = true,
+  canConfigure = true,
+  canRemove = true,
   onChange,
   onEditWidget,
   onRemoveWidget,
@@ -64,9 +72,9 @@ export default function DashboardGrid({
           width={width}
           layout={layout}
           gridConfig={{ cols: columns, rowHeight: ROW_HEIGHT, margin: [GRID_GAP, GRID_GAP], containerPadding: [0, 0] }}
-          dragConfig={{ enabled: editing, handle: ".dash-drag", cancel: ".dash-actions" }}
-          resizeConfig={{ enabled: editing, handles: ["s", "e", "se"] }}
-          onLayoutChange={(next) => editing && onChange(applyLayout(widgets, next))}
+          dragConfig={{ enabled: editing && canMove, handle: ".dash-drag", cancel: ".dash-actions" }}
+          resizeConfig={{ enabled: editing && canMove, handles: ["s", "e", "se"] }}
+          onLayoutChange={(next) => editing && canMove && onChange(applyLayout(widgets, next))}
         >
           {widgets.map((widget) => (
             <div key={widget.id} className="dash-item">
@@ -75,8 +83,8 @@ export default function DashboardGrid({
                 summary={summary}
                 filters={filters}
                 editing={editing}
-                onEdit={() => onEditWidget?.(widget.id)}
-                onRemove={() => onRemoveWidget?.(widget.id)}
+                onEdit={canConfigure ? () => onEditWidget?.(widget.id) : undefined}
+                onRemove={canRemove ? () => onRemoveWidget?.(widget.id) : undefined}
                 onFilterBy={onFilterBy}
               />
             </div>

@@ -20,7 +20,7 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.ai_access import AI_PERMISSIONS
+from app.core.permission_keys import MANAGED_PERMISSIONS
 from app.core.workspace_deps import admin_group_lock
 from app.models.audit_log import AuditLog
 from app.models.group_permission import GroupPermission
@@ -186,7 +186,7 @@ def current_state(db: Session, log: AuditLog, change: dict) -> Any:
             raise RevertGone("O grupo nao existe mais")
         rows = (
             db.query(GroupPermission.permission_key)
-            .filter(GroupPermission.group_id == change["group_id"], GroupPermission.permission_key.in_(AI_PERMISSIONS))
+            .filter(GroupPermission.group_id == change["group_id"], GroupPermission.permission_key.in_(MANAGED_PERMISSIONS))
             .all()
         )
         return sorted(row.permission_key for row in rows)
@@ -233,7 +233,7 @@ def apply_revert(db: Session, log: AuditLog, change: dict) -> None:
         if group is not None and group.is_admin_group:
             raise RevertBlocked("O grupo Administradores sempre tem todas as permissoes")
         db.query(GroupPermission).filter(
-            GroupPermission.group_id == change["group_id"], GroupPermission.permission_key.in_(AI_PERMISSIONS)
+            GroupPermission.group_id == change["group_id"], GroupPermission.permission_key.in_(MANAGED_PERMISSIONS)
         ).delete(synchronize_session=False)
         for key in change["before"]:
             db.add(GroupPermission(group_id=change["group_id"], permission_key=key))

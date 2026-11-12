@@ -22,8 +22,10 @@ type Result = { key: string; data?: AuditSummary; failed?: boolean };
 
 interface Props {
   filters: AuditFilters;
-  /** Quem pode editar o painel (mover, redimensionar e salvar para todos) */
+  /** O que a pessoa pode fazer no painel: criar, editar (inclui mover e redimensionar) e excluir visuais */
+  canCreate?: boolean;
   canEdit?: boolean;
+  canDelete?: boolean;
   /** Clicar num item de um visual (barra, fatia, dia, cartao) aplica este filtro na pagina */
   onFilterBy?: (patch: FilterPatch) => void;
 }
@@ -35,7 +37,8 @@ const snapshot = (widgets: DashboardWidget[]) => JSON.stringify(widgets);
 const bottomOf = (widgets: DashboardWidget[]) => widgets.reduce((bottom, w) => Math.max(bottom, w.y + w.h), 0);
 
 /** Aba Analiticos: o painel de visuais (compartilhado, editavel) com os mesmos filtros da tabela. */
-export default function AuditAnalytics({ filters, canEdit = false, onFilterBy }: Props) {
+export default function AuditAnalytics({ filters, canCreate = false, canEdit = false, canDelete = false, onFilterBy }: Props) {
+  const canChange = canCreate || canEdit || canDelete;
   const { showToast } = useToast();
   const [result, setResult] = useState<Result | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -132,20 +135,20 @@ export default function AuditAnalytics({ filters, canEdit = false, onFilterBy }:
               todos, e so muda depois de Salvar.
             </p>
             <div className="dash-toolbar-actions">
-              <button className="btn btn-ghost" disabled={saving} onClick={() => setEditor({})}>
+              {canCreate && <button className="btn btn-ghost" disabled={saving} onClick={() => setEditor({})}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">add_chart</span>
                 Adicionar visual
-              </button>
+              </button>}
               <button className="btn btn-primary" disabled={saving || !dirty} onClick={save}>
                 {saving ? "Salvando..." : "Salvar"}
               </button>
               <button className="btn btn-ghost" disabled={saving} onClick={() => (dirty ? setConfirm("cancel") : setDraft(null))}>
                 Cancelar
               </button>
-              <button className="btn btn-ghost" disabled={saving || dashboard.is_default} onClick={() => setConfirm("reset")}>
+              {canCreate && canEdit && canDelete && <button className="btn btn-ghost" disabled={saving || dashboard.is_default} onClick={() => setConfirm("reset")}>
                 <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">restart_alt</span>
                 Restaurar padrao
-              </button>
+              </button>}
             </div>
           </>
         ) : (
@@ -153,7 +156,7 @@ export default function AuditAnalytics({ filters, canEdit = false, onFilterBy }:
             <p className="dash-toolbar-hint">
               {dashboard.is_default || !dashboard.updated_by ? "" : `Layout salvo por ${dashboard.updated_by}.`}
             </p>
-            {canEdit && (
+            {canChange && (
               <div className="dash-toolbar-actions">
                 <button className="btn btn-ghost" onClick={() => setDraft(dashboard.widgets)}>
                   <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">dashboard_customize</span>
@@ -179,6 +182,9 @@ export default function AuditAnalytics({ filters, canEdit = false, onFilterBy }:
         summary={summary}
         filters={filters}
         editing={editing}
+        canMove={canEdit}
+        canConfigure={canEdit}
+        canRemove={canDelete}
         onChange={setDraft}
         onFilterBy={onFilterBy}
         onEditWidget={(id) => setEditor({ widget: (draft ?? []).find((w) => w.id === id) })}

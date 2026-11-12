@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.ai_access import AI_PERMISSIONS
+from app.core.permission_keys import MANAGED_PERMISSIONS
 from app.core.audit import log_action
 from app.core.audit_revert import GROUP_MEMBER, GROUP_PERMISSIONS
 from app.core.database import get_db
@@ -97,11 +97,11 @@ def get_group_permissions(
     if not group:
         raise HTTPException(status_code=404, detail="Grupo nao encontrado")
     if group.is_admin_group:
-        return GroupPermissionsOut(permissions=list(AI_PERMISSIONS), editable=False)
+        return GroupPermissionsOut(permissions=list(MANAGED_PERMISSIONS), editable=False)
 
     rows = (
         db.query(GroupPermission.permission_key)
-        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS))
+        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(MANAGED_PERMISSIONS))
         .all()
     )
     return GroupPermissionsOut(permissions=sorted(row.permission_key for row in rows), editable=True)
@@ -123,12 +123,12 @@ def set_group_permissions(
     permissions_before = sorted(
         row.permission_key
         for row in db.query(GroupPermission.permission_key)
-        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS))
+        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(MANAGED_PERMISSIONS))
         .all()
     )
     # Troca so as chaves de IA: qualquer outra permissao que o grupo venha a ter nao e tocada
     db.query(GroupPermission).filter(
-        GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(AI_PERMISSIONS)
+        GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(MANAGED_PERMISSIONS)
     ).delete(synchronize_session=False)
     for key in data.permissions:
         db.add(GroupPermission(group_id=group_id, permission_key=key))

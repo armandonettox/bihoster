@@ -237,12 +237,16 @@ export default function WidgetView({ widget, summary, filters = {}, editing, onE
 
   const actions = editing ? (
     <div className="dash-actions">
-      <button type="button" className="dash-action" aria-label={`Configurar ${title}`} title="Configurar" onClick={onEdit}>
-        <span className="material-symbols-outlined" aria-hidden="true">tune</span>
-      </button>
-      <button type="button" className="dash-action" aria-label={`Remover ${title}`} title="Remover" onClick={onRemove}>
-        <span className="material-symbols-outlined" aria-hidden="true">delete</span>
-      </button>
+      {onEdit && (
+        <button type="button" className="dash-action" aria-label={`Configurar ${title}`} title="Configurar" onClick={onEdit}>
+          <span className="material-symbols-outlined" aria-hidden="true">tune</span>
+        </button>
+      )}
+      {onRemove && (
+        <button type="button" className="dash-action" aria-label={`Remover ${title}`} title="Remover" onClick={onRemove}>
+          <span className="material-symbols-outlined" aria-hidden="true">delete</span>
+        </button>
+      )}
     </div>
   ) : null;
 

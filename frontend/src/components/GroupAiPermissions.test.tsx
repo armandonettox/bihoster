@@ -10,6 +10,10 @@ vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.
 vi.mock("../api/groups", () => ({
   AI_PERMISSION_MANAGE: "ia.gerenciar",
   AI_PERMISSION_USE: "ia.usar",
+  ANALYTICS_PERMISSION_VIEW: "analiticos.ver",
+  ANALYTICS_PERMISSION_CREATE: "analiticos.criar",
+  ANALYTICS_PERMISSION_EDIT: "analiticos.editar",
+  ANALYTICS_PERMISSION_DELETE: "analiticos.excluir",
   getGroupPermissions: vi.fn(),
   setGroupPermissions: vi.fn(),
 }));
@@ -33,6 +37,18 @@ beforeEach(() => {
   mocks.showToast.mockClear();
   get.mockReset();
   set.mockReset();
+});
+
+describe("GroupAiPermissions - analiticos", () => {
+  it("tirar o ver tira tambem criar, editar e excluir", async () => {
+    await abrir(GRUPO, ["analiticos.ver", "analiticos.criar", "analiticos.editar"]);
+    set.mockResolvedValue({ permissions: [], editable: true });
+
+    fireEvent.click(screen.getByLabelText(/^Ver analiticos/));
+
+    await waitFor(() => expect(set).toHaveBeenCalledWith(7, []));
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Permissoes de analiticos atualizadas."));
+  });
 });
 
 describe("GroupAiPermissions - carregar", () => {
@@ -63,7 +79,7 @@ describe("GroupAiPermissions - carregar", () => {
     get.mockRejectedValue(new Error("403"));
     render(<GroupAiPermissions group={GRUPO} />);
 
-    expect(await screen.findByText("Nao foi possivel carregar as permissoes de IA.")).toBeTruthy();
+    expect(await screen.findByText("Nao foi possivel carregar as permissoes.")).toBeTruthy();
   });
 });
 

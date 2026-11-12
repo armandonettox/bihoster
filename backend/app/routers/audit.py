@@ -12,7 +12,8 @@ from app.core.audit_filters import utc_range as _utc_range
 from app.core.audit_labels import action_label, entity_label
 from app.core.audit_revert import parse_change, summarize
 from app.core.database import get_db
-from app.core.workspace_deps import require_platform_admin, require_workspace_role
+from app.core.analytics_access import require_analytics_view
+from app.core.workspace_deps import is_platform_admin, require_platform_admin, require_workspace_role
 from app.models.audit_log import AuditLog
 from app.models.report import Report
 from app.models.user import User, UserRole
@@ -185,8 +186,10 @@ def _user_details(db: Session, users: list[User]) -> list[AuditUserOption]:
 
 
 @router.get("/audit/options", response_model=AuditOptionsOut)
-def audit_filter_options(db: Session = Depends(get_db), _=Depends(require_platform_admin)):
-    """Valores para os seletores de filtro: so o que aparece de fato na auditoria."""
+def audit_filter_options(db: Session = Depends(get_db), viewer: User = Depends(require_analytics_view)):
+    """Valores para os seletores de filtro: so o que aparece de fato na auditoria. Quem so tem a
+    permissao de ver os analiticos (nao e administrador) recebe as pessoas sem email e sem os
+    detalhes de conta."""
     codes = [code for (code,) in db.query(AuditLog.action).distinct().all()]
     actions = sorted(
         (AuditActionOption(action=code, label=action_label(code)) for code in codes), key=lambda option: option.label
@@ -197,7 +200,10 @@ def audit_filter_options(db: Session = Depends(get_db), _=Depends(require_platfo
     )
     audited_users = db.query(AuditLog.user_id).filter(AuditLog.user_id.isnot(None)).distinct()
     users = db.query(User).filter(User.id.in_(audited_users)).order_by(User.name).all()
-    people = _user_details(db, users)
+    if is_platform_admin(db, viewer.id):
+        people = _user_details(db, users)
+    else:
+        people = [AuditUserOption(id=u.id, name=u.name, email="") for u in users]
     collections = db.query(Workspace.id, Workspace.name).order_by(Workspace.name).all()
     reports = (
         db.query(Report.id, Report.name, Workspace.name)
@@ -225,9 +231,11 @@ def audit_summary(
     date_from: date | None = None,
     date_to: date | None = None,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    viewer: User = Depends(require_analytics_view),
 ):
-    """Numeros da aba Analiticos, com os mesmos filtros da tabela."""
+    """Numeros da aba Analiticos, com os mesmos filtros da tabela. Quem so tem a permissao de ver
+    os analiticos (nao e administrador) nao recebe o email das pessoas."""
+    show_emails = is_platform_admin(db, viewer.id)
     tz, tz_name = _system_tz(db)
     start, end = _utc_range(tz, date_from, date_to)
     filters = dict(
@@ -331,7 +339,12 @@ def audit_summary(
         by_hour=hour_counts,
         by_action=[AuditActionCount(action=code, label=action_label(code), count=n) for code, n in action_rows],
         top_users=[
-            AuditUserCount(user_id=uid, name=name or email or "Usuario removido", email=email, count=n)
+            AuditUserCount(
+                user_id=uid,
+                name=name or (email if show_emails else None) or "Usuario removido",
+                email=email if show_emails else None,
+                count=n,
+            )
             for uid, name, email, n in user_rows
         ],
         top_collections=[

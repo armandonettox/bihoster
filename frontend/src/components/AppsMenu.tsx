@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useChat } from "../context/ChatContext";
 import { useWorkspace } from "../context/WorkspaceContext";
+import { useAnalyticsAccess } from "../hooks/useAnalyticsAccess";
 import { useDropdownMenu } from "../hooks/useDropdownMenu";
 
 /** Quadradinho da barra do topo: janela suspensa com os modulos do sistema (Administracao, Auditoria e Chat de IA).
@@ -17,7 +18,10 @@ export default function AppsMenu() {
   const isAnyAdmin = workspaces.some((w) => w.role === "admin");
   // A auditoria e so do administrador da plataforma (grupo Administradores)
   const canSeeAudit = user?.is_platform_admin === true;
-  if (!isAnyAdmin && !canUseChat && !canSeeAudit) return null;
+  // Quem so tem a permissao de ver os analiticos entra direto no painel, sem a tabela de registros
+  const { canView: canViewAnalytics } = useAnalyticsAccess();
+  const canSeeAnalytics = canViewAnalytics && !canSeeAudit;
+  if (!isAnyAdmin && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
 
   return (
     <div ref={containerRef} className="topbar-menu">
@@ -62,6 +66,18 @@ export default function AppsMenu() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">fact_check</span>
               Auditoria
+            </button>
+          )}
+          {canSeeAnalytics && (
+            <button
+              className="topbar-menu-item"
+              onClick={() => {
+                setOpen(false);
+                navigate("/audit");
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">monitoring</span>
+              Analiticos
             </button>
           )}
           {canUseChat && (

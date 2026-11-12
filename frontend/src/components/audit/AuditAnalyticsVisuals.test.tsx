@@ -80,7 +80,7 @@ beforeEach(() => {
   mocks.toast.mockReset();
 });
 
-const open = (filters = {}) => render(<AuditAnalytics filters={filters} canEdit />);
+const open = (filters = {}) => render(<AuditAnalytics filters={filters} canCreate canEdit canDelete />);
 const startEditing = async (filters = {}) => {
   open(filters);
   fireEvent.click(await screen.findByRole("button", { name: /Editar painel/ }));

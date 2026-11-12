@@ -85,3 +85,9 @@ export async function setGroupPermissions(groupId: number, permissions: string[]
   const { data } = await api.put(`/groups/${groupId}/permissions`, { permissions });
   return data;
 }
+
+/** Chaves de permissao dos analiticos (criar, editar e excluir pressupoem ver). */
+export const ANALYTICS_PERMISSION_VIEW = "analiticos.ver";
+export const ANALYTICS_PERMISSION_CREATE = "analiticos.criar";
+export const ANALYTICS_PERMISSION_EDIT = "analiticos.editar";
+export const ANALYTICS_PERMISSION_DELETE = "analiticos.excluir";

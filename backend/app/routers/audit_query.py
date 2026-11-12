@@ -5,10 +5,12 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.core.analytics_access import require_analytics_view
 from app.core.audit_filters import system_tz, utc_range
 from app.core.audit_query import GroupBy, Metric, QueryError, run_query
 from app.core.database import get_db
-from app.core.workspace_deps import require_platform_admin
+from app.core.workspace_deps import is_platform_admin
+from app.models.user import User
 
 router = APIRouter(tags=["audit"])
 
@@ -42,10 +44,11 @@ def audit_query(
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    viewer: User = Depends(require_analytics_view),
 ):
     """Numero ou serie de um visual personalizado: uma medida repartida por um agrupamento, com os
-    mesmos filtros da tabela e dos analiticos."""
+    mesmos filtros da tabela e dos analiticos. Quem so tem a permissao de ver os analiticos (nao e
+    administrador) nao recebe o email das pessoas."""
     tz, tz_name = system_tz(db)
     start, end = utc_range(tz, date_from, date_to)
     filters = dict(
@@ -60,7 +63,15 @@ def audit_query(
     )
     try:
         result = run_query(
-            db, metric=metric, group_by=group_by, limit=limit, filters=filters, tz=tz, date_from=date_from, date_to=date_to
+            db,
+            metric=metric,
+            group_by=group_by,
+            limit=limit,
+            filters=filters,
+            tz=tz,
+            date_from=date_from,
+            date_to=date_to,
+            include_emails=is_platform_admin(db, viewer.id),
         )
     except QueryError as exc:
         raise HTTPException(status_code=422, detail=str(exc))

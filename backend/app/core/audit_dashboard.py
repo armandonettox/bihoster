@@ -114,3 +114,35 @@ def default_widgets() -> list[dict]:
         _w("donut-logins", "donut", "login_methods", "Logins por metodo", 10, 23, 10, 7),
     ]
     return widgets
+
+
+_LAYOUT_FIELDS = {"x", "y", "w", "h"}
+
+
+def required_permissions(old: list[dict], new: list[dict]) -> set[str]:
+    """Permissoes que a troca de `old` por `new` exige: visual novo pede criar, visual que sumiu
+    pede excluir e mudar o conteudo de um visual pede editar. Mover ou redimensionar so pede
+    editar quando nada foi criado nem excluido (criar ou excluir empurra os outros visuais de lugar)."""
+    from app.core.permission_keys import ANALYTICS_CREATE, ANALYTICS_DELETE, ANALYTICS_EDIT
+
+    old_by_id = {w["id"]: w for w in old}
+    new_by_id = {w["id"]: w for w in new}
+    needed: set[str] = set()
+    if set(new_by_id) - set(old_by_id):
+        needed.add(ANALYTICS_CREATE)
+    if set(old_by_id) - set(new_by_id):
+        needed.add(ANALYTICS_DELETE)
+
+    moved = False
+    for id_, widget in new_by_id.items():
+        before = old_by_id.get(id_)
+        if before is None:
+            continue
+        keys = (set(widget) | set(before)) - _LAYOUT_FIELDS
+        if any(widget.get(k) != before.get(k) for k in keys):
+            needed.add(ANALYTICS_EDIT)
+        if any(widget.get(k) != before.get(k) for k in _LAYOUT_FIELDS):
+            moved = True
+    if moved and not ({ANALYTICS_CREATE, ANALYTICS_DELETE} & needed):
+        needed.add(ANALYTICS_EDIT)
+    return needed

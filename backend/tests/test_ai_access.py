@@ -244,7 +244,8 @@ class TestConcederPermissao:
         grupo_admin = _grupo_especial(client, admin, "is_admin_group")
 
         lido = client.get(f"/groups/{grupo_admin}/permissions", headers=admin).json()
-        assert lido == {"permissions": ["ia.gerenciar", "ia.usar"], "editable": False}
+        assert set(lido["permissions"]) >= {"ia.gerenciar", "ia.usar"}
+        assert lido["editable"] is False
 
         resp = _permissoes(client, admin, grupo_admin, [])
         assert resp.status_code == 400

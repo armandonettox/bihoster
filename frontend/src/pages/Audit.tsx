@@ -6,6 +6,7 @@ import AuditFiltersBar from "../components/audit/AuditFilters";
 import AuditTable from "../components/audit/AuditTable";
 import { useAuth } from "../context/AuthContext";
 import { useBranding } from "../context/BrandingContext";
+import { useAnalyticsAccess } from "../hooks/useAnalyticsAccess";
 import { useUrlTab } from "../hooks/useUrlTab";
 import { DEFAULT_FILTERS, toggleFilter, type AuditFilterState } from "../utils/auditFilterState";
 import { periodRange } from "../utils/auditPeriod";
@@ -22,7 +23,11 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
 export default function Audit() {
   const { user } = useAuth();
   const { settings } = useBranding();
-  const [tab, setTab] = useUrlTab<Tab>(["records", "analytics"], "records", { storageKey: "audit_tab" });
+  const analytics = useAnalyticsAccess();
+  const isAdmin = user?.is_platform_admin === true;
+  const [storedTab, setTab] = useUrlTab<Tab>(["records", "analytics"], "records", { storageKey: "audit_tab" });
+  // Quem so tem a permissao de ver os analiticos nao tem a tabela de registros
+  const tab: Tab = isAdmin ? storedTab : "analytics";
   const [filterState, setFilterState] = useState<AuditFilterState>(DEFAULT_FILTERS);
   const [options, setOptions] = useState<AuditOptions | null>(null);
 
@@ -52,12 +57,15 @@ export default function Audit() {
     };
   }, [filterState, timezone]);
 
-  if (!user?.is_platform_admin) return <Navigate to="/" replace />;
+  if (!isAdmin) {
+    if (analytics.loading) return null;
+    if (!analytics.canView) return <Navigate to="/" replace />;
+  }
 
   return (
     <div className="settings-page audit-page">
       <div className="settings-header">
-        <h1>Auditoria</h1>
+        <h1>{isAdmin ? "Auditoria" : "Analiticos"}</h1>
         <p>
           Historico de acoes no sistema: acessos, mudancas de configuracao e de permissao. Horarios no fuso{" "}
           {timezone || "America/Sao_Paulo"} (configuravel em Geral).
@@ -65,7 +73,7 @@ export default function Audit() {
       </div>
 
       <div className="settings-tabs" role="tablist">
-        {TABS.map((t) => (
+        {TABS.filter((t) => isAdmin || t.key === "analytics").map((t) => (
           <button
             key={t.key}
             id={`audit-tab-${t.key}`}
@@ -94,7 +102,9 @@ export default function Audit() {
         ) : (
           <AuditAnalytics
             filters={filters}
-            canEdit={user?.is_platform_admin === true}
+            canCreate={isAdmin || analytics.canCreate}
+            canEdit={isAdmin || analytics.canEdit}
+            canDelete={isAdmin || analytics.canDelete}
             onFilterBy={(patch) => setFilterState((current) => toggleFilter(current, patch))}
           />
         )}

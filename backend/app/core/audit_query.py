@@ -156,7 +156,7 @@ def _time_rows(db, metric, group_by, filters, tz: ZoneInfo, date_from: Optional[
     return rows
 
 
-def _category_rows(db, metric, group_by, filters, limit) -> list[Row]:
+def _category_rows(db, metric, group_by, filters, limit, include_emails: bool = True) -> list[Row]:
     value = _value(metric).label("value")
     if group_by == "action":
         rows = _query(db, [AuditLog.action, value], metric, filters).group_by(AuditLog.action)
@@ -173,7 +173,7 @@ def _category_rows(db, metric, group_by, filters, limit) -> list[Row]:
             .group_by(AuditLog.user_id, User.name, AuditLog.user_email)
         )
         order = rows.order_by(value.desc()).limit(limit).all()
-        return [Row(str(uid), name or email or "Usuario removido", n) for uid, name, email, n in order]
+        return [Row(str(uid), name or (email if include_emails else None) or "Usuario removido", n) for uid, name, email, n in order]
     if group_by == "collection":
         rows = (
             _query(db, [AuditLog.workspace_id, Workspace.name, value], metric, filters)
@@ -209,6 +209,7 @@ def run_query(
     tz: ZoneInfo,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
+    include_emails: bool = True,
 ) -> QueryResult:
     check_combination(metric, group_by)
     total = _query(db, [_value(metric)], metric, filters).scalar() or 0
@@ -218,5 +219,5 @@ def run_query(
     elif group_by in _TIME_GROUPS:
         rows = _time_rows(db, metric, group_by, filters, tz, date_from, date_to)
     else:
-        rows = _category_rows(db, metric, group_by, filters, limit)
+        rows = _category_rows(db, metric, group_by, filters, limit, include_emails)
     return QueryResult(metric=metric, metric_label=METRIC_LABELS[metric], group_by=group_by, rows=rows, total=total)

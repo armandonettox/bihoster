@@ -87,7 +87,7 @@ beforeEach(() => {
   mocks.grid = null;
 });
 
-const open = (canEdit = true, filters = {}) => render(<AuditAnalytics filters={filters} canEdit={canEdit} />);
+const open = (canEdit = true, filters = {}) => render(<AuditAnalytics filters={filters} canCreate={canEdit} canEdit={canEdit} canDelete={canEdit} />);
 
 describe("AuditAnalytics - carregamento", () => {
   it("busca o resumo com os filtros e o painel salvo, e entrega os visuais a grade", async () => {
@@ -103,7 +103,7 @@ describe("AuditAnalytics - carregamento", () => {
     const { rerender } = open();
     await screen.findByTestId("grid");
 
-    rerender(<AuditAnalytics filters={{ user_id: [3, 4] }} canEdit />);
+    rerender(<AuditAnalytics filters={{ user_id: [3, 4] }} canCreate canEdit canDelete />);
 
     await waitFor(() => expect(mocks.summary).toHaveBeenLastCalledWith({ user_id: [3, 4] }));
     expect(mocks.getDashboard).toHaveBeenCalledTimes(1);

@@ -5,6 +5,7 @@ import Audit from "./Audit";
 
 const mocks = vi.hoisted(() => ({
   platformAdmin: true,
+  canViewAnalytics: false,
   options: vi.fn(),
   table: vi.fn(),
   analytics: vi.fn(),
@@ -12,6 +13,9 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { is_platform_admin: mocks.platformAdmin } }) }));
 vi.mock("../context/BrandingContext", () => ({ useBranding: () => ({ settings: { timezone: "America/Sao_Paulo" } }) }));
+vi.mock("../hooks/useAnalyticsAccess", () => ({
+  useAnalyticsAccess: () => ({ canView: mocks.canViewAnalytics, canCreate: false, canEdit: false, canDelete: false, loading: false }),
+}));
 vi.mock("../api/audit", () => ({ getAuditOptions: mocks.options }));
 // Tabela e analiticos fazem chamadas de rede; aqui so importa o que a pagina entrega a cada um
 vi.mock("../components/audit/AuditTable", () => ({
@@ -40,6 +44,7 @@ function renderAt(url = "/audit") {
 
 beforeEach(() => {
   mocks.platformAdmin = true;
+  mocks.canViewAnalytics = false;
   mocks.options.mockReset();
   mocks.options.mockResolvedValue({
     actions: [{ action: "login", label: "Login" }],
@@ -61,6 +66,16 @@ describe("Audit", () => {
     renderAt();
     expect(screen.queryByTestId("home")).not.toBeNull();
     expect(screen.queryByRole("heading", { name: "Auditoria" })).toBeNull();
+  });
+
+  it("quem so pode ver analiticos entra direto no painel, sem a aba de registros", () => {
+    mocks.platformAdmin = false;
+    mocks.canViewAnalytics = true;
+    renderAt();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Analiticos");
+    expect(screen.queryByTestId("records")).toBeNull();
+    expect(screen.queryByTestId("analytics")).not.toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
   });
 
   it("abre na aba Registros, com duas abas e o fuso no texto", () => {
