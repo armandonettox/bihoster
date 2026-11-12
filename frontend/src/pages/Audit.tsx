@@ -7,7 +7,7 @@ import AuditTable from "../components/audit/AuditTable";
 import { useAuth } from "../context/AuthContext";
 import { useBranding } from "../context/BrandingContext";
 import { useUrlTab } from "../hooks/useUrlTab";
-import { DEFAULT_FILTERS, type AuditFilterState } from "../utils/auditFilterState";
+import { DEFAULT_FILTERS, toggleFilter, type AuditFilterState } from "../utils/auditFilterState";
 import { periodRange } from "../utils/auditPeriod";
 
 type Tab = "records" | "analytics";
@@ -92,7 +92,11 @@ export default function Audit() {
             onFilterBy={(patch) => setFilterState((current) => ({ ...current, ...patch }))}
           />
         ) : (
-          <AuditAnalytics filters={filters} canEdit={user?.is_platform_admin === true} />
+          <AuditAnalytics
+            filters={filters}
+            canEdit={user?.is_platform_admin === true}
+            onFilterBy={(patch) => setFilterState((current) => toggleFilter(current, patch))}
+          />
         )}
       </div>
     </div>

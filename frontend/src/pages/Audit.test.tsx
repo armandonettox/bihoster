@@ -128,6 +128,61 @@ describe("Audit", () => {
     );
   });
 
+  describe("clicar num visual dos analiticos filtra a pagina", () => {
+    const lastAnalytics = () =>
+      mocks.analytics.mock.calls[mocks.analytics.mock.calls.length - 1][0] as {
+        filters: Record<string, unknown>;
+        onFilterBy: (patch: Record<string, unknown>) => void;
+      };
+
+    it("aplica o filtro, vale na tabela tambem, e clicar de novo no mesmo valor tira", () => {
+      renderAt("/audit?tab=analytics");
+
+      act(() => lastAnalytics().onFilterBy({ actions: ["login"] }));
+      expect(lastAnalytics().filters).toMatchObject({ action: ["login"] });
+      expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeTruthy();
+
+      fireEvent.click(screen.getByRole("tab", { name: /Registros/ }));
+      expect(lastProps(mocks.table).filters).toMatchObject({ action: ["login"] });
+
+      fireEvent.click(screen.getByRole("tab", { name: /Analiticos/ }));
+      act(() => lastAnalytics().onFilterBy({ actions: ["login"] }));
+      expect(lastAnalytics().filters.action).toBeUndefined();
+    });
+
+    it("filtros de campos diferentes se somam e o seletor da pagina acompanha", async () => {
+      mocks.options.mockResolvedValue({
+        actions: [{ action: "login", label: "Login" }],
+        entities: [],
+        users: [{ id: 7, name: "Ana Lima", email: "ana@example.com" }],
+        collections: [],
+        reports: [],
+      });
+      renderAt("/audit?tab=analytics");
+      await screen.findByRole("button", { name: "Pessoa: Todas" });
+
+      act(() => lastAnalytics().onFilterBy({ actions: ["login"] }));
+      act(() => lastAnalytics().onFilterBy({ userIds: ["7"] }));
+
+      expect(lastAnalytics().filters).toMatchObject({ action: ["login"], user_id: [7] });
+      expect(screen.getByRole("button", { name: "Pessoa: Ana Lima" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Acao: Login" })).toBeTruthy();
+    });
+
+    it("clicar num dia aplica o periodo daquele dia e clicar de novo volta ao periodo padrao", () => {
+      renderAt("/audit?tab=analytics");
+      const day = { period: "custom", customFrom: "2026-11-10", customTo: "2026-11-10" };
+
+      act(() => lastAnalytics().onFilterBy(day));
+      expect(lastAnalytics().filters).toMatchObject({ date_from: "2026-11-10", date_to: "2026-11-10" });
+      expect((screen.getByLabelText("Periodo") as HTMLSelectElement).value).toBe("custom");
+
+      act(() => lastAnalytics().onFilterBy(day));
+      expect((screen.getByLabelText("Periodo") as HTMLSelectElement).value).toBe("30d");
+      expect(lastAnalytics().filters.date_from).not.toBe("2026-11-10");
+    });
+  });
+
   it("o filtro de relatorio lista os relatorios com a colecao e filtra por varios", async () => {
     mocks.options.mockResolvedValue({
       actions: [],

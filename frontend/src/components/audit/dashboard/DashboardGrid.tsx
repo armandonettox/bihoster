@@ -3,6 +3,7 @@ import "react-grid-layout/css/styles.css";
 import "react-resizable/css/styles.css";
 import type { AuditFilters, AuditSummary, DashboardWidget } from "../../../api/audit";
 import { GRID_GAP, MIN_SIZE, ROW_HEIGHT, STACK_BELOW_PX, applyLayout, readingOrder } from "./gridLayout";
+import type { FilterPatch } from "./interactions";
 import WidgetView from "./WidgetView";
 
 interface Props {
@@ -14,6 +15,8 @@ interface Props {
   editing: boolean;
   onEditWidget?: (id: string) => void;
   onRemoveWidget?: (id: string) => void;
+  /** Clicar num item de um visual pede este filtro a pagina (so fora do modo de edicao) */
+  onFilterBy?: (patch: FilterPatch) => void;
   /** Chamado a cada mudanca de posicao ou tamanho (so no modo de edicao) */
   onChange: (widgets: DashboardWidget[]) => void;
 }
@@ -28,6 +31,7 @@ export default function DashboardGrid({
   onChange,
   onEditWidget,
   onRemoveWidget,
+  onFilterBy,
 }: Props) {
   const { width, containerRef, mounted } = useContainerWidth();
 
@@ -36,7 +40,7 @@ export default function DashboardGrid({
       <div ref={containerRef} className="dash-stack">
         {readingOrder(widgets).map((widget) => (
           <div key={widget.id} className="dash-item" style={{ height: widget.h * ROW_HEIGHT + (widget.h - 1) * GRID_GAP }}>
-            <WidgetView widget={widget} summary={summary} filters={filters} editing={false} />
+            <WidgetView widget={widget} summary={summary} filters={filters} editing={false} onFilterBy={onFilterBy} />
           </div>
         ))}
       </div>
@@ -73,6 +77,7 @@ export default function DashboardGrid({
                 editing={editing}
                 onEdit={() => onEditWidget?.(widget.id)}
                 onRemove={() => onRemoveWidget?.(widget.id)}
+                onFilterBy={onFilterBy}
               />
             </div>
           ))}

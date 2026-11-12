@@ -9,6 +9,7 @@ import {
 } from "../../../api/audit";
 import { shortDate } from "../../../utils/auditPeriod";
 import { BarList, Donut, HourChart, LineChart } from "../charts";
+import { isFilterable, isStatSelected, patchForKey, patchForStat, selectedKeys, type FilterPatch } from "./interactions";
 import { STAT_META, widgetTitle } from "./widgetMeta";
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("pt-BR")} ${n === 1 ? one : many}`;
@@ -29,6 +30,12 @@ function hintFor(widget: DashboardWidget, summary: AuditSummary | null): string 
   if (widget.source === "by_hour" && summary) return `Eventos por hora do dia (${summary.timezone})`;
   if (widget.source === "top_reports") return "Cada abertura conta uma vez a cada 10 minutos por pessoa";
   return undefined;
+}
+
+/** O que os graficos recebem para filtrar ao clicar: sem onSelect o visual so mostra o rotulo */
+interface ItemPick {
+  onSelect?: (key: string) => void;
+  selected: string[];
 }
 
 type QueryState =
@@ -61,7 +68,7 @@ function useQueryResult(query: WidgetQuery | null, filters: AuditFilters): Query
   return { status: "ready", data: result.data };
 }
 
-function CustomBody({ widget, state }: { widget: DashboardWidget; state: QueryState }) {
+function CustomBody({ widget, state, pick }: { widget: DashboardWidget; state: QueryState; pick: ItemPick }) {
   if (state.status === "loading") return <p className="audit-empty">Carregando...</p>;
   if (state.status !== "ready") return <p className="audit-empty" role="alert">Nao foi possivel carregar este visual.</p>;
 
@@ -78,16 +85,18 @@ function CustomBody({ widget, state }: { widget: DashboardWidget; state: QuerySt
           data={rows.map((r) => ({ label: group_by === "day" ? r.key : r.label, value: r.value }))}
           formatLabel={group_by === "day" ? shortDate : (label) => label}
           describe={(n) => `${unit(n)} ${metric_label.toLowerCase()}`}
+          {...pick}
         />
       );
     case "bars":
-      return <BarList items={rows.map((r) => ({ key: r.key, label: r.label, value: r.value }))} unit={unit} />;
+      return <BarList items={rows.map((r) => ({ key: r.key, label: r.label, value: r.value }))} unit={unit} {...pick} />;
     case "donut":
       return (
         <Donut
           centerLabel={metric_label.toLowerCase()}
           emptyText="Sem dados."
           parts={rows.map((r, i) => ({ key: r.key, label: r.label, value: r.value, color: DONUT_COLORS[i % DONUT_COLORS.length] }))}
+          {...pick}
         />
       );
     case "table":
@@ -101,7 +110,12 @@ function CustomBody({ widget, state }: { widget: DashboardWidget; state: QuerySt
           </thead>
           <tbody>
             {rows.map((r) => (
-              <tr key={r.key}>
+              <tr
+                key={r.key}
+                className={`${pick.onSelect ? "chart-clickable" : ""} ${pick.selected.includes(r.key) ? "chart-selected" : ""}`.trim()}
+                title={pick.onSelect ? (pick.selected.includes(r.key) ? "Clique para tirar o filtro" : "Clique para filtrar") : undefined}
+                onClick={pick.onSelect ? () => pick.onSelect?.(r.key) : undefined}
+              >
                 <td>{group_by === "day" ? shortDate(r.key) : r.label}</td>
                 <td>{unit(r.value)}</td>
               </tr>
@@ -114,7 +128,7 @@ function CustomBody({ widget, state }: { widget: DashboardWidget; state: QuerySt
   }
 }
 
-function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: AuditSummary | null }) {
+function SummaryBody({ widget, summary, pick }: { widget: DashboardWidget; summary: AuditSummary | null; pick: ItemPick }) {
   if (!summary) return <p className="audit-empty">Sem dados.</p>;
   switch (widget.source) {
     case "by_day":
@@ -122,10 +136,11 @@ function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: Au
         <LineChart
           data={summary.by_day.map((d) => ({ label: d.date, value: d.count }))}
           describe={(n) => plural(n, "evento", "eventos")}
+          {...pick}
         />
       );
     case "by_hour":
-      return <HourChart values={summary.by_hour} describe={(hour, n) => `${hour}h: ${plural(n, "evento", "eventos")}`} />;
+      return <HourChart values={summary.by_hour} describe={(_hour, n) => plural(n, "evento", "eventos")} />;
     case "by_action":
       return summary.by_action.length === 0 ? (
         <p className="audit-empty">Sem dados.</p>
@@ -133,6 +148,7 @@ function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: Au
         <BarList
           items={summary.by_action.map((a) => ({ key: a.action, label: a.label, value: a.count }))}
           unit={(n) => n.toLocaleString("pt-BR")}
+          {...pick}
         />
       );
     case "top_users":
@@ -142,6 +158,7 @@ function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: Au
         <BarList
           items={summary.top_users.map((u) => ({ key: String(u.user_id), label: u.name, value: u.count, hint: u.email ?? undefined }))}
           unit={(n) => plural(n, "evento", "eventos")}
+          {...pick}
         />
       );
     case "top_collections":
@@ -151,6 +168,7 @@ function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: Au
         <BarList
           items={summary.top_collections.map((c) => ({ key: String(c.workspace_id), label: c.name, value: c.visits }))}
           unit={(n) => plural(n, "visita", "visitas")}
+          {...pick}
         />
       );
     case "top_reports":
@@ -165,6 +183,7 @@ function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: Au
             hint: r.collection ? `Colecao: ${r.collection}` : undefined,
           }))}
           unit={(n) => plural(n, "abertura", "aberturas")}
+          {...pick}
         />
       );
     case "login_methods":
@@ -176,6 +195,7 @@ function SummaryBody({ widget, summary }: { widget: DashboardWidget; summary: Au
             { key: "password", label: "Email e senha", value: summary.login_methods.password, color: "var(--color-primary-text)" },
             { key: "google", label: "Google", value: summary.login_methods.google, color: "var(--color-accent)" },
           ]}
+          {...pick}
         />
       );
     default:
@@ -193,11 +213,24 @@ interface Props {
   editing: boolean;
   onEdit?: () => void;
   onRemove?: () => void;
+  /** Clicar num item do visual pede este filtro a pagina. No modo de edicao o clique nao filtra. */
+  onFilterBy?: (patch: FilterPatch) => void;
 }
 
 /** Um visual do painel. Ocupa todo o espaco que a grade deu. */
-export default function WidgetView({ widget, summary, filters = {}, editing, onEdit, onRemove }: Props) {
+export default function WidgetView({ widget, summary, filters = {}, editing, onEdit, onRemove, onFilterBy }: Props) {
   const state = useQueryResult(widget.query, filters);
+  const interactive = !editing && onFilterBy !== undefined;
+  const pick: ItemPick = {
+    onSelect:
+      interactive && isFilterable(widget)
+        ? (key) => {
+            const patch = patchForKey(widget, key);
+            if (patch) onFilterBy?.(patch);
+          }
+        : undefined,
+    selected: selectedKeys(widget, filters),
+  };
   const dragClass = editing ? "dash-drag" : "";
   const colorClass = widget.color ? `dash-color-${widget.color}` : "";
   const title = widgetTitle(widget);
@@ -221,8 +254,26 @@ export default function WidgetView({ widget, summary, filters = {}, editing, onE
         : null
       : ((summary?.totals as unknown as Record<string, number> | undefined)?.[widget.source] ?? 0);
     const danger = meta?.danger && (value ?? 0) > 0;
+    const statPatch = interactive ? patchForStat(widget) : null;
+    const statSelected = isStatSelected(widget, filters);
     return (
-      <div className={`audit-stat dash-fill ${danger ? "audit-stat-danger" : ""} ${colorClass} ${dragClass}`}>
+      <div
+        className={`audit-stat dash-fill ${danger ? "audit-stat-danger" : ""} ${colorClass} ${dragClass} ${statPatch ? "chart-clickable" : ""} ${statSelected ? "chart-selected" : ""}`}
+        {...(statPatch
+          ? {
+              role: "button",
+              tabIndex: 0,
+              title: statSelected ? "Clique para tirar o filtro" : "Clique para filtrar",
+              onClick: () => onFilterBy?.(statPatch),
+              onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  onFilterBy?.(statPatch);
+                }
+              },
+            }
+          : {})}
+      >
         <span className="material-symbols-outlined audit-stat-icon" aria-hidden="true">{meta?.icon ?? "analytics"}</span>
         <div>
           <div className="audit-stat-value">
@@ -245,7 +296,11 @@ export default function WidgetView({ widget, summary, filters = {}, editing, onE
       </header>
       {hint && <p className="audit-panel-hint">{hint}</p>}
       <div className="dash-body">
-        {widget.query ? <CustomBody widget={widget} state={state} /> : <SummaryBody widget={widget} summary={summary} />}
+        {widget.query ? (
+          <CustomBody widget={widget} state={state} pick={pick} />
+        ) : (
+          <SummaryBody widget={widget} summary={summary} pick={pick} />
+        )}
       </div>
     </section>
   );

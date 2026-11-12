@@ -4094,3 +4094,128 @@ table.table tr:last-child td {
   flex-direction: column;
   overflow: hidden;
 }
+
+/* Rotulo do valor ao passar o cursor nos graficos */
+
+.chart-tooltip {
+  position: fixed;
+  z-index: 100;
+  max-width: 240px;
+  padding: 8px 10px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  font-size: 12px;
+  line-height: 1.35;
+  pointer-events: none;
+}
+
+.chart-tooltip-title {
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.chart-tooltip-value {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.chart-tooltip-hint {
+  margin-top: 4px;
+  color: var(--color-text-muted);
+}
+
+/* Visuais clicaveis (clicar filtra a pagina) e o item que ja esta filtrado */
+
+.chart-clickable {
+  cursor: pointer;
+}
+
+.chart-dim {
+  opacity: 0.4;
+}
+
+.audit-barlist-row {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+}
+
+.audit-barlist-item:hover .audit-barlist-fill {
+  filter: brightness(1.12);
+}
+
+.audit-barlist-row:hover .audit-barlist-label,
+.audit-barlist-row:focus-visible .audit-barlist-label {
+  color: var(--color-primary-text);
+}
+
+.audit-barlist-item.chart-selected .audit-barlist-label {
+  font-weight: 700;
+}
+
+.audit-barlist-item.chart-selected .audit-barlist-track {
+  outline: 2px solid var(--dash-color, var(--color-secondary));
+  outline-offset: 2px;
+}
+
+.audit-line-hit.chart-selected {
+  fill: color-mix(in srgb, var(--dash-color, var(--color-secondary)) 22%, transparent);
+}
+
+.audit-donut-slice {
+  transition: stroke-width 0.12s, opacity 0.12s;
+}
+
+.audit-donut-slice:hover {
+  stroke-width: 16;
+}
+
+.audit-donut-slice.chart-selected {
+  stroke-width: 17;
+}
+
+.audit-donut-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  color: inherit;
+}
+
+.audit-donut-legend li.chart-selected {
+  font-weight: 700;
+}
+
+.audit-stat.chart-clickable:hover {
+  border-color: var(--dash-color, var(--color-secondary));
+}
+
+.audit-stat.chart-selected {
+  border-color: var(--dash-color, var(--color-secondary));
+  box-shadow: 0 0 0 1px var(--dash-color, var(--color-secondary));
+}
+
+.audit-stat.chart-clickable:focus-visible {
+  outline: 2px solid var(--color-secondary);
+  outline-offset: 2px;
+}
+
+.audit-widget-table tr.chart-clickable:hover td {
+  background-color: var(--color-surface-hover);
+}
+
+.audit-widget-table tr.chart-selected td {
+  background-color: color-mix(in srgb, var(--color-secondary) 14%, transparent);
+  font-weight: 600;
+}

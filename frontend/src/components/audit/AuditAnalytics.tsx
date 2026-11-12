@@ -14,6 +14,7 @@ import { useToast } from "../../context/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import { SkeletonList } from "../Skeleton";
 import DashboardGrid from "./dashboard/DashboardGrid";
+import type { FilterPatch } from "./dashboard/interactions";
 import { DEFAULT_SIZE } from "./dashboard/widgetCatalog";
 import WidgetEditor from "./dashboard/WidgetEditor";
 
@@ -23,6 +24,8 @@ interface Props {
   filters: AuditFilters;
   /** Quem pode editar o painel (mover, redimensionar e salvar para todos) */
   canEdit?: boolean;
+  /** Clicar num item de um visual (barra, fatia, dia, cartao) aplica este filtro na pagina */
+  onFilterBy?: (patch: FilterPatch) => void;
 }
 
 /** Tudo que o modo de edicao muda (posicao, tamanho, visuais novos ou removidos, titulo, cor, consulta) */
@@ -32,7 +35,7 @@ const snapshot = (widgets: DashboardWidget[]) => JSON.stringify(widgets);
 const bottomOf = (widgets: DashboardWidget[]) => widgets.reduce((bottom, w) => Math.max(bottom, w.y + w.h), 0);
 
 /** Aba Analiticos: o painel de visuais (compartilhado, editavel) com os mesmos filtros da tabela. */
-export default function AuditAnalytics({ filters, canEdit = false }: Props) {
+export default function AuditAnalytics({ filters, canEdit = false, onFilterBy }: Props) {
   const { showToast } = useToast();
   const [result, setResult] = useState<Result | null>(null);
   const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -177,6 +180,7 @@ export default function AuditAnalytics({ filters, canEdit = false }: Props) {
         filters={filters}
         editing={editing}
         onChange={setDraft}
+        onFilterBy={onFilterBy}
         onEditWidget={(id) => setEditor({ widget: (draft ?? []).find((w) => w.id === id) })}
         onRemoveWidget={(id) => setDraft((draft ?? []).filter((w) => w.id !== id))}
       />
