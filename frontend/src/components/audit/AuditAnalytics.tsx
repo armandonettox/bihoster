@@ -5,6 +5,7 @@ import {
   resetDashboard,
   saveDashboard,
   type AuditFilters,
+  type AuditOptions,
   type AuditSummary,
   type Dashboard,
   type DashboardWidget,
@@ -22,6 +23,8 @@ type Result = { key: string; data?: AuditSummary; failed?: boolean };
 
 interface Props {
   filters: AuditFilters;
+  /** Listas dos filtros (pessoas, acoes, colecoes...), usadas nos filtros proprios de cada visual */
+  options?: AuditOptions | null;
   /** O que a pessoa pode fazer no painel: criar, editar (inclui mover e redimensionar) e excluir visuais */
   canCreate?: boolean;
   canEdit?: boolean;
@@ -37,7 +40,7 @@ const snapshot = (widgets: DashboardWidget[]) => JSON.stringify(widgets);
 const bottomOf = (widgets: DashboardWidget[]) => widgets.reduce((bottom, w) => Math.max(bottom, w.y + w.h), 0);
 
 /** Aba Analiticos: o painel de visuais (compartilhado, editavel) com os mesmos filtros da tabela. */
-export default function AuditAnalytics({ filters, canCreate = false, canEdit = false, canDelete = false, onFilterBy }: Props) {
+export default function AuditAnalytics({ filters, options = null, canCreate = false, canEdit = false, canDelete = false, onFilterBy }: Props) {
   const canChange = canCreate || canEdit || canDelete;
   const { showToast } = useToast();
   const [result, setResult] = useState<Result | null>(null);
@@ -195,6 +198,7 @@ export default function AuditAnalytics({ filters, canCreate = false, canEdit = f
         <WidgetEditor
           initial={editor.widget}
           filters={filters}
+          options={options}
           summary={summary}
           onSave={applyEditor}
           onClose={() => setEditor(null)}

@@ -139,3 +139,14 @@ class TestDiferenca:
         assert required_permissions(base, base[1:]) == {"analiticos.excluir"}
         reflow = [{**w, "y": w["y"] + 1} for w in base[1:]]
         assert required_permissions(base, reflow) == {"analiticos.excluir"}
+
+    def test_trocar_o_filtro_de_um_visual_pede_editar(self):
+        def visual(filters):
+            query = {"metric": "logins", "group_by": "none", "limit": 8, "filters": filters}
+            return {"id": "c1", "type": "stat", "source": "custom", "title": None, "color": None, "query": query,
+                    "x": 0, "y": 0, "w": 4, "h": 2}
+
+        sem = [visual(None)]
+        com = [visual({"action": ["login"]})]
+        assert required_permissions(sem, com) == {"analiticos.editar"}
+        assert required_permissions(com, com) == set()

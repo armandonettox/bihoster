@@ -182,7 +182,7 @@ def test_salva_visuais_personalizados_de_todos_os_tipos_com_cor_e_consulta(clien
 
     assert resp.status_code == 200, resp.text
     saved = {w["id"]: w for w in client.get("/audit/dashboard", headers=admin).json()["widgets"]}
-    assert saved["a"]["color"] == "danger" and saved["a"]["query"] == {"metric": "logins", "group_by": "none", "limit": 8}
+    assert saved["a"]["color"] == "danger" and saved["a"]["query"] == {"metric": "logins", "group_by": "none", "limit": 8, "filters": None}
     assert saved["e"]["query"]["limit"] == 15 and saved["e"]["type"] == "table"
     assert saved["f"]["query"] is None and saved["f"]["color"] is None  # visual padrao continua como era
 
@@ -230,3 +230,53 @@ def test_painel_padrao_continua_sem_consulta_nem_cor(client):
     widgets = client.get("/audit/dashboard", headers=admin).json()["widgets"]
 
     assert all(w["query"] is None and w["color"] is None for w in widgets)
+
+
+# --- filtros proprios de cada visual ---
+
+
+def _com_filtros(filters: dict, **kw) -> dict:
+    widget = _custom("f1", "stat", "logins", "none", w=4, h=2, **kw)
+    widget["query"] = {**widget["query"], "filters": filters}
+    return widget
+
+
+def test_guarda_os_filtros_do_visual_sem_repetidos(client):
+    admin = _admin(client)
+    filtros = {"action": ["login", "login", " view_report "], "workspace_id": [3, 3, 5], "user_id": [], "entity": ["report"]}
+
+    resp = client.put("/audit/dashboard", json={"widgets": [_com_filtros(filtros)]}, headers=admin)
+
+    assert resp.status_code == 200, resp.text
+    saved = client.get("/audit/dashboard", headers=admin).json()["widgets"][0]["query"]["filters"]
+    assert saved == {"user_id": [], "action": ["login", "view_report"], "workspace_id": [3, 5], "report_id": [], "entity": ["report"]}
+
+
+def test_filtros_todos_vazios_valem_como_visual_sem_filtro(client):
+    admin = _admin(client)
+
+    resp = client.put("/audit/dashboard", json={"widgets": [_com_filtros({"action": [], "user_id": []})]}, headers=admin)
+
+    assert resp.status_code == 200, resp.text
+    assert resp.json()["widgets"][0]["query"]["filters"] is None
+
+
+def test_recusa_filtros_invalidos(client):
+    admin = _admin(client)
+    invalidos = {
+        "acao vazia": {"action": [""]},
+        "texto grande demais": {"entity": ["x" * 41]},
+        "id que nao e numero": {"user_id": ["abc"]},
+        "valores demais": {"workspace_id": list(range(51))},
+    }
+
+    for nome, filtros in invalidos.items():
+        resp = client.put("/audit/dashboard", json={"widgets": [_com_filtros(filtros)]}, headers=admin)
+        assert resp.status_code == 422, nome
+
+
+def test_visual_padrao_nao_aceita_filtros(client):
+    admin = _admin(client)
+    widget = {**_widget("a", "stat", "events"), "query": {"metric": "events", "group_by": "none", "filters": {"action": ["login"]}}}
+
+    assert client.put("/audit/dashboard", json={"widgets": [widget]}, headers=admin).status_code == 422

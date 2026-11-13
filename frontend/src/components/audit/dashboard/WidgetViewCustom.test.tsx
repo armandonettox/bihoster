@@ -197,3 +197,48 @@ describe("WidgetView - botoes de edicao", () => {
     expect(container.querySelector(".dash-drag .dash-actions")).not.toBeNull(); // a grade ignora o arraste que comeca nos botoes (cancel)
   });
 });
+
+describe("WidgetView - filtros proprios do visual", () => {
+  it("manda os filtros da pagina e os do visual juntos, com o periodo da pagina", async () => {
+    show(custom("stat", { metric: "logins", group_by: "none", filters: { action: ["login"], workspace_id: [7] } }), {
+      date_from: "2026-11-01",
+      user_id: [3],
+    });
+
+    await screen.findByText("130");
+
+    expect(mocks.query.mock.calls[0][0]).toEqual({
+      date_from: "2026-11-01",
+      user_id: [3],
+      action: ["login"],
+      workspace_id: [7],
+    });
+  });
+
+  it("no mesmo campo vale so o que esta na pagina e no visual", async () => {
+    show(custom("stat", { filters: { user_id: [2, 3] } }), { user_id: [3, 4] });
+
+    await screen.findByText("130");
+
+    expect(mocks.query.mock.calls[0][0]).toEqual({ user_id: [3] });
+  });
+
+  it("sem valor em comum manda um valor que nao existe, para dar zero", async () => {
+    show(custom("stat", { filters: { user_id: [2] } }), { user_id: [3] });
+
+    await screen.findByText("130");
+
+    expect(mocks.query.mock.calls[0][0]).toEqual({ user_id: [-1] });
+  });
+
+  it("busca de novo quando o filtro do visual muda", async () => {
+    const view = show(custom("stat", { filters: { action: ["login"] } }));
+    await screen.findByText("130");
+
+    view.rerender(
+      <WidgetView widget={custom("stat", { filters: { action: ["login", "view_report"] } })} summary={null} filters={{}} editing={false} />,
+    );
+
+    await waitFor(() => expect(mocks.query).toHaveBeenCalledTimes(2));
+  });
+});

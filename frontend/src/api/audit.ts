@@ -151,11 +151,16 @@ export type Metric =
 
 export type GroupBy = "none" | "day" | "hour" | "weekday" | "action" | "entity" | "user" | "collection" | "report" | "login_method";
 
+/** Filtros so de um visual: valem junto com os da pagina (onde os dois filtram o mesmo campo, vale a intersecao) */
+export type WidgetFilters = Pick<AuditFilters, "user_id" | "action" | "workspace_id" | "report_id" | "entity">;
+
 /** O que um visual personalizado conta (medida) e como reparte (agrupamento) */
 export interface WidgetQuery {
   metric: Metric;
   group_by: GroupBy;
   limit: number;
+  /** Sem valor marcado em nenhum campo, o servidor devolve null */
+  filters?: WidgetFilters | null;
 }
 
 /** Um visual do painel: o que mostrar (`type` e `source`) e onde fica na grade (x, y, w, h em celulas). */

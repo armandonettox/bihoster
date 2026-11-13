@@ -1,6 +1,17 @@
 import { useState } from "react";
-import type { AuditFilters, AuditSummary, DashboardWidget, GroupBy, Metric, WidgetColor, WidgetType } from "../../../api/audit";
+import type {
+  AuditFilters,
+  AuditOptions,
+  AuditSummary,
+  DashboardWidget,
+  GroupBy,
+  Metric,
+  WidgetColor,
+  WidgetFilters,
+  WidgetType,
+} from "../../../api/audit";
 import Modal from "../../Modal";
+import MultiSelect from "../../MultiSelect";
 import {
   COLOR_OPTIONS,
   COLORABLE_TYPES,
@@ -12,8 +23,10 @@ import {
   groupsFor,
 } from "./widgetCatalog";
 import WidgetView from "./WidgetView";
+import { FILTER_KEYS, isEmptyWidgetFilters } from "./widgetFilters";
 
 const LIMIT_OPTIONS = [5, 8, 10, 15, 20];
+const EMPTY_FILTERS: WidgetFilters = Object.fromEntries(FILTER_KEYS.map((key) => [key, []]));
 // Agrupamentos em que "quantos itens" faz sentido (dia, hora e dia da semana mostram todos)
 const CATEGORY_GROUPS: GroupBy[] = ["action", "entity", "user", "collection", "report", "login_method"];
 
@@ -26,6 +39,8 @@ interface Props {
   /** Visual que esta sendo configurado; sem ele, e um visual novo */
   initial?: DashboardWidget;
   filters: AuditFilters;
+  /** Listas para escolher os filtros do visual; sem elas os campos aparecem sem opcoes */
+  options?: AuditOptions | null;
   summary: AuditSummary | null;
   onSave: (widget: DashboardWidget) => void;
   onClose: () => void;
@@ -33,7 +48,7 @@ interface Props {
 
 /** Janela para montar um visual novo (tipo, o que medir, como agrupar, titulo e cor) ou configurar
  * um existente. Visual padrao so aceita titulo e cor; a pre-visualizacao usa os filtros da pagina. */
-export default function WidgetEditor({ initial, filters, summary, onSave, onClose }: Props) {
+export default function WidgetEditor({ initial, filters, options = null, summary, onSave, onClose }: Props) {
   const isBuiltIn = initial !== undefined && !initial.query;
   const [type, setType] = useState<WidgetType>(initial?.type ?? "bars");
   const [metric, setMetric] = useState<Metric>(initial?.query?.metric ?? "events");
@@ -41,6 +56,7 @@ export default function WidgetEditor({ initial, filters, summary, onSave, onClos
   const [limit, setLimit] = useState(initial?.query?.limit ?? 8);
   const [title, setTitle] = useState(initial?.title ?? "");
   const [color, setColor] = useState<WidgetColor | null>(initial?.color ?? null);
+  const [own, setOwn] = useState<WidgetFilters>({ ...EMPTY_FILTERS, ...initial?.query?.filters });
 
   const groups = groupsFor(type, metric);
   const colorable = COLORABLE_TYPES.includes(type);
@@ -66,7 +82,7 @@ export default function WidgetEditor({ initial, filters, summary, onSave, onClos
         source: "custom",
         title: title.trim() || null,
         color: colorable ? color : null,
-        query: { metric, group_by: group, limit },
+        query: { metric, group_by: group, limit, filters: isEmptyWidgetFilters(own) ? null : own },
         x: initial?.x ?? 0,
         y: initial?.y ?? 0,
         w: initial?.w ?? DEFAULT_SIZE[type].w,
@@ -132,6 +148,45 @@ export default function WidgetEditor({ initial, filters, summary, onSave, onClos
                   ))}
                 </select>
               </label>
+
+              <fieldset className="editor-field editor-filters">
+                <legend className="editor-label">Filtros deste visual</legend>
+                <p className="editor-note">Valem junto com os filtros da pagina. Nada marcado nao filtra.</p>
+                <MultiSelect
+                  label="Pessoa"
+                  options={(options?.users ?? []).map((u) => ({ value: String(u.id), label: u.name, hint: u.email }))}
+                  selected={(own.user_id ?? []).map(String)}
+                  onChange={(next) => setOwn({ ...own, user_id: next.map(Number) })}
+                />
+                <MultiSelect
+                  label="Acao"
+                  options={(options?.actions ?? []).map((a) => ({ value: a.action, label: a.label }))}
+                  selected={own.action ?? []}
+                  onChange={(action) => setOwn({ ...own, action })}
+                />
+                <MultiSelect
+                  label="Recurso"
+                  options={(options?.entities ?? []).map((e) => ({ value: e.entity, label: e.label }))}
+                  selected={own.entity ?? []}
+                  onChange={(entity) => setOwn({ ...own, entity })}
+                />
+                <MultiSelect
+                  label="Colecao"
+                  options={(options?.collections ?? []).map((c) => ({ value: String(c.id), label: c.name }))}
+                  selected={(own.workspace_id ?? []).map(String)}
+                  onChange={(next) => setOwn({ ...own, workspace_id: next.map(Number) })}
+                />
+                <MultiSelect
+                  label="Relatorio"
+                  options={(options?.reports ?? []).map((r) => ({
+                    value: String(r.id),
+                    label: r.name,
+                    hint: r.collection ? `Colecao: ${r.collection}` : undefined,
+                  }))}
+                  selected={(own.report_id ?? []).map(String)}
+                  onChange={(next) => setOwn({ ...own, report_id: next.map(Number) })}
+                />
+              </fieldset>
 
               {showLimit && (
                 <label className="editor-field">

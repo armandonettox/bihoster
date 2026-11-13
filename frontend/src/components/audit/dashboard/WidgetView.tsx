@@ -11,6 +11,7 @@ import { shortDate } from "../../../utils/auditPeriod";
 import { BarList, Donut, HourChart, LineChart } from "../charts";
 import { isFilterable, isStatSelected, patchForKey, patchForStat, selectedKeys, type FilterPatch } from "./interactions";
 import { STAT_META, widgetTitle } from "./widgetMeta";
+import { mergeFilters } from "./widgetFilters";
 
 const plural = (n: number, one: string, many: string) => `${n.toLocaleString("pt-BR")} ${n === 1 ? one : many}`;
 
@@ -219,7 +220,8 @@ interface Props {
 
 /** Um visual do painel. Ocupa todo o espaco que a grade deu. */
 export default function WidgetView({ widget, summary, filters = {}, editing, onEdit, onRemove, onFilterBy }: Props) {
-  const state = useQueryResult(widget.query, filters);
+  // O visual conta com os filtros da pagina mais os dele
+  const state = useQueryResult(widget.query, mergeFilters(filters, widget.query?.filters));
   const interactive = !editing && onFilterBy !== undefined;
   const pick: ItemPick = {
     onSelect:

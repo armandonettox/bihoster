@@ -118,7 +118,7 @@ describe("AuditAnalytics - adicionar, configurar e remover visuais", () => {
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("Painel salvo para todos."));
     expect(saved()).toHaveLength(3);
     expect(saved()[2]).toMatchObject({ source: "custom", title: "Meu visual", x: 0, y: 8, w: 10, h: 7 });
-    expect(saved()[2].query).toEqual({ metric: "events", group_by: "action", limit: 8 });
+    expect(saved()[2].query).toEqual({ metric: "events", group_by: "action", limit: 8, filters: null });
   });
 
   it("cada visual novo ganha um id diferente", async () => {
@@ -192,7 +192,7 @@ describe("AuditAnalytics - adicionar, configurar e remover visuais", () => {
     fireEvent.click(screen.getByRole("button", { name: "Adicionar visual" }));
 
     await waitFor(() =>
-      expect(mocks.query).toHaveBeenCalledWith({ date_from: "2026-11-01" }, { metric: "events", group_by: "action", limit: 8 }),
+      expect(mocks.query).toHaveBeenCalledWith({ date_from: "2026-11-01" }, { metric: "events", group_by: "action", limit: 8, filters: null }),
     );
   });
 });

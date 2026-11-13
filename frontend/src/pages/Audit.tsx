@@ -101,6 +101,7 @@ export default function Audit() {
           />
         ) : (
           <AuditAnalytics
+            options={options}
             filters={filters}
             canCreate={isAdmin || analytics.canCreate}
             canEdit={isAdmin || analytics.canEdit}

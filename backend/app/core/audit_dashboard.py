@@ -32,6 +32,36 @@ SOURCES_BY_TYPE: dict[str, set[str]] = {
 }
 
 
+MAX_FILTER_VALUES = 50
+
+
+class WidgetFilters(BaseModel):
+    """Filtros proprios de um visual. Valem junto com os da pagina: quando os dois filtram o mesmo
+    campo, o visual mostra so o que esta nos dois (a conta da intersecao e feita na tela)."""
+
+    user_id: list[int] = Field(default_factory=list, max_length=MAX_FILTER_VALUES)
+    action: list[str] = Field(default_factory=list, max_length=MAX_FILTER_VALUES)
+    workspace_id: list[int] = Field(default_factory=list, max_length=MAX_FILTER_VALUES)
+    report_id: list[int] = Field(default_factory=list, max_length=MAX_FILTER_VALUES)
+    entity: list[str] = Field(default_factory=list, max_length=MAX_FILTER_VALUES)
+
+    @field_validator("action", "entity")
+    @classmethod
+    def clean_texts(cls, values: list[str]) -> list[str]:
+        cleaned = [v.strip() for v in values]
+        if any(not v or len(v) > 40 for v in cleaned):
+            raise ValueError("Valor de filtro invalido")
+        return list(dict.fromkeys(cleaned))
+
+    @field_validator("user_id", "workspace_id", "report_id")
+    @classmethod
+    def clean_ids(cls, values: list[int]) -> list[int]:
+        return list(dict.fromkeys(values))
+
+    def is_empty(self) -> bool:
+        return not any(getattr(self, name) for name in self.model_fields)
+
+
 class WidgetQuery(BaseModel):
     """O que um visual personalizado conta e como reparte."""
 
@@ -39,6 +69,13 @@ class WidgetQuery(BaseModel):
     group_by: GroupBy
     # Quantos itens mostrar nos agrupamentos por categoria (acao, pessoa, colecao...)
     limit: int = Field(default=8, ge=1, le=50)
+    # Filtros so deste visual; sem nenhum valor marcado fica None (igual a um visual sem filtro)
+    filters: WidgetFilters | None = None
+
+    @field_validator("filters")
+    @classmethod
+    def drop_empty_filters(cls, value: WidgetFilters | None) -> WidgetFilters | None:
+        return None if value is None or value.is_empty() else value
 
 
 class DashboardWidget(BaseModel):

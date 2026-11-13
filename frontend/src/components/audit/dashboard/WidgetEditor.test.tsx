@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { AuditQueryResult, DashboardWidget } from "../../../api/audit";
+import type { AuditOptions, AuditQueryResult, DashboardWidget } from "../../../api/audit";
 import WidgetEditor from "./WidgetEditor";
 
 const mocks = vi.hoisted(() => ({ query: vi.fn() }));
@@ -27,8 +27,21 @@ beforeEach(() => {
   onClose.mockReset();
 });
 
-const open = (initial?: DashboardWidget, filters = {}) =>
-  render(<WidgetEditor initial={initial} filters={filters} summary={null} onSave={onSave} onClose={onClose} />);
+const OPTIONS: AuditOptions = {
+  actions: [
+    { action: "login", label: "Login" },
+    { action: "view_report", label: "Relatorio aberto" },
+  ],
+  entities: [{ entity: "report", label: "Relatorio" }],
+  users: [{ id: 3, name: "Ana", email: "ana@example.com" } as AuditOptions["users"][number]],
+  collections: [{ id: 7, name: "Financeiro" }],
+  reports: [{ id: 9, name: "Vendas", collection: "Financeiro" }],
+};
+
+const open = (initial?: DashboardWidget, filters = {}, options: AuditOptions | null = OPTIONS) =>
+  render(
+    <WidgetEditor initial={initial} filters={filters} options={options} summary={null} onSave={onSave} onClose={onClose} />,
+  );
 
 const select = (name: string) => screen.getByLabelText(name) as HTMLSelectElement;
 const options = (name: string) => Array.from(select(name).options).map((o) => o.textContent);
@@ -42,7 +55,12 @@ describe("WidgetEditor - visual novo", () => {
     expect(select("O que medir").value).toBe("events");
     expect(select("Agrupar por").value).toBe("action");
     expect(await screen.findByText("Login")).toBeTruthy();
-    expect(mocks.query).toHaveBeenCalledWith({ date_from: "2026-11-01" }, { metric: "events", group_by: "action", limit: 8 });
+    expect(mocks.query).toHaveBeenCalledWith({ date_from: "2026-11-01" }, {
+      metric: "events",
+      group_by: "action",
+      limit: 8,
+      filters: null,
+    });
   });
 
   it("lista os cinco tipos e as oito medidas", () => {
@@ -234,5 +252,73 @@ describe("WidgetEditor - configurar um visual existente", () => {
   it("visual padrao do tipo rosca nao mostra cor", () => {
     open({ ...BUILT_IN, id: "donut-logins", type: "donut", source: "login_methods" });
     expect(screen.queryByRole("radiogroup", { name: "Cor" })).toBeNull();
+  });
+});
+
+
+describe("WidgetEditor - filtros do visual", () => {
+  const pick = (label: RegExp, option: string) => {
+    fireEvent.click(screen.getByRole("button", { name: label }));
+    fireEvent.click(screen.getByLabelText(new RegExp(option)));
+  };
+
+  it("visual novo mostra os cinco filtros, todos sem valor, e o visual padrao nao mostra", () => {
+    open();
+    expect(screen.getByText("Filtros deste visual")).toBeTruthy();
+    for (const nome of ["Pessoa", "Acao", "Recurso", "Colecao", "Relatorio"]) {
+      expect(screen.getByRole("button", { name: new RegExp(`^${nome}: `) })).toBeTruthy();
+    }
+    expect(screen.getByRole("button", { name: /^Acao: Todas/ })).toBeTruthy();
+  });
+
+  it("visual padrao nao tem filtros proprios", () => {
+    open({
+      id: "stat-events", type: "stat", source: "events", title: null, color: null, query: null, x: 0, y: 0, w: 4, h: 2,
+    });
+    expect(screen.queryByText("Filtros deste visual")).toBeNull();
+  });
+
+  it("os valores escolhidos vao na consulta do visual salvo e na pre-visualizacao", async () => {
+    open();
+    pick(/^Acao: /, "Login");
+    pick(/^Colecao: /, "Financeiro");
+    pick(/^Pessoa: /, "Ana");
+
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar visual" }));
+
+    expect(onSave.mock.calls[0][0].query.filters).toEqual({
+      user_id: [3],
+      action: ["login"],
+      workspace_id: [7],
+      report_id: [],
+      entity: [],
+    });
+  });
+
+  it("sem nada marcado o visual salvo leva filtros null", () => {
+    open();
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar visual" }));
+    expect(onSave.mock.calls[0][0].query.filters).toBeNull();
+  });
+
+  it("ao configurar um visual existente, os filtros dele ja vem marcados", () => {
+    open({
+      id: "c1", type: "stat", source: "custom", title: null, color: null,
+      query: { metric: "logins", group_by: "none", limit: 8, filters: { action: ["login"], workspace_id: [7] } },
+      x: 0, y: 0, w: 4, h: 2,
+    });
+    expect(screen.getByRole("button", { name: "Acao: Login" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Colecao: Financeiro" })).toBeTruthy();
+  });
+
+  it("a pre-visualizacao consulta com os filtros da pagina e os do visual juntos", async () => {
+    open(undefined, { date_from: "2026-11-01", action: ["login", "view_report"] });
+    pick(/^Acao: /, "Login");
+
+    await screen.findAllByText("Login");
+    expect(mocks.query).toHaveBeenLastCalledWith(
+      { date_from: "2026-11-01", action: ["login"] },
+      expect.objectContaining({ filters: expect.objectContaining({ action: ["login"] }) }),
+    );
   });
 });
