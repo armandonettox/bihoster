@@ -22,8 +22,18 @@ PAGE_SIZE = 50
 MAX_PAGE_SIZE = 100
 
 # Desfechos que o admin quer rever: a IA nao respondeu com dados ou deu erro. "blocked" (relatorio com RLS,
-# sem acesso) fica de fora: e esperado. "no_reports" e pessoa sem relatorio, tambem esperado.
-PROBLEM_OUTCOMES = ("model_reply", "off_topic", "needs_detail", "no_dax", "no_report", "empty_answer", "error")
+# sem acesso) fica de fora: e esperado. "no_reports" e pessoa sem relatorio, tambem esperado. "blocked_columns"
+# (pergunta que precisava de coluna bloqueada) entra: mostra ao admin o que as pessoas pedem e o bloqueio barra.
+PROBLEM_OUTCOMES = (
+    "model_reply",
+    "off_topic",
+    "needs_detail",
+    "no_dax",
+    "no_report",
+    "empty_answer",
+    "blocked_columns",
+    "error",
+)
 
 
 def _now() -> datetime:

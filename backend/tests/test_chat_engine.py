@@ -572,15 +572,75 @@ class TestOrientacoesEBloqueios:
 
         assert pbi.bloqueadas == [(("Vendas", "Mes"),)]
 
-    def test_consulta_recusada_por_citar_coluna_bloqueada_volta_para_a_ia_corrigir(self, cenario, pbi, monkeypatch):
+    def _recusa_por_coluna_bloqueada(self, pbi):
+        pbi.resultados = [
+            ChatDataError(
+                "A consulta usa colunas que o administrador bloqueou para o chat: Vendas[Mes].",
+                fixable=True,
+                blocked_columns=True,
+            )
+        ]
+
+    def test_consulta_que_cita_coluna_bloqueada_nao_tenta_de_novo_e_explica_a_recusa(self, cenario, pbi, monkeypatch):
         _salvar(cenario, bloqueadas=[("Vendas", "Mes")])
-        pbi.resultados = [ChatDataError("A consulta usa colunas que o administrador bloqueou para o chat: Vendas[Mes].", fixable=True)]
-        llm = _llm(monkeypatch, _json(dax="EVALUATE com_mes"), _json(dax="EVALUATE sem_mes"), "ok")
+        self._recusa_por_coluna_bloqueada(pbi)
+        texto = "Esse detalhe fica protegido. Posso mostrar totais por periodo ou comparar entre grupos."
+        llm = _llm(monkeypatch, _json(dax="EVALUATE com_mes"), texto)
+
+        resposta = _perguntar(cenario, "Quem comprou mais?")
+
+        assert resposta.reply == texto and resposta.outcome == "blocked_columns"
+        assert len(pbi.consultas) == 1 and len(llm.calls) == 2
+
+    def test_a_recusa_nao_devolve_o_dax_que_citava_a_coluna_bloqueada(self, cenario, pbi, monkeypatch):
+        _salvar(cenario, bloqueadas=[("Vendas", "Mes")])
+        self._recusa_por_coluna_bloqueada(pbi)
+        _llm(monkeypatch, _json(dax="EVALUATE com_mes"), "Nao posso mostrar isso.")
+
+        resposta = _perguntar(cenario, "Quem comprou mais?")
+
+        assert not resposta.dax and resposta.table is None
+
+    def test_o_pedido_da_recusa_usa_o_esquema_sem_a_coluna_bloqueada_e_linguagem_de_negocio(self, cenario, pbi, monkeypatch):
+        _salvar(cenario, bloqueadas=[("Vendas", "Mes")])
+        self._recusa_por_coluna_bloqueada(pbi)
+        llm = _llm(monkeypatch, _json(dax="EVALUATE com_mes"), "Nao posso mostrar isso.")
+
+        _perguntar(cenario, "Quem comprou mais?")
+
+        sistema = llm.system(1)
+        assert "protecao de dados" in sistema and "Nunca cite DAX" in sistema
+        assert "'Vendas'[Valor]" in sistema and "'Vendas'[Mes]" not in sistema
+        assert llm.conversa(1)[-1]["content"] == "Quem comprou mais?"
+
+    def test_recusa_que_cita_a_coluna_bloqueada_vira_o_texto_fixo(self, cenario, pbi, monkeypatch):
+        _salvar(cenario, bloqueadas=[("Vendas", "Mes")])
+        self._recusa_por_coluna_bloqueada(pbi)
+        _llm(monkeypatch, _json(dax="EVALUATE com_mes"), "A coluna Mes esta bloqueada.")
+
+        resposta = _perguntar(cenario, "Quem comprou mais?")
+
+        assert resposta.reply == chat_engine.REPLY_BLOCKED_COLUMNS
+
+    def test_recusa_vazia_ou_com_falha_da_ia_vira_o_texto_fixo(self, cenario, pbi, monkeypatch):
+        _salvar(cenario, bloqueadas=[("Vendas", "Mes")])
+        self._recusa_por_coluna_bloqueada(pbi)
+        _llm(monkeypatch, _json(dax="EVALUATE com_mes"), "   ")
+        assert _perguntar(cenario, "Quem comprou mais?").reply == chat_engine.REPLY_BLOCKED_COLUMNS
+
+        self._recusa_por_coluna_bloqueada(pbi)
+        _llm(monkeypatch, _json(dax="EVALUATE com_mes"), AIError("falhou"))
+        resposta = _perguntar(cenario, "Quem comprou mais?")
+        assert resposta.reply == chat_engine.REPLY_BLOCKED_COLUMNS and resposta.outcome == "blocked_columns"
+
+    def test_erro_de_dax_comum_continua_voltando_para_a_ia_corrigir(self, cenario, pbi, monkeypatch):
+        pbi.resultados = [ChatDataError("Erro de sintaxe.", fixable=True)]
+        llm = _llm(monkeypatch, _json(dax="EVALUATE ruim"), _json(dax="EVALUATE bom"), "ok")
 
         resposta = _perguntar(cenario, "Total?")
 
-        assert resposta.dax == "EVALUATE sem_mes" and resposta.reply == "ok"
-        assert "bloqueou" in llm.conversa(1)[-1]["content"]
+        assert resposta.dax == "EVALUATE bom" and resposta.reply == "ok" and resposta.outcome == "answered"
+        assert "Erro de sintaxe" in llm.conversa(1)[-1]["content"]
 
     def test_sem_configuracao_nada_e_bloqueado(self, cenario, pbi, monkeypatch):
         _llm(monkeypatch, _json(dax="EVALUATE x"), "ok")

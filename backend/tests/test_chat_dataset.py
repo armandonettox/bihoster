@@ -550,7 +550,8 @@ class TestColunasBloqueadas:
         with pytest.raises(ChatDataError, match="bloqueou") as erro:
             chat_dataset.validate_dax(dax, self.BLOQUEADAS)
 
-        assert erro.value.fixable is True and "Vendas[Cliente]" in str(erro.value)
+        assert erro.value.fixable is True and erro.value.blocked_columns is True
+        assert "Vendas[Cliente]" in str(erro.value)
 
     def test_mesmo_nome_em_outra_tabela_passa(self):
         chat_dataset.validate_dax("EVALUATE SUMMARIZECOLUMNS(Outra[Cliente])", self.BLOQUEADAS)
@@ -591,7 +592,13 @@ class TestColunasBloqueadas:
         with pytest.raises(ChatDataError, match="bloqueou") as erro:
             chat_dataset.run_chat_query(CONEXAO, RELATORIO, "EVALUATE TOPN(10, Vendas)", blocked=self.BLOQUEADAS)
 
-        assert erro.value.fixable is True
+        assert erro.value.fixable is True and erro.value.blocked_columns is True
+
+    def test_erro_de_dax_comum_nao_leva_a_marca_de_coluna_bloqueada(self):
+        with pytest.raises(ChatDataError) as erro:
+            chat_dataset.validate_dax("SELECT 1", self.BLOQUEADAS)
+
+        assert erro.value.blocked_columns is False
 
     def test_sem_bloqueio_nada_muda_e_o_esquema_nem_e_lido(self, pbi):
         pbi.respostas = {"EVALUATE": [{"Vendas[Cliente]": "Ana"}]}

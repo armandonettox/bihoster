@@ -42,11 +42,14 @@ REASON_CHECK_FAILED = "Nao foi possivel verificar este relatorio no Power BI ago
 
 class ChatDataError(Exception):
     """Erro com mensagem segura para mostrar ao usuario ou devolver a IA. `fixable` indica que a IA
-    pode corrigir a consulta e tentar de novo (DAX invalido), ao contrario de um bloqueio."""
+    pode corrigir a consulta e tentar de novo (DAX invalido), ao contrario de um bloqueio.
+    `blocked_columns` marca a consulta que precisa de coluna bloqueada pelo admin: o motor nao tenta de novo,
+    explica a recusa a pessoa."""
 
-    def __init__(self, message: str, fixable: bool = False):
+    def __init__(self, message: str, fixable: bool = False, blocked_columns: bool = False):
         super().__init__(message)
         self.fixable = fixable
+        self.blocked_columns = blocked_columns
 
 
 @dataclass(frozen=True)
@@ -447,6 +450,7 @@ def validate_dax(dax: str, blocked=(), measure_names: frozenset[str] = frozenset
                 f"A consulta usa colunas que o administrador bloqueou para o chat: {', '.join(cited)}. "
                 "Use outras colunas.",
                 fixable=True,
+                blocked_columns=True,
             )
     return query
 
@@ -462,6 +466,7 @@ def _strip_blocked_columns(rows: list[dict], blocked) -> list[dict]:
         raise ChatDataError(
             "A consulta so devolveu colunas que o administrador bloqueou para o chat. Use outras colunas.",
             fixable=True,
+            blocked_columns=True,
         )
     return stripped
 

@@ -295,13 +295,13 @@ class TestConsulta:
         assert corpo["retention_days"] == 30 and corpo["days"] == 7 and corpo["next_before_id"] is None
 
     def test_so_problemas_esconde_o_que_foi_respondido_e_o_bloqueio_esperado(self, client, admin, db_session):
-        for outcome in ("answered", "blocked", "no_reports", "off_topic", "error", "needs_detail", "model_reply", "no_dax", "no_report", "empty_answer"):
+        for outcome in ("answered", "blocked", "no_reports", "off_topic", "error", "needs_detail", "model_reply", "no_dax", "no_report", "empty_answer", "blocked_columns"):
             _linha(db_session, outcome=outcome)
 
         todos = _log(client, admin).json()["entries"]
         problemas = _log(client, admin, only_problems=True).json()["entries"]
 
-        assert len(todos) == 10
+        assert len(todos) == 11
         assert {e["outcome"] for e in problemas} == set(chat_log.PROBLEM_OUTCOMES)
 
     def test_filtra_por_provedor_e_modelo(self, client, admin, db_session):

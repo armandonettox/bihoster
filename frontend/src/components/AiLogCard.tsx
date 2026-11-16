@@ -13,6 +13,7 @@ const OUTCOME_LABELS: Record<string, string> = {
   off_topic: "Recusa padrao",
   needs_detail: "Pediu mais detalhe",
   blocked: "Bloqueado",
+  blocked_columns: "Coluna bloqueada",
   no_dax: "Consulta falhou",
   no_report: "Nao achou o relatorio",
   no_reports: "Sem relatorios",
