@@ -5,13 +5,14 @@ from unittest.mock import patch
 
 import pytest
 
-from app.core import ai_report_settings, chat_dataset, chat_images
+from app.core import ai_report_settings, chat_dataset, chat_engine, chat_images
 from app.core.chat_dataset import ChatDataError, DatasetSchema, Eligibility, SchemaColumn, SchemaTable
 from app.core.workspace_deps import ensure_default_group_access
 from app.models.ai_report_settings import AIReportSettings
 from app.models.audit_log import AuditLog
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
+from app.models.user import User
 from app.models.workspace import Workspace
 
 PASSWORD = "SenhaForte123"
@@ -197,6 +198,7 @@ class TestConfiguracoes:
             "notes": "",
             "blocked_columns": [],
             "allow_images": False,
+            "review": "unreviewed",
         }
 
     def test_grava_e_devolve_orientacoes_colunas_e_imagem(self, client, admin, relatorio):
@@ -321,3 +323,110 @@ class TestAquecerImagem:
     @pytest.mark.parametrize("pagina", ["", "../etc", "pagina com espaco", "x" * 101])
     def test_nome_de_pagina_fora_do_formato_e_recusado(self, client, admin, relatorio, pagina):
         assert self._post(client, admin, relatorio.id, pagina).status_code == 422
+
+
+class TestRevisaoDasColunas:
+    """Relatorio novo nasce fechado ao chat ate o admin revisar as colunas; os de antes continuam abertos."""
+
+    def _criar(self, client, admin, relatorio, nome="Relatorio novo"):
+        corpo = {
+            "name": nome,
+            "powerbi_connection_id": relatorio.powerbi_connection_id,
+            "pbi_workspace_id": "ws2",
+            "pbi_report_id": "rep2",
+            "pbi_dataset_id": "ds2",
+        }
+        resp = client.post(f"/workspaces/{relatorio.collection_id}/reports/", json=corpo, headers=admin)
+        assert resp.status_code == 201
+        return resp.json()["id"]
+
+    def _ids_do_chat(self, db_session, email="admin@example.com"):
+        usuario = db_session.query(User).filter(User.email == email).one()
+        return {c.report.id for c in chat_engine.list_candidate_reports(db_session, usuario.id)}
+
+    def test_relatorio_de_antes_continua_aberto_e_aparece_como_nao_revisado(self, client, admin, relatorio, db_session):
+        corpo = client.get(f"/ai/reports/{relatorio.id}/settings", headers=admin).json()
+
+        assert corpo["review"] == "unreviewed"
+        assert relatorio.id in self._ids_do_chat(db_session)
+
+    def test_relatorio_novo_nasce_fechado_ao_chat(self, client, admin, relatorio, db_session):
+        novo = self._criar(client, admin, relatorio)
+
+        assert client.get(f"/ai/reports/{novo}/settings", headers=admin).json()["review"] == "pending"
+        ids = self._ids_do_chat(db_session)
+        assert novo not in ids and relatorio.id in ids
+
+    def test_marcar_como_revisado_libera_o_relatorio_sem_precisar_bloquear_nada(self, client, admin, relatorio, db_session):
+        novo = self._criar(client, admin, relatorio)
+
+        resp = client.post(f"/ai/reports/{novo}/review", headers=admin)
+
+        assert resp.status_code == 200 and resp.json()["review"] == "reviewed" and resp.json()["blocked_columns"] == []
+        assert novo in self._ids_do_chat(db_session)
+        linha = db_session.query(AIReportSettings).filter(AIReportSettings.report_id == novo).one()
+        assert linha.review_status == "reviewed" and linha.reviewed_at is not None
+
+    def test_marcar_o_relatorio_de_antes_como_revisado_tambem_funciona(self, client, admin, relatorio):
+        resp = client.post(f"/ai/reports/{relatorio.id}/review", headers=admin)
+
+        assert resp.json()["review"] == "reviewed"
+
+    def test_salvar_configuracoes_nao_libera_nem_fecha_o_relatorio(self, client, admin, relatorio, db_session):
+        novo = self._criar(client, admin, relatorio)
+        corpo = {"notes": "x", "blocked_columns": [{"table": "fato", "column": "unidade"}], "allow_images": False}
+
+        assert client.put(f"/ai/reports/{novo}/settings", json=corpo, headers=admin).json()["review"] == "pending"
+        assert novo not in self._ids_do_chat(db_session)
+
+        client.post(f"/ai/reports/{novo}/review", headers=admin)
+        assert client.put(f"/ai/reports/{novo}/settings", json=corpo, headers=admin).json()["review"] == "reviewed"
+
+    def test_lista_o_estado_de_cada_relatorio_das_colecoes_do_admin(self, client, admin, relatorio):
+        novo = self._criar(client, admin, relatorio)
+        client.post(f"/ai/reports/{relatorio.id}/review", headers=admin)
+
+        itens = client.get("/ai/reports/review", headers=admin)
+
+        assert itens.status_code == 200
+        assert {i["report_id"]: i["review"] for i in itens.json()} == {relatorio.id: "reviewed", novo: "pending"}
+
+    def test_so_quem_gerencia_a_ia_ve_e_muda_a_revisao(self, client, admin, pessoa, relatorio):
+        assert client.get("/ai/reports/review").status_code == 401
+        assert client.get("/ai/reports/review", headers=pessoa).status_code == 403
+        assert client.post(f"/ai/reports/{relatorio.id}/review", headers=pessoa).status_code == 403
+
+    def test_quem_gerencia_a_ia_mas_nao_ve_a_colecao_nao_revisa(self, client, admin, pessoa, relatorio):
+        _dar_gerenciar_ia(client, admin)
+
+        assert client.post(f"/ai/reports/{relatorio.id}/review", headers=pessoa).status_code == 404
+        assert client.get("/ai/reports/review", headers=pessoa).json() == []
+
+    def test_revisar_vai_para_a_auditoria_sem_nomes_de_colunas(self, client, admin, relatorio, db_session):
+        client.put(
+            f"/ai/reports/{relatorio.id}/settings",
+            json={"notes": "", "blocked_columns": [{"table": "fato", "column": "unidade"}], "allow_images": False},
+            headers=admin,
+        )
+        client.post(f"/ai/reports/{relatorio.id}/review", headers=admin)
+
+        registro = db_session.query(AuditLog).filter(AuditLog.action == "review_ai_report").one()
+        assert registro.entity_id == str(relatorio.id) and registro.details == "colunas bloqueadas=1"
+
+    def test_relatorio_fechado_nunca_exporta_imagem_mesmo_com_imagens_liberadas(self, client, admin, relatorio, db_session):
+        novo = self._criar(client, admin, relatorio)
+        ai_report_settings.save_settings(db_session, novo, "", [], True)
+
+        with patch.object(chat_images, "warm") as aquecer:
+            resp = client.post(f"/ai/reports/{novo}/page-image", json={"page_name": "P1"}, headers=admin)
+
+        assert resp.json() == {"state": "disabled"}
+        aquecer.assert_not_called()
+
+    def test_apagar_o_relatorio_novo_apaga_tambem_o_estado_de_revisao(self, client, admin, relatorio, db_session):
+        novo = self._criar(client, admin, relatorio)
+
+        resp = client.delete(f"/workspaces/{relatorio.collection_id}/reports/{novo}", headers=admin)
+
+        assert resp.status_code in (200, 204)
+        assert db_session.query(AIReportSettings).filter(AIReportSettings.report_id == novo).count() == 0

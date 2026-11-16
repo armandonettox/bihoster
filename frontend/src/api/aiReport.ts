@@ -6,6 +6,10 @@ export interface BlockedColumn {
   column: string;
 }
 
+/** Revisao das colunas pelo admin: reviewed = revisado; pending = relatorio novo, fechado ao chat ate revisar;
+ * unreviewed = de antes da revisao, aberto ao chat e ainda nao revisado */
+export type ReviewState = "reviewed" | "pending" | "unreviewed";
+
 export interface AIReportSettings {
   report_id: number;
   report_name: string;
@@ -14,6 +18,12 @@ export interface AIReportSettings {
   blocked_columns: BlockedColumn[];
   /** A IA pode receber a imagem da pagina aberta do relatorio (desligado por padrao) */
   allow_images: boolean;
+  review: ReviewState;
+}
+
+export interface AIReportReview {
+  report_id: number;
+  review: ReviewState;
 }
 
 export interface AIReportSettingsInput {
@@ -64,6 +74,18 @@ export async function getReportSettings(reportId: number): Promise<AIReportSetti
 
 export async function saveReportSettings(reportId: number, input: AIReportSettingsInput): Promise<AIReportSettings> {
   const { data } = await api.put(`/ai/reports/${reportId}/settings`, input);
+  return data;
+}
+
+/** Estado de revisao das colunas de cada relatorio das colecoes do admin */
+export async function getReviewStates(): Promise<AIReportReview[]> {
+  const { data } = await api.get("/ai/reports/review");
+  return data;
+}
+
+/** Marca as colunas do relatorio como revisadas (com ou sem bloqueio) e libera o relatorio novo para o chat */
+export async function markReportReviewed(reportId: number): Promise<AIReportSettings> {
+  const { data } = await api.post(`/ai/reports/${reportId}/review`);
   return data;
 }
 

@@ -14,7 +14,7 @@ from app.core.workspace_deps import require_workspace_member, require_workspace_
 from app.models.favorite import Favorite
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
-from app.core.ai_report_settings import delete_settings_of_reports
+from app.core.ai_report_settings import delete_settings_of_reports, mark_review_pending
 from app.models.subscription import delete_subscriptions_of_reports
 from app.models.user import User, UserRole
 from app.routers.powerbi import invalidate_embed_cache
@@ -77,6 +77,9 @@ def create_report(
     if page_names is not None:
         report.set_page_names(page_names)
     db.add(report)
+    db.flush()
+    # Relatorio novo nasce fechado ao chat de IA ate o admin revisar as colunas, na mesma gravacao do relatorio
+    mark_review_pending(db, report.id)
     db.commit()
     db.refresh(report)
 

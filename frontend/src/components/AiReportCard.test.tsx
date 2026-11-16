@@ -17,12 +17,16 @@ vi.mock("../api/aiReport", () => ({
   getReportSchema: vi.fn(),
   getReportSettings: vi.fn(),
   saveReportSettings: vi.fn(),
+  getReviewStates: vi.fn(),
+  markReportReviewed: vi.fn(),
 }));
 
 const listReports = vi.mocked(reportsApi.listReports);
 const getSchema = vi.mocked(aiReportApi.getReportSchema);
 const getSettings = vi.mocked(aiReportApi.getReportSettings);
 const saveSettings = vi.mocked(aiReportApi.saveReportSettings);
+const getReviews = vi.mocked(aiReportApi.getReviewStates);
+const markReviewed = vi.mocked(aiReportApi.markReportReviewed);
 
 const ESQUEMA: AIReportSchema = {
   report_id: 5,
@@ -54,6 +58,7 @@ const CONFIG: AIReportSettings = {
   notes: "",
   blocked_columns: [],
   allow_images: false,
+  review: "reviewed",
 };
 
 const seletor = () => screen.getByLabelText("Relatorio") as HTMLSelectElement;
@@ -73,6 +78,9 @@ beforeEach(() => {
   getSchema.mockReset();
   getSettings.mockReset();
   saveSettings.mockReset();
+  getReviews.mockReset();
+  getReviews.mockResolvedValue([]);
+  markReviewed.mockReset();
   listReports.mockImplementation(async (colecao: number) =>
     colecao === 1
       ? ([{ id: 5, name: "Carteira" }, { id: 6, name: "Vendas" }] as never)
@@ -272,5 +280,106 @@ describe("AiReportCard - salvar", () => {
 
     expect(screen.getByText(/e enviada ao provedor de IA/)).toBeTruthy();
     expect((screen.getByLabelText(/Permitir que a IA veja a imagem/) as HTMLInputElement).checked).toBe(false);
+  });
+});
+
+describe("AiReportCard - revisao das colunas", () => {
+  it("marca na lista os relatorios que ainda nao foram revisados e conta quantos faltam", async () => {
+    getReviews.mockResolvedValue([
+      { report_id: 5, review: "unreviewed" },
+      { report_id: 6, review: "reviewed" },
+      { report_id: 9, review: "pending" },
+    ]);
+    render(<AiReportCard />);
+
+    await waitFor(() => expect(seletor().options.length).toBe(4));
+    await waitFor(() =>
+      expect(Array.from(seletor().options).map((o) => o.text)).toEqual([
+        "Escolha um relatorio",
+        "Carteira (Comercial) - nao revisado",
+        "Vendas (Comercial)",
+        "Custo Assistencial (Saude) - fechado ate revisar",
+      ]),
+    );
+    expect(screen.getByText("2 de 3 relatorios ainda sem revisao das colunas.")).toBeTruthy();
+  });
+
+  it("sem nenhum relatorio pendente nao mostra a contagem", async () => {
+    render(<AiReportCard />);
+
+    await waitFor(() => expect(seletor().options.length).toBe(4));
+    expect(screen.queryByText(/ainda sem revisao das colunas/)).toBeNull();
+  });
+
+  it("se o estado de revisao nao carregar, a lista aparece igual, sem marcas", async () => {
+    getReviews.mockRejectedValue(new Error("falhou"));
+    render(<AiReportCard />);
+
+    await waitFor(() => expect(seletor().options.length).toBe(4));
+    expect(Array.from(seletor().options).map((o) => o.text)[1]).toBe("Carteira (Comercial)");
+  });
+
+  it("relatorio novo mostra que o chat ainda nao o consulta e oferece marcar como revisado", async () => {
+    await abrirRelatorio(ESQUEMA, { ...CONFIG, review: "pending" });
+
+    expect(screen.getByText(/Relatorio novo: o chat ainda nao o consulta/)).toBeTruthy();
+    expect((screen.getByText("Marcar como revisado") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("relatorio de antes avisa que o chat ja o consulta e pede para conferir as colunas", async () => {
+    await abrirRelatorio(ESQUEMA, { ...CONFIG, review: "unreviewed" });
+
+    expect(screen.getByText(/ainda nao foram revisadas\. O chat ja o consulta/)).toBeTruthy();
+    expect(screen.getByText("Marcar como revisado")).toBeTruthy();
+  });
+
+  it("relatorio revisado nao mostra o botao", async () => {
+    await abrirRelatorio();
+
+    expect(screen.getByText("Colunas revisadas: o chat consulta este relatorio.")).toBeTruthy();
+    expect(screen.queryByText("Marcar como revisado")).toBeNull();
+  });
+
+  it("marcar como revisado funciona sem bloquear nenhuma coluna e libera o aviso", async () => {
+    await abrirRelatorio(ESQUEMA, { ...CONFIG, review: "pending" });
+    markReviewed.mockResolvedValue({ ...CONFIG, review: "reviewed" });
+
+    fireEvent.click(screen.getByText("Marcar como revisado"));
+
+    await waitFor(() => expect(markReviewed).toHaveBeenCalledWith(5));
+    await waitFor(() => expect(screen.queryByText("Marcar como revisado")).toBeNull());
+    expect(screen.getByText("Colunas revisadas: o chat consulta este relatorio.")).toBeTruthy();
+    expect(mocks.showToast).toHaveBeenCalledWith("Colunas revisadas. O chat ja pode consultar este relatorio.");
+  });
+
+  it("com mudancas nao salvas o botao fica desligado e pede para salvar antes", async () => {
+    await abrirRelatorio(ESQUEMA, { ...CONFIG, review: "pending" });
+
+    fireEvent.click(screen.getByLabelText("Bloquear dim_unidade[uf]"));
+
+    expect((screen.getByText("Marcar como revisado") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Salve as mudancas antes de marcar como revisado/)).toBeTruthy();
+  });
+
+  it("falha ao marcar mostra o aviso e mantem o relatorio como esta", async () => {
+    await abrirRelatorio(ESQUEMA, { ...CONFIG, review: "pending" });
+    markReviewed.mockRejectedValue({ response: { data: { detail: "Sem permissao" } } });
+
+    fireEvent.click(screen.getByText("Marcar como revisado"));
+
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Sem permissao", "error"));
+    expect(screen.getByText(/Relatorio novo: o chat ainda nao o consulta/)).toBeTruthy();
+  });
+
+  it("salvar um relatorio novo nao o libera: o aviso continua ate marcar como revisado", async () => {
+    await abrirRelatorio(ESQUEMA, { ...CONFIG, review: "pending" });
+    saveSettings.mockResolvedValue({ ...CONFIG, review: "pending", notes: "oi" });
+
+    fireEvent.change(screen.getByLabelText(/Orientacoes para a IA/), { target: { value: "oi" } });
+    fireEvent.click(screen.getByText("Salvar"));
+
+    await waitFor(() => expect(saveSettings).toHaveBeenCalled());
+    await waitFor(() => expect((screen.getByText("Salvar") as HTMLButtonElement).disabled).toBe(true));
+    expect(screen.getByText(/Relatorio novo: o chat ainda nao o consulta/)).toBeTruthy();
   });
 });

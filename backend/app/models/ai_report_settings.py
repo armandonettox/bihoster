@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, Integer, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 from app.core.database import Base
 
@@ -19,3 +19,8 @@ class AIReportSettings(Base):
     # Nulo ou falso = a IA nunca recebe imagem deste relatorio (decisao de privacidade: so o admin liga)
     allow_images = Column(Boolean, nullable=True)
     updated_at = Column(DateTime(timezone=True), nullable=True)
+    # Revisao das colunas pelo admin. Nulo = relatorio de antes da revisao (aberto ao chat, ainda nao revisado);
+    # "pending" = relatorio novo, fechado ao chat ate o admin revisar; "reviewed" = revisado. Colunas nulaveis de
+    # proposito (a migracao automatica do boot so adiciona colunas nulaveis).
+    review_status = Column(String, nullable=True)
+    reviewed_at = Column(DateTime(timezone=True), nullable=True)

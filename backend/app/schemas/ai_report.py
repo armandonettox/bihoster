@@ -18,12 +18,23 @@ class BlockedColumn(BaseModel):
         return value
 
 
+# reviewed: colunas revisadas; pending: relatorio novo, fechado ao chat ate revisar; unreviewed: de antes da
+# revisao, aberto ao chat e ainda nao revisado
+ReviewState = Literal["reviewed", "pending", "unreviewed"]
+
+
 class AIReportSettingsOut(BaseModel):
     report_id: int
     report_name: str
     notes: str
     blocked_columns: list[BlockedColumn]
     allow_images: bool
+    review: ReviewState
+
+
+class AIReportReviewItem(BaseModel):
+    report_id: int
+    review: ReviewState
 
 
 class AIReportSettingsUpdate(BaseModel):

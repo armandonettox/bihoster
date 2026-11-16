@@ -6,11 +6,12 @@ from app.core.ai_access import require_ai_manage, require_ai_use
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.core.workspace_deps import get_effective_role
+from app.core.workspace_deps import get_effective_role, get_effective_roles_map
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User
 from app.schemas.ai_report import (
+    AIReportReviewItem,
     AIReportSchemaOut,
     AIReportSettingsOut,
     AIReportSettingsUpdate,
@@ -40,7 +41,20 @@ def _settings_out(report: Report, settings: ai_report_settings.ReportAISettings)
         notes=settings.notes,
         blocked_columns=[BlockedColumn(table=t, column=c) for t, c in settings.blocked],
         allow_images=settings.allow_images,
+        review=settings.review,
     )
+
+
+@router.get("/review", response_model=list[AIReportReviewItem])
+def list_review_states(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_ai_manage),
+):
+    """Estado de revisao das colunas de cada relatorio das colecoes que o admin acessa."""
+    roles = get_effective_roles_map(db, current_user.id)
+    ids = [row.id for row in db.query(Report.id).filter(Report.collection_id.in_(list(roles))).order_by(Report.id).all()] if roles else []
+    states = ai_report_settings.review_states(db, ids)
+    return [AIReportReviewItem(report_id=report_id, review=states[report_id]) for report_id in ids]
 
 
 @router.get("/{report_id}/schema", response_model=AIReportSchemaOut)
@@ -136,7 +150,8 @@ def warm_page_image(
     segundo plano e as proximas perguntas usam a imagem quando ela estiver pronta. So acontece se o admin
     liberou imagens neste relatorio e ele passou na checagem de RLS; senao responde "disabled" sem exportar nada."""
     report = _get_report(db, current_user, report_id)
-    if not ai_report_settings.get_settings(db, report.id).allow_images:
+    settings = ai_report_settings.get_settings(db, report.id)
+    if settings.chat_closed or not settings.allow_images:
         return PageImageOut(state="disabled")
     connection = db.query(PowerBIConnection).get(report.powerbi_connection_id) if report.powerbi_connection_id else None
     if connection is None or not chat_dataset.check_eligibility(connection, report).ok:
@@ -178,5 +193,26 @@ def update_report_settings(
             f"orientacoes={len(saved.notes)} caracteres; colunas bloqueadas={len(saved.blocked)}; "
             f"imagens={'sim' if saved.allow_images else 'nao'}"
         ),
+    )
+    return _settings_out(report, saved)
+
+
+@router.post("/{report_id}/review", response_model=AIReportSettingsOut)
+def review_report(
+    report_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_ai_manage),
+):
+    """Marca as colunas do relatorio como revisadas (com ou sem bloqueio) e libera o relatorio novo para o chat."""
+    report = _get_report(db, current_user, report_id)
+    saved = ai_report_settings.mark_reviewed(db, report.id)
+    log_action(
+        db,
+        action="review_ai_report",
+        entity="report",
+        user_id=current_user.id,
+        workspace_id=report.collection_id,
+        entity_id=report.id,
+        details=f"colunas bloqueadas={len(saved.blocked)}",
     )
     return _settings_out(report, saved)

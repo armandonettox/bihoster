@@ -17,6 +17,7 @@ import time
 from dataclasses import dataclass
 from typing import Optional
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core import ai_providers, ai_report_settings, chat_dataset, chat_images
@@ -24,6 +25,7 @@ from app.core.ai_providers import AIError
 from app.core.chat_dataset import ChatDataError, ChatQueryResult
 from app.core.workspace_deps import get_effective_roles_map
 from app.models.ai_provider import AIProvider
+from app.models.ai_report_settings import AIReportSettings
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.workspace import Workspace
@@ -164,17 +166,23 @@ def resolve_chat_provider(db: Session) -> ChatProvider:
 
 
 def list_candidate_reports(db: Session, user_id: int) -> list[Candidate]:
-    """Relatorios com dataset e conta do Power BI nas colecoes que a pessoa pode ver."""
+    """Relatorios com dataset e conta do Power BI nas colecoes que a pessoa pode ver. Ficam de fora os relatorios
+    novos que o admin ainda nao revisou (`pending`); os de antes da revisao (sem estado) continuam abertos."""
     roles = get_effective_roles_map(db, user_id)
     if not roles:
         return []
     rows = (
         db.query(Report, Workspace.name)
         .join(Workspace, Workspace.id == Report.collection_id)
+        .outerjoin(AIReportSettings, AIReportSettings.report_id == Report.id)
         .filter(
             Report.collection_id.in_(list(roles)),
             Report.pbi_dataset_id.isnot(None),
             Report.powerbi_connection_id.isnot(None),
+            or_(
+                AIReportSettings.review_status.is_(None),
+                AIReportSettings.review_status != ai_report_settings.REVIEW_PENDING,
+            ),
         )
         .order_by(Workspace.name, Report.position, Report.name)
         .limit(MAX_CANDIDATE_REPORTS)

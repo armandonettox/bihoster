@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as aiReportApi from "../api/aiReport";
-import type { AIReportSchema, AIReportSettings, BlockedColumn } from "../api/aiReport";
+import type { AIReportSchema, AIReportSettings, BlockedColumn, ReviewState } from "../api/aiReport";
 import { extractErrorMessage } from "../api/client";
 import { listReports } from "../api/reports";
 import { useToast } from "../context/ToastContext";
@@ -19,6 +19,22 @@ const sameColumn = (a: BlockedColumn, b: BlockedColumn) =>
 
 const columnKey = (c: BlockedColumn) => `${c.table.toLowerCase()}\u0000${c.column.toLowerCase()}`;
 
+/** O que aparece ao lado do nome do relatorio na lista */
+const REVIEW_SUFFIX: Record<ReviewState, string> = {
+  reviewed: "",
+  unreviewed: " - nao revisado",
+  pending: " - fechado ate revisar",
+};
+
+/** Aviso no formulario, por estado de revisao */
+const REVIEW_NOTICE: Record<ReviewState, string> = {
+  reviewed: "Colunas revisadas: o chat consulta este relatorio.",
+  unreviewed:
+    "As colunas deste relatorio ainda nao foram revisadas. O chat ja o consulta, entao confira se alguma coluna tem nomes de pessoas ou documentos.",
+  pending:
+    "Relatorio novo: o chat ainda nao o consulta. Revise as colunas abaixo, bloqueie as que tem dados de pessoas e marque como revisado para liberar.",
+};
+
 /** Por relatorio: o que a IA enxerga (tabelas e colunas, com a quantidade de valores diferentes), orientacoes
  * escritas pelo admin, colunas que ela nunca consulta e se ela pode receber a imagem da pagina aberta.
  * So nomes e contagens: nenhuma linha de dado aparece aqui. */
@@ -32,6 +48,9 @@ export default function AiReportCard() {
   const [saved, setSaved] = useState<AIReportSettings | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Estado de revisao de cada relatorio da lista (id do relatorio -> estado)
+  const [reviews, setReviews] = useState<Record<number, ReviewState>>({});
+  const [reviewing, setReviewing] = useState(false);
 
   const [notes, setNotes] = useState("");
   const [blocked, setBlocked] = useState<BlockedColumn[]>([]);
@@ -42,6 +61,12 @@ export default function AiReportCard() {
 
   useEffect(() => {
     let cancelled = false;
+    aiReportApi
+      .getReviewStates()
+      .then((list) => {
+        if (!cancelled) setReviews(Object.fromEntries(list.map((item) => [item.report_id, item.review])));
+      })
+      .catch(() => undefined); // sem o estado a lista so perde a marca, nada mais
     Promise.all(
       workspaces.map((workspace) =>
         listReports(workspace.id)
@@ -61,6 +86,7 @@ export default function AiReportCard() {
     setNotes(settings.notes);
     setBlocked(settings.blocked_columns);
     setAllowImages(settings.allow_images);
+    setReviews((current) => ({ ...current, [settings.report_id]: settings.review }));
   }
 
   async function load(reportId: number, refresh = false) {
@@ -134,6 +160,21 @@ export default function AiReportCard() {
     }
   }
 
+  async function handleReview() {
+    if (selectedId === "" || reviewing) return;
+    setReviewing(true);
+    try {
+      const settings = await aiReportApi.markReportReviewed(selectedId);
+      fillForm(settings);
+      showToast("Colunas revisadas. O chat ja pode consultar este relatorio.");
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Nao foi possivel marcar como revisado.", "error");
+    } finally {
+      setReviewing(false);
+    }
+  }
+
+  const unreviewedCount = reports ? reports.filter((r) => (reviews[r.id] ?? "reviewed") !== "reviewed").length : 0;
   const tables = schema?.tables ?? [];
   const inPrompt = tables.filter((t) => t.in_prompt).length;
 
@@ -146,6 +187,12 @@ export default function AiReportCard() {
         linhas de dados.
       </p>
 
+      {reports !== null && unreviewedCount > 0 && (
+        <p className="chat-hint" role="status">
+          {unreviewedCount} de {reports.length} relatorios ainda sem revisao das colunas.
+        </p>
+      )}
+
       {reports === null ? (
         <p className="settings-section-desc">Carregando relatorios...</p>
       ) : (
@@ -155,7 +202,7 @@ export default function AiReportCard() {
             <option value="">Escolha um relatorio</option>
             {reports.map((r) => (
               <option key={r.id} value={r.id}>
-                {r.name} ({r.collection})
+                {r.name} ({r.collection}){REVIEW_SUFFIX[reviews[r.id] ?? "reviewed"]}
               </option>
             ))}
           </select>
@@ -175,6 +222,22 @@ export default function AiReportCard() {
 
       {schema?.eligible && saved && (
         <div style={{ marginTop: 16 }}>
+          <p className={saved.review === "pending" ? "auth-error" : "chat-hint"} role="status">
+            {REVIEW_NOTICE[saved.review]}
+          </p>
+          {saved.review !== "reviewed" && (
+            <p>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={dirty || reviewing || saving}
+                onClick={() => void handleReview()}
+              >
+                {reviewing ? "Marcando..." : "Marcar como revisado"}
+              </button>
+              {dirty && <span className="chat-hint"> Salve as mudancas antes de marcar como revisado.</span>}
+            </p>
+          )}
           <p className="ai-report-summary">
             A IA recebe {inPrompt} de {tables.length} tabelas ({schema.prompt_chars.toLocaleString("pt-BR")} de{" "}
             {schema.prompt_max_chars.toLocaleString("pt-BR")} caracteres).{" "}
