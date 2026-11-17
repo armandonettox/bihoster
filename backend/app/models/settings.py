@@ -23,6 +23,15 @@ class AppSettings(Base):
     force_https = Column(Boolean, default=False, nullable=False)
     default_workspace_id = Column(Integer, nullable=True)
 
+    # Textos das telas de erro: pagina nao encontrada (404) e erro inesperado. Tudo nullable: a migracao
+    # automatica so acrescenta colunas nulaveis, e nulo vale o texto padrao da interface.
+    not_found_title = Column(String, nullable=True)
+    not_found_message = Column(String, nullable=True)
+    not_found_button = Column(String, nullable=True)
+    error_title = Column(String, nullable=True)
+    error_message = Column(String, nullable=True)
+    error_button = Column(String, nullable=True)
+
     # nullable por causa da migracao automatica: ALTER TABLE nao suporta DEFAULT, entao linhas
     # existentes chegam com NULL; _to_out usa bool() para normalizar antes de devolver ao cliente
     single_collection_redirect = Column(Boolean, default=False, nullable=True)

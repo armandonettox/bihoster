@@ -1559,6 +1559,123 @@ table.table tr:last-child td {
   color: var(--color-text-muted);
 }
 
+/* --- Aba Marca: um cartão por assunto, com o que se preenche à esquerda e a prévia dele à direita, no mesmo
+   cartão (separada só por uma linha fina). Nada fica grudado nem se mexe sozinho na rolagem. --- */
+
+.brand-layout {
+  display: flex;
+  flex-direction: column;
+}
+
+.brand-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 424px;
+  gap: 28px;
+  align-items: stretch;
+}
+
+.brand-card-main {
+  min-width: 0;
+}
+
+/* Dentro de um mesmo cartão, um segundo assunto (logo e favicon, abaixo das cores) */
+.brand-card-divider {
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid var(--color-border);
+}
+
+/* A prévia: a linha à esquerda é a única divisão entre ela e o formulário */
+.brand-card-preview {
+  border-left: 1px solid var(--color-border);
+  padding-left: 28px;
+}
+
+.brand-card-preview aside + aside {
+  margin-top: 22px;
+}
+
+.brand-preview-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.brand-preview-note {
+  margin: 10px 0 0;
+}
+
+.brand-palettes {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 20px;
+}
+
+/* Os dois cartões de layout ficam com a mesma altura, mesmo com descrições de tamanhos diferentes */
+.settings-grid.brand-layout-options {
+  align-items: stretch;
+}
+
+.brand-layout-option {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px;
+}
+
+.brand-layout-option input {
+  margin-top: 3px;
+}
+
+.brand-layout-option-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 2px;
+}
+
+/* Campo da imagem do painel de login: compacto, do mesmo tamanho do logo e do favicon */
+.brand-login-image {
+  margin-top: 20px;
+  max-width: 420px;
+}
+
+/* Grupo de campos de uma tela de erro (404 ou "Algo deu errado"), com o nome da tela como legenda */
+.brand-error-group {
+  border: 0;
+  padding: 0;
+  margin: 0 0 22px;
+  min-width: 0;
+}
+
+.brand-error-group legend {
+  padding: 0;
+  margin-bottom: 12px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.brand-error-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Em tela estreita a prévia desce para baixo do formulário, ainda dentro do mesmo cartão */
+@media (max-width: 1100px) {
+  .brand-card {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .brand-card-preview {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    padding-top: 20px;
+  }
+}
+
 .settings-row {
   display: flex;
   gap: 20px;

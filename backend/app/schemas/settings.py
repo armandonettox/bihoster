@@ -8,6 +8,11 @@ LoginLayout = Literal["centered", "split"]
 
 HEX_COLOR_PATTERN = re.compile(r"^#[0-9a-fA-F]{6}$")
 
+# Textos das telas de erro (404 e erro inesperado). Os mesmos limites valem nos campos da tela de Marca.
+ERROR_TITLE_MAX_CHARS = 80
+ERROR_MESSAGE_MAX_CHARS = 300
+ERROR_BUTTON_MAX_CHARS = 40
+
 # Campos que sao NOT NULL no banco (AppSettings) -- um cliente mandando explicitamente
 # {"campo": null} deve dar 422, nao quebrar com IntegrityError no commit.
 _SETTINGS_NOT_NULLABLE_FIELDS = (
@@ -34,6 +39,12 @@ class SettingsUpdate(BaseModel):
     force_https: Optional[bool] = None
     single_collection_redirect: Optional[bool] = None
     default_workspace_id: Optional[int] = None
+    not_found_title: Optional[str] = Field(default=None, max_length=ERROR_TITLE_MAX_CHARS)
+    not_found_message: Optional[str] = Field(default=None, max_length=ERROR_MESSAGE_MAX_CHARS)
+    not_found_button: Optional[str] = Field(default=None, max_length=ERROR_BUTTON_MAX_CHARS)
+    error_title: Optional[str] = Field(default=None, max_length=ERROR_TITLE_MAX_CHARS)
+    error_message: Optional[str] = Field(default=None, max_length=ERROR_MESSAGE_MAX_CHARS)
+    error_button: Optional[str] = Field(default=None, max_length=ERROR_BUTTON_MAX_CHARS)
     allow_registration: Optional[bool] = None
     google_oauth_enabled: Optional[bool] = None
     google_client_id: Optional[str] = None
@@ -41,6 +52,14 @@ class SettingsUpdate(BaseModel):
     google_allowed_domains: Optional[str] = None
     cache_warmup_enabled: Optional[bool] = None
     cache_warmup_interval_seconds: Optional[int] = Field(default=None, ge=30, le=3600)
+
+    @field_validator("not_found_title", "not_found_message", "not_found_button", "error_title", "error_message", "error_button")
+    @classmethod
+    def error_text_normalize(cls, value: Optional[str]) -> Optional[str]:
+        """Sem espaços nas pontas; texto vazio vira nulo, que significa "usar o texto padrão"."""
+        if value is None:
+            return None
+        return value.strip() or None
 
     @field_validator("google_allowed_domains")
     @classmethod
@@ -92,6 +111,12 @@ class SettingsOut(BaseModel):
     force_https: bool
     single_collection_redirect: bool = False
     default_workspace_id: Optional[int]
+    not_found_title: Optional[str] = None
+    not_found_message: Optional[str] = None
+    not_found_button: Optional[str] = None
+    error_title: Optional[str] = None
+    error_message: Optional[str] = None
+    error_button: Optional[str] = None
     allow_registration: bool
     google_oauth_enabled: bool
     google_client_id: Optional[str]

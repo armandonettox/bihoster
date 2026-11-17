@@ -1,15 +1,8 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import * as settingsApi from "../api/settings";
 import type { AppSettings } from "../api/settings";
 import { assetUrl } from "../api/client";
-
-interface BrandingContextValue {
-  settings: AppSettings | null;
-  loaded: boolean;
-  reload: () => Promise<void>;
-}
-
-const BrandingContext = createContext<BrandingContextValue | undefined>(undefined);
+import { BrandingContext, type BrandingContextValue } from "./brandingContextObject";
 
 function applyFavicon(faviconUrl: string | null) {
   const href = faviconUrl ? assetUrl(faviconUrl) : "/favicon.ico";

@@ -4,7 +4,7 @@ import DefaultBrandLogo from "./DefaultBrandLogo";
 
 const STAGE_WIDTH = 720;
 const STAGE_HEIGHT = 440;
-const SCALE = 0.5;
+const DEFAULT_SCALE = 0.5;
 
 export default function LoginPreview({
   companyName,
@@ -13,6 +13,8 @@ export default function LoginPreview({
   secondaryColor,
   layout,
   loginImageUrl,
+  scale = DEFAULT_SCALE,
+  label = "Prévia da tela de login",
 }: {
   companyName: string;
   logoUrl: string | null;
@@ -20,6 +22,10 @@ export default function LoginPreview({
   secondaryColor: string;
   layout: LoginLayout;
   loginImageUrl: string | null;
+  /** Tamanho da prévia em relação à tela de verdade (0.5 = metade) */
+  scale?: number;
+  /** Texto acima da prévia; null esconde (quando a página já põe um título próprio) */
+  label?: string | null;
 }) {
   const cssVars = {
     "--color-primary": primaryColor,
@@ -56,16 +62,13 @@ export default function LoginPreview({
 
   return (
     <div>
-      <span style={{ fontSize: 12, color: "var(--color-text-muted)", display: "block", marginBottom: 8 }}>
-        Previa da tela de login
-      </span>
-      <div
-        className="login-preview-frame"
-        style={{ width: STAGE_WIDTH * SCALE, height: STAGE_HEIGHT * SCALE }}
-      >
+      {label && (
+        <span style={{ fontSize: 12, color: "var(--color-text-muted)", display: "block", marginBottom: 8 }}>{label}</span>
+      )}
+      <div className="login-preview-frame" style={{ width: STAGE_WIDTH * scale, height: STAGE_HEIGHT * scale }}>
         <div
           className="login-preview-stage"
-          style={{ ...cssVars, width: STAGE_WIDTH, height: STAGE_HEIGHT, transform: `scale(${SCALE})` }}
+          style={{ ...cssVars, width: STAGE_WIDTH, height: STAGE_HEIGHT, transform: `scale(${scale})` }}
         >
           {layout === "split" ? (
             <div className="auth-split" style={{ height: "100%" }}>

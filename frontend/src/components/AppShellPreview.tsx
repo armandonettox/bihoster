@@ -3,18 +3,24 @@ import DefaultBrandLogo from "./DefaultBrandLogo";
 
 const STAGE_WIDTH = 720;
 const STAGE_HEIGHT = 360;
-const SCALE = 0.5;
+const DEFAULT_SCALE = 0.5;
 
 export default function AppShellPreview({
   companyName,
   logoUrl,
   primaryColor,
   secondaryColor,
+  scale = DEFAULT_SCALE,
+  label = "Prévia",
 }: {
   companyName: string;
   logoUrl: string | null;
   primaryColor: string;
   secondaryColor: string;
+  /** Tamanho da prévia em relação à tela de verdade (0.5 = metade) */
+  scale?: number;
+  /** Texto acima da prévia; null esconde (quando a página já põe um título próprio) */
+  label?: string | null;
 }) {
   const cssVars = {
     "--color-primary": primaryColor,
@@ -23,13 +29,13 @@ export default function AppShellPreview({
 
   return (
     <div>
-      <span style={{ fontSize: 12, color: "var(--color-text-muted)", display: "block", marginBottom: 8 }}>
-        Previa
-      </span>
-      <div className="login-preview-frame" style={{ width: STAGE_WIDTH * SCALE, height: STAGE_HEIGHT * SCALE }}>
+      {label && (
+        <span style={{ fontSize: 12, color: "var(--color-text-muted)", display: "block", marginBottom: 8 }}>{label}</span>
+      )}
+      <div className="login-preview-frame" style={{ width: STAGE_WIDTH * scale, height: STAGE_HEIGHT * scale }}>
         <div
           className="login-preview-stage"
-          style={{ ...cssVars, width: STAGE_WIDTH, height: STAGE_HEIGHT, transform: `scale(${SCALE})` }}
+          style={{ ...cssVars, width: STAGE_WIDTH, height: STAGE_HEIGHT, transform: `scale(${scale})` }}
         >
           <div className="app-shell" style={{ height: "100%" }}>
             <header className="topbar">

@@ -16,6 +16,13 @@ export interface AppSettings {
   force_https: boolean;
   single_collection_redirect: boolean;
   default_workspace_id: number | null;
+  /** Textos das telas de erro. Nulo = usar o texto padrão da interface. */
+  not_found_title: string | null;
+  not_found_message: string | null;
+  not_found_button: string | null;
+  error_title: string | null;
+  error_message: string | null;
+  error_button: string | null;
   allow_registration: boolean;
   google_oauth_enabled: boolean;
   google_client_id: string | null;
