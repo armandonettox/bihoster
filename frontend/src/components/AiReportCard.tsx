@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import * as aiReportApi from "../api/aiReport";
-import type { AIReportSchema, AIReportSettings, BlockedColumn, ReviewState } from "../api/aiReport";
+import type { AIReportSchema, AIReportSettings, AISchemaColumn, BlockedColumn, ReviewState } from "../api/aiReport";
 import { extractErrorMessage } from "../api/client";
 import { listReports } from "../api/reports";
 import { useToast } from "../context/ToastContext";
@@ -34,6 +34,13 @@ const REVIEW_NOTICE: Record<ReviewState, string> = {
   pending:
     "Relatorio novo: o chat ainda nao o consulta. Revise as colunas abaixo, bloqueie as que tem dados de pessoas e marque como revisado para liberar.",
 };
+
+/** Por que a coluna foi sugerida para bloqueio, nas palavras de quem administra */
+function suggestionText(column: AISchemaColumn): string {
+  if (column.suggestion === "name") return "O nome parece dado de pessoa ou documento";
+  const values = column.distinct === null ? "valores demais" : `${column.distinct.toLocaleString("pt-BR")} valores diferentes`;
+  return `Texto com ${values}, parece nomes ou codigos`;
+}
 
 /** Por relatorio: o que a IA enxerga (tabelas e colunas, com a quantidade de valores diferentes), orientacoes
  * escritas pelo admin, colunas que ela nunca consulta e se ela pode receber a imagem da pagina aberta.
@@ -132,6 +139,21 @@ export default function AiReportCard() {
   }
 
   const blockedKeys = new Set(blocked.map(columnKey));
+
+  // Colunas que o servidor sugere bloquear e que ainda nao estao marcadas (so sinaliza; quem decide e o admin)
+  const isSuggested = (tableName: string, column: AISchemaColumn) =>
+    Boolean(column.suggestion) && !blockedKeys.has(columnKey({ table: tableName, column: column.name }));
+  const suggestedColumns: BlockedColumn[] = (schema?.tables ?? []).flatMap((table) =>
+    table.columns.filter((column) => isSuggested(table.name, column)).map((column) => ({ table: table.name, column: column.name })),
+  );
+
+  function blockSuggested() {
+    setBlocked((current) => {
+      const missing = suggestedColumns.filter((target) => !current.some((c) => sameColumn(c, target)));
+      return [...current, ...missing];
+    });
+  }
+
   const dirty =
     saved !== null &&
     (notes.trim() !== saved.notes.trim() ||
@@ -238,6 +260,17 @@ export default function AiReportCard() {
               {dirty && <span className="chat-hint"> Salve as mudancas antes de marcar como revisado.</span>}
             </p>
           )}
+          {suggestedColumns.length > 0 && (
+            <p className="auth-error" role="status">
+              {suggestedColumns.length === 1
+                ? "1 coluna parece ter dados de pessoas ou documentos."
+                : `${suggestedColumns.length} colunas parecem ter dados de pessoas ou documentos.`}{" "}
+              Abra as tabelas para ver quais e marque as que a IA nunca deve consultar.{" "}
+              <button type="button" className="btn btn-ghost" onClick={blockSuggested}>
+                Marcar as sugeridas para bloqueio
+              </button>
+            </p>
+          )}
           <p className="ai-report-summary">
             A IA recebe {inPrompt} de {tables.length} tabelas ({schema.prompt_chars.toLocaleString("pt-BR")} de{" "}
             {schema.prompt_max_chars.toLocaleString("pt-BR")} caracteres).{" "}
@@ -266,6 +299,9 @@ export default function AiReportCard() {
                   {table.name} ({table.columns.length} colunas
                   {table.measures.length > 0 ? `, ${table.measures.length} medidas` : ""})
                   {!table.in_prompt && <strong> fora do esquema da IA</strong>}
+                  {table.columns.some((column) => isSuggested(table.name, column)) && (
+                    <strong> - com colunas sugeridas para bloqueio</strong>
+                  )}
                 </summary>
                 {table.columns.length > 0 && (
                   <table className="ai-report-table">
@@ -274,6 +310,7 @@ export default function AiReportCard() {
                         <th>Coluna</th>
                         <th>Tipo</th>
                         <th>Valores diferentes</th>
+                        <th>Sugestao</th>
                         <th>Bloquear</th>
                       </tr>
                     </thead>
@@ -283,6 +320,7 @@ export default function AiReportCard() {
                           <td>{column.name}</td>
                           <td>{column.data_type ?? "-"}</td>
                           <td>{column.distinct === null ? "-" : column.distinct.toLocaleString("pt-BR")}</td>
+                          <td>{isSuggested(table.name, column) ? suggestionText(column) : ""}</td>
                           <td>
                             <input
                               type="checkbox"

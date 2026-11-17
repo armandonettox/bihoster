@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
-from app.core import ai_report_settings, chat_dataset, chat_images
+from app.core import ai_column_hints, ai_report_settings, chat_dataset, chat_images
 from app.core.ai_access import require_ai_manage, require_ai_use
 from app.core.audit import log_action
 from app.core.database import get_db
@@ -115,6 +115,7 @@ def get_report_schema(
                     data_type=c.data_type,
                     distinct=c.distinct,
                     blocked=(table.name.lower(), c.name.lower()) in blocked,
+                    suggestion=ai_column_hints.suggestion(c),
                 )
                 for c in table.columns
             ],

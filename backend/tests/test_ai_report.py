@@ -130,8 +130,41 @@ class TestSchema:
         assert 0 < corpo["prompt_chars"] <= corpo["prompt_max_chars"]
         fato, dim = corpo["tables"]
         assert fato["name"] == "fato" and fato["measures"] == ["Custo"] and fato["in_prompt"] is True
-        assert fato["columns"][0] == {"name": "unidade", "data_type": "texto", "distinct": 1377, "blocked": False}
+        assert fato["columns"][0] == {
+            "name": "unidade",
+            "data_type": "texto",
+            "distinct": 1377,
+            "blocked": False,
+            "suggestion": "many_values",
+        }
         assert dim["columns"][0]["distinct"] == 5
+
+    def test_sugere_bloquear_por_nome_e_por_quantidade_de_valores_sem_bloquear_nada(self, client, admin, relatorio):
+        esquema = DatasetSchema(
+            tables=(
+                SchemaTable(
+                    "pessoa",
+                    (
+                        SchemaColumn("nome_beneficiario", "texto", 40),
+                        SchemaColumn("unidade", "texto", 1377),
+                        SchemaColumn("uf", "texto", 5),
+                        SchemaColumn("valor", "decimal"),
+                    ),
+                    (),
+                ),
+            )
+        )
+
+        with _elegivel(), _com_esquema(esquema):
+            colunas = _schema(client, admin, relatorio.id).json()["tables"][0]["columns"]
+
+        assert {c["name"]: c["suggestion"] for c in colunas} == {
+            "nome_beneficiario": "name",
+            "unidade": "many_values",
+            "uf": None,
+            "valor": None,
+        }
+        assert [c["blocked"] for c in colunas] == [False, False, False, False]
 
     def test_marca_as_colunas_bloqueadas(self, client, admin, relatorio, db_session):
         ai_report_settings.save_settings(db_session, relatorio.id, "", [("FATO", "Unidade")], False)

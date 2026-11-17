@@ -383,3 +383,127 @@ describe("AiReportCard - revisao das colunas", () => {
     expect(screen.getByText(/Relatorio novo: o chat ainda nao o consulta/)).toBeTruthy();
   });
 });
+
+const ESQUEMA_COM_SUGESTOES: AIReportSchema = {
+  ...ESQUEMA,
+  tables: [
+    {
+      name: "fato_carteira",
+      columns: [
+        { name: "unidade", data_type: "texto", distinct: 1377, blocked: false, suggestion: "many_values" },
+        { name: "vidas", data_type: "inteiro", distinct: null, blocked: false, suggestion: null },
+      ],
+      measures: [],
+      in_prompt: true,
+    },
+    {
+      name: "dim_pessoa",
+      columns: [
+        { name: "nome_beneficiario", data_type: "texto", distinct: 40, blocked: false, suggestion: "name" },
+        { name: "uf", data_type: "texto", distinct: 5, blocked: false, suggestion: null },
+      ],
+      measures: [],
+      in_prompt: true,
+    },
+  ],
+};
+
+describe("AiReportCard - sugestao de colunas para bloquear", () => {
+  it("avisa quantas colunas parecem ter dados de pessoas e marca a tabela onde elas estao", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES);
+
+    expect(screen.getByText(/2 colunas parecem ter dados de pessoas ou documentos\./)).toBeTruthy();
+    expect(screen.getAllByText(/com colunas sugeridas para bloqueio/)).toHaveLength(2);
+  });
+
+  it("diz o motivo de cada coluna sugerida e nao marca as outras", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES);
+
+    expect(screen.getByText("Texto com 1.377 valores diferentes, parece nomes ou codigos")).toBeTruthy();
+    expect(screen.getByText("O nome parece dado de pessoa ou documento")).toBeTruthy();
+    expect(screen.getAllByText(/parece nomes ou codigos|parece dado de pessoa/)).toHaveLength(2);
+  });
+
+  it("so sinaliza: nenhuma coluna vem marcada para bloqueio e o Salvar segue desligado", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES);
+
+    expect((screen.getByLabelText("Bloquear fato_carteira[unidade]") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Bloquear dim_pessoa[nome_beneficiario]") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByText("Salvar") as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("Marcar as sugeridas marca so as sugeridas, liga o Salvar e nao grava nada sozinho", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES);
+
+    fireEvent.click(screen.getByText("Marcar as sugeridas para bloqueio"));
+
+    expect((screen.getByLabelText("Bloquear fato_carteira[unidade]") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Bloquear dim_pessoa[nome_beneficiario]") as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByLabelText("Bloquear fato_carteira[vidas]") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Bloquear dim_pessoa[uf]") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByText("Salvar") as HTMLButtonElement).disabled).toBe(false);
+    expect(saveSettings).not.toHaveBeenCalled();
+    // Ja marcadas: o aviso e as sugestoes somem
+    expect(screen.queryByText(/parecem ter dados de pessoas/)).toBeNull();
+    expect(screen.queryByText("Marcar as sugeridas para bloqueio")).toBeNull();
+  });
+
+  it("salvar depois de marcar as sugeridas manda essas colunas na lista", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES);
+    saveSettings.mockResolvedValue(CONFIG);
+
+    fireEvent.click(screen.getByText("Marcar as sugeridas para bloqueio"));
+    fireEvent.click(screen.getByText("Salvar"));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(5, {
+        notes: "",
+        blocked_columns: [
+          { table: "fato_carteira", column: "unidade" },
+          { table: "dim_pessoa", column: "nome_beneficiario" },
+        ],
+        allow_images: false,
+      }),
+    );
+  });
+
+  it("coluna sugerida que ja estava bloqueada nao entra na contagem e nao duplica na lista", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES, {
+      ...CONFIG,
+      blocked_columns: [{ table: "fato_carteira", column: "unidade" }],
+    });
+    saveSettings.mockResolvedValue(CONFIG);
+
+    expect(screen.getByText(/1 coluna parece ter dados de pessoas ou documentos\./)).toBeTruthy();
+    fireEvent.click(screen.getByText("Marcar as sugeridas para bloqueio"));
+    fireEvent.click(screen.getByText("Salvar"));
+
+    await waitFor(() =>
+      expect(saveSettings).toHaveBeenCalledWith(5, {
+        notes: "",
+        blocked_columns: [
+          { table: "fato_carteira", column: "unidade" },
+          { table: "dim_pessoa", column: "nome_beneficiario" },
+        ],
+        allow_images: false,
+      }),
+    );
+  });
+
+  it("o admin pode desmarcar uma sugerida depois de usar o botao", async () => {
+    await abrirRelatorio(ESQUEMA_COM_SUGESTOES);
+
+    fireEvent.click(screen.getByText("Marcar as sugeridas para bloqueio"));
+    fireEvent.click(screen.getByLabelText("Bloquear fato_carteira[unidade]"));
+
+    expect((screen.getByLabelText("Bloquear fato_carteira[unidade]") as HTMLInputElement).checked).toBe(false);
+    expect((screen.getByLabelText("Bloquear dim_pessoa[nome_beneficiario]") as HTMLInputElement).checked).toBe(true);
+  });
+
+  it("sem nenhuma sugestao nao mostra aviso nem botao", async () => {
+    await abrirRelatorio();
+
+    expect(screen.queryByText(/parecem ter dados de pessoas|parece ter dados de pessoas/)).toBeNull();
+    expect(screen.queryByText("Marcar as sugeridas para bloqueio")).toBeNull();
+  });
+});

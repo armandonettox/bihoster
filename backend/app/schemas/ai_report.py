@@ -58,6 +58,9 @@ class AISchemaColumnOut(BaseModel):
     data_type: Optional[str]
     distinct: Optional[int]
     blocked: bool
+    # Por que vale considerar bloquear: name (nome parece dado de pessoa ou documento) ou many_values (texto com
+    # valores demais para ser categoria). So uma sugestao: nada e bloqueado sozinho.
+    suggestion: Optional[Literal["name", "many_values"]] = None
 
 
 class AISchemaTableOut(BaseModel):

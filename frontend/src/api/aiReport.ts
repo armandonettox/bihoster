@@ -38,6 +38,9 @@ export interface AISchemaColumn {
   /** Quantidade de valores diferentes (so colunas de texto; nunca os valores) */
   distinct: number | null;
   blocked: boolean;
+  /** Por que vale considerar bloquear: name = o nome parece dado de pessoa ou documento; many_values = texto
+   * com valores demais para ser categoria. So uma sugestao: nada e bloqueado sozinho. */
+  suggestion?: "name" | "many_values" | null;
 }
 
 export interface AISchemaTable {
