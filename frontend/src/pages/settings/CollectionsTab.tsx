@@ -5,18 +5,10 @@ import { useWorkspace } from "../../context/WorkspaceContext";
 import CollectionIcon from "../../components/CollectionIcon";
 import EditCollectionModal from "../../components/EditCollectionModal";
 import KebabMenu from "../../components/KebabMenu";
+import MenuIcon from "../../components/MenuIcon";
 import { SkeletonList } from "../../components/Skeleton";
 import { useToast } from "../../context/ToastContext";
 import { extractErrorMessage } from "../../api/client";
-
-/** Ícone de uma opção do menu dos 3 pontinhos (mesmo tamanho e padrão dos outros menus do app) */
-function MenuIcon({ name }: { name: string }) {
-  return (
-    <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">
-      {name}
-    </span>
-  );
-}
 
 function CollectionCard({ workspace, onChanged }: { workspace: Workspace; onChanged: () => void }) {
   const [editing, setEditing] = useState(false);

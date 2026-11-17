@@ -901,6 +901,8 @@ table.table tr:last-child td {
   display: flex;
   align-items: center;
   gap: 8px;
+  /* O texto da opção não quebra em duas linhas: o menu cresce até caber (ex: "Gerar link de redefinição") */
+  white-space: nowrap;
 }
 
 /* Linha de uma coleção na aba Coleções das configurações: ícone, nome com descrição e o menu dos 3 pontinhos */
@@ -2488,22 +2490,110 @@ table.table tr:last-child td {
 
 /* --- Celula de grupos (dropdown de marcacao) --- */
 
+/* O quadrado tem sempre o mesmo tamanho, qualquer que seja o nome do grupo: nome cortado com reticências, "+N" e seta */
 .groups-cell-trigger {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 200px;
+  height: 34px;
+  box-sizing: border-box;
   background: none;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-sm);
-  padding: 6px 10px;
+  padding: 0 8px 0 10px;
   font-size: 13px;
   color: var(--color-text);
   text-align: left;
-  max-width: 260px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  cursor: pointer;
 }
 
 .groups-cell-trigger:hover {
   border-color: var(--color-secondary);
+}
+
+/* Só o grupo padrão (ou nenhum): o quadrado fica em cinza, para quem tem um grupo de verdade se destacar */
+.groups-cell-trigger-muted {
+  color: var(--color-text-muted);
+}
+
+.groups-cell-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.groups-cell-extra {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 3px 6px;
+  border-radius: 999px;
+  background-color: var(--color-bg);
+  border: 1px solid var(--color-border);
+  color: var(--color-text-muted);
+}
+
+.groups-cell-caret {
+  flex-shrink: 0;
+  font-size: 18px;
+  color: var(--color-text-muted);
+}
+
+
+/* --- Rodapé de tabela paginada (Membros e outras): linhas na tela, quantidade por página e troca de página --- */
+
+.table-pager {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 12px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.table-pager-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.table-pager-size {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-pager-size .input {
+  width: auto;
+  padding: 4px 8px;
+  font-size: 13px;
+}
+
+.table-pager-pages {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.table-pager-page {
+  min-width: 32px;
+}
+
+.table-pager-page-active {
+  background-color: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+
+.table-pager-gap {
+  padding: 0 4px;
 }
 
 .groups-cell-dropdown {
@@ -2541,6 +2631,21 @@ table.table tr:last-child td {
 
 .groups-cell-option:hover {
   background-color: var(--color-bg);
+}
+
+/* O mesmo seletor de grupos dentro de uma janela (adicionar membro): o quadrado ocupa a largura toda e a lista abre no
+   fluxo da janela, empurrando o que vem depois, em vez de flutuar e ficar cortada na borda. Vem depois das regras da
+   lista flutuante de propósito: tem a mesma força e a que vem por último vale. */
+.groups-cell-trigger-block {
+  width: 100%;
+}
+
+.groups-cell-dropdown-inline {
+  position: static;
+  min-width: 0;
+  max-height: 220px;
+  margin-top: 6px;
+  box-shadow: none;
 }
 
 /* --- Toggle (switch) --- */
