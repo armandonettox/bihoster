@@ -1480,6 +1480,20 @@ table.table tr:last-child td {
   max-width: 520px;
 }
 
+/* Barra de salvar no fim de um formulario de configuracoes: Salvar, Descartar e o aviso de mudanca nao salva */
+.settings-savebar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.settings-savebar-hint {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
 .settings-row {
   display: flex;
   gap: 20px;

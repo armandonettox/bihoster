@@ -1,10 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
 import * as settingsApi from "../../api/settings";
+import { extractErrorMessage } from "../../api/client";
 import * as workspacesApi from "../../api/workspaces";
 import type { Workspace } from "../../api/workspaces";
 import { useBranding } from "../../context/BrandingContext";
 import { useToast } from "../../context/ToastContext";
 import { getUtcOffsetLabel, getUtcOffsetMinutes } from "../../utils/datetime";
+import ConfirmDialog from "../../components/ConfirmDialog";
 import PowerBiConnectionsSection from "../../components/PowerBiConnectionsSection";
 
 // Lista curada -- um fuso por regiao relevante, em vez do dump completo de ~400 zonas IANA.
@@ -64,6 +66,7 @@ export default function GeneralTab() {
   const [forceHttps, setForceHttps] = useState(settings?.force_https || false);
   const [timezone, setTimezone] = useState(settings?.timezone || "America/Sao_Paulo");
   const [saving, setSaving] = useState(false);
+  const [confirmingHttps, setConfirmingHttps] = useState(false);
   const { showToast } = useToast();
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
@@ -71,12 +74,13 @@ export default function GeneralTab() {
   const [singleCollectionRedirect, setSingleCollectionRedirect] = useState(settings?.single_collection_redirect || false);
 
   useEffect(() => {
-    workspacesApi.listAllWorkspaces().then(setWorkspaces);
+    workspacesApi
+      .listAllWorkspaces()
+      .then(setWorkspaces)
+      .catch(() => setWorkspaces([])); // sem a lista o seletor da Homepage fica so com "Nenhuma"
   }, []);
 
-  useEffect(() => {
-    // Sincroniza os campos se a marca ainda nao tinha carregado quando o componente montou
-    // (ex: usuario navega direto pra Configuracoes antes do BrandingContext terminar o fetch inicial).
+  function fillFromSettings() {
     if (!settings) return;
     setCompanyName(settings.company_name || "");
     setSiteUrl(settings.site_url || "");
@@ -85,11 +89,27 @@ export default function GeneralTab() {
     setTimezone(settings.timezone || "America/Sao_Paulo");
     setHomeWorkspaceId(settings.default_workspace_id || "");
     setSingleCollectionRedirect(settings.single_collection_redirect || false);
+  }
+
+  useEffect(() => {
+    // Sincroniza os campos se a marca ainda nao tinha carregado quando o componente montou
+    // (ex: usuario navega direto pra Configuracoes antes do BrandingContext terminar o fetch inicial).
+    fillFromSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [settings === null]);
 
-  async function handleSubmit(event: FormEvent) {
-    event.preventDefault();
+  // Mudou alguma coisa em relacao ao que esta salvo? Sem isso o Salvar fica desligado.
+  const dirty =
+    settings !== null &&
+    (companyName !== (settings.company_name || "") ||
+      siteUrl !== (settings.site_url || "") ||
+      supportEmail !== (settings.support_email || "") ||
+      forceHttps !== (settings.force_https || false) ||
+      timezone !== (settings.timezone || "America/Sao_Paulo") ||
+      homeWorkspaceId !== (settings.default_workspace_id || "") ||
+      singleCollectionRedirect !== (settings.single_collection_redirect || false));
+
+  async function save() {
     setSaving(true);
     try {
       await settingsApi.updateSettings({
@@ -98,35 +118,42 @@ export default function GeneralTab() {
         support_email: supportEmail || null,
         force_https: forceHttps,
         timezone,
+        default_workspace_id: homeWorkspaceId || null,
+        single_collection_redirect: singleCollectionRedirect,
       });
       await reload();
       showToast("Configuracoes salvas.");
+    } catch (err: any) {
+      // Os campos ficam como estao: quem digitou nao perde o que escreveu
+      showToast(extractErrorMessage(err) || "Nao foi possivel salvar as configuracoes.", "error");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleHomeWorkspaceChange(value: string) {
-    const workspaceId = value ? Number(value) : "";
-    setHomeWorkspaceId(workspaceId);
-    await settingsApi.updateSettings({ default_workspace_id: workspaceId || null });
-    await reload();
+  function handleSubmit(event: FormEvent) {
+    event.preventDefault();
+    if (!dirty || saving) return;
+    // Ligar o HTTPS com o site ainda sem certificado pode deixar o portal fora do ar: pede confirmacao antes
+    if (forceHttps && !settings?.force_https) {
+      setConfirmingHttps(true);
+      return;
+    }
+    void save();
   }
 
-  async function handleSingleCollectionRedirectChange(checked: boolean) {
-    setSingleCollectionRedirect(checked);
-    await settingsApi.updateSettings({ single_collection_redirect: checked });
-    await reload();
-    showToast("Configuracao salva.");
+  function handleConfirmHttps() {
+    setConfirmingHttps(false);
+    void save();
   }
 
   return (
     <div>
-      <div className="settings-section">
-        <h2 className="settings-section-title">Configuracao do aplicativo</h2>
-        <p className="settings-section-desc">Informacoes gerais desta instancia do sistema.</p>
+      <form onSubmit={handleSubmit}>
+        <div className="settings-section">
+          <h2 className="settings-section-title">Configuracao do aplicativo</h2>
+          <p className="settings-section-desc">Informacoes gerais desta instancia do sistema.</p>
 
-        <form onSubmit={handleSubmit}>
           <div className="settings-grid">
             <label className="field">
               Nome do site
@@ -190,56 +217,82 @@ export default function GeneralTab() {
               </span>
             </label>
           </div>
+        </div>
 
-          <button type="submit" className="btn btn-primary" disabled={saving} style={{ marginTop: 16 }}>
+        <div className="settings-section">
+          <h2 className="settings-section-title">Homepage</h2>
+          <p className="settings-section-desc">Colecao que os usuarios veem primeiro ao entrar no sistema.</p>
+
+          <div className="settings-grid">
+            <label className="field">
+              Colecao
+              <select
+                className="input"
+                value={homeWorkspaceId}
+                onChange={(e) => setHomeWorkspaceId(e.target.value ? Number(e.target.value) : "")}
+              >
+                <option value="">Nenhuma (tela padrao)</option>
+                {workspaces.map((w) => (
+                  <option key={w.id} value={w.id}>
+                    {w.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 12, marginBottom: 0 }}>
+            Usuarios sem acesso a essa colecao veem a tela padrao normalmente.
+          </p>
+
+          <div style={{ marginTop: 20 }}>
+            <label className="field">
+              Abrir direto a colecao unica
+              <div className="toggle-field" style={{ marginTop: 4 }}>
+                <label className="toggle-switch">
+                  <input
+                    type="checkbox"
+                    checked={singleCollectionRedirect}
+                    onChange={(e) => setSingleCollectionRedirect(e.target.checked)}
+                  />
+                  <span className="toggle-switch-track" />
+                </label>
+                <span style={{ fontWeight: 400, fontSize: 13, color: "var(--color-text-muted)" }}>
+                  {singleCollectionRedirect ? "Habilitado" : "Desabilitado"}
+                </span>
+              </div>
+              <span style={{ fontWeight: 400, fontSize: 12 }}>
+                Quando ativado, usuarios com acesso a uma unica colecao entram direto nela, sem passar pela tela inicial.
+              </span>
+            </label>
+          </div>
+        </div>
+
+        <div className="settings-savebar">
+          <button type="submit" className="btn btn-primary" disabled={!dirty || saving}>
             {saving ? "Salvando..." : "Salvar"}
           </button>
-        </form>
-      </div>
-
-      <div className="settings-section">
-        <h2 className="settings-section-title">Homepage</h2>
-        <p className="settings-section-desc">Colecao que os usuarios veem primeiro ao entrar no sistema.</p>
-
-        <div className="settings-grid">
-          <label className="field">
-            Colecao
-            <select className="input" value={homeWorkspaceId} onChange={(e) => handleHomeWorkspaceChange(e.target.value)}>
-              <option value="">Nenhuma (tela padrao)</option>
-              {workspaces.map((w) => (
-                <option key={w.id} value={w.id}>
-                  {w.name}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 12, marginBottom: 0 }}>
-          Usuarios sem acesso a essa colecao veem a tela padrao normalmente.
-        </p>
-
-        <div style={{ marginTop: 20 }}>
-          <label className="field">
-            Abrir direto a colecao unica
-            <div className="toggle-field" style={{ marginTop: 4 }}>
-              <label className="toggle-switch">
-                <input
-                  type="checkbox"
-                  checked={singleCollectionRedirect}
-                  onChange={(e) => handleSingleCollectionRedirectChange(e.target.checked)}
-                />
-                <span className="toggle-switch-track" />
-              </label>
-              <span style={{ fontWeight: 400, fontSize: 13, color: "var(--color-text-muted)" }}>
-                {singleCollectionRedirect ? "Habilitado" : "Desabilitado"}
+          {dirty && !saving && (
+            <>
+              <button type="button" className="btn btn-ghost" onClick={fillFromSettings}>
+                Descartar
+              </button>
+              <span className="settings-savebar-hint" role="status">
+                Voce tem alteracoes nao salvas.
               </span>
-            </div>
-            <span style={{ fontWeight: 400, fontSize: 12 }}>
-              Quando ativado, usuarios com acesso a uma unica colecao entram direto nela, sem passar pela tela inicial.
-            </span>
-          </label>
+            </>
+          )}
         </div>
-      </div>
+      </form>
+
+      {confirmingHttps && (
+        <ConfirmDialog
+          title="Ligar o redirecionamento para HTTPS?"
+          message="Depois de salvar, quem abrir o portal por http sera levado para https. Se o dominio ainda nao tiver certificado, ou se o site nao abrir por https, o acesso ao portal pode ficar fora do ar. Confirme so se voce ja consegue abrir o site por https."
+          confirmLabel="Ligar e salvar"
+          onConfirm={handleConfirmHttps}
+          onCancel={() => setConfirmingHttps(false)}
+        />
+      )}
 
       <PowerBiConnectionsSection />
     </div>
