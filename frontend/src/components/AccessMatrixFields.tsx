@@ -29,14 +29,14 @@ export default function AccessMatrixFields({
         <thead>
           <tr>
             <th>Grupo</th>
-            <th>Nivel de acesso</th>
+            <th>Nível de acesso</th>
           </tr>
         </thead>
         <tbody>
           {visibleGroups.map((g) => (
             <tr key={g.id}>
               <td>
-                {g.name} {g.is_default && <span className="badge">padrao</span>}
+                {g.name} {g.is_default && <span className="badge">padrão</span>}
               </td>
               <td>
                 <select

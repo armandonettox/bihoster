@@ -896,6 +896,62 @@ table.table tr:last-child td {
   color: #dc2626;
 }
 
+/* Opção do menu com ícone à esquerda; o ícone herda a cor do texto (inclusive o vermelho do Excluir) */
+.kebab-menu-item-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Linha de uma coleção na aba Coleções das configurações: ícone, nome com descrição e o menu dos 3 pontinhos */
+.collection-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.collection-row-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.collection-row-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.collection-row-desc {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Lista de grupos dentro da janela de editar coleção. Não tem rolagem própria: quem rola é a janela inteira */
+.edit-collection-access {
+  margin-bottom: 4px;
+}
+
+/* Botões de uma janela com conteúdo comprido: ficam grudados no rodapé da janela enquanto ela rola, para o
+   Salvar nunca sumir. As margens negativas esticam a barra até as bordas (o corpo da janela tem 20px de folga). */
+.modal-actions-sticky {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  display: flex;
+  gap: 8px;
+  margin: 12px -20px -20px;
+  padding: 12px 20px;
+  background-color: var(--color-surface);
+  border-top: 1px solid var(--color-border);
+  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+}
+
 .topbar-menu {
   position: relative;
 }

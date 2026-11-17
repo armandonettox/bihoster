@@ -82,7 +82,7 @@ export default function CollectionIconPicker({
           ))}
         </div>
 
-        <p className="icon-picker-label">Icone (opcional -- sem icone usa as iniciais)</p>
+        <p className="icon-picker-label">Ícone (opcional, sem ícone usa as iniciais)</p>
         <div className="icon-picker-icons">
           <button
             type="button"

@@ -75,21 +75,21 @@ export default function NewCollectionModal({ onClose }: { onClose: () => void })
       await reloadAndSelect(workspace.id);
       onClose();
       navigate("/collection");
-      showToast("Colecao criada.");
+      showToast("Coleção criada.");
     } catch (err: any) {
-      setError(extractErrorMessage(err) || "Nao foi possivel criar a colecao.");
+      setError(extractErrorMessage(err) || "Não foi possível criar a coleção.");
     } finally {
       setSubmitting(false);
     }
   }
 
   return (
-    <Modal title="Nova colecao" onClose={onClose}>
+    <Modal title="Nova coleção" onClose={onClose}>
       <form onSubmit={handleSubmit}>
         <input
           className="input"
           autoFocus
-          placeholder="Nome da colecao"
+          placeholder="Nome da coleção"
           value={name}
           onChange={(e) => setName(e.target.value)}
           required
@@ -97,7 +97,7 @@ export default function NewCollectionModal({ onClose }: { onClose: () => void })
         />
         <textarea
           className="input"
-          placeholder="Descricao (opcional)"
+          placeholder="Descrição (opcional)"
           value={description}
           onChange={(e) => setDescription(e.target.value)}
           rows={2}
