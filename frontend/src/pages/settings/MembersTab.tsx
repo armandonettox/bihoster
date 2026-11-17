@@ -390,20 +390,25 @@ export default function MembersTab() {
         </button>
       </div>
 
-      <input
-        className="input"
-        placeholder="Filtrar por nome ou e-mail..."
-        aria-label="Filtrar membros por nome ou e-mail"
-        value={filter}
-        onChange={(e) => setFilter(e.target.value)}
-        style={{ marginBottom: 6, maxWidth: 320 }}
-      />
+      <div className="table-search" style={{ marginBottom: 6, maxWidth: 360 }}>
+        <span className="material-symbols-outlined" aria-hidden="true">
+          search
+        </span>
+        <input
+          className="input"
+          type="search"
+          placeholder="Filtrar por nome ou e-mail..."
+          aria-label="Filtrar membros por nome ou e-mail"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+        />
+      </div>
       <p className="field-hint" style={{ marginBottom: 16 }}>
         “{defaultGroupName}” é o grupo padrão de todas as pessoas, por isso só aparece na coluna Grupos quando a pessoa
         não está em nenhum outro.
       </p>
 
-      <div className="card" style={{ overflow: "visible" }}>
+      <div className="card data-table-card" style={{ overflow: "visible" }}>
         <table className="table">
           <thead>
             <tr>

@@ -3381,13 +3381,16 @@ table.table tr:last-child td {
   gap: 6px;
 }
 
-.audit-search {
+/* Busca com lupa: a da Auditoria e a das outras tabelas (`.table-search`, por exemplo em Membros) */
+.audit-search,
+.table-search {
   position: relative;
   max-width: 460px;
   margin-bottom: 16px;
 }
 
-.audit-search .material-symbols-outlined {
+.audit-search .material-symbols-outlined,
+.table-search .material-symbols-outlined {
   position: absolute;
   left: 10px;
   top: 50%;
@@ -3397,7 +3400,8 @@ table.table tr:last-child td {
   pointer-events: none;
 }
 
-.audit-search .input {
+.audit-search .input,
+.table-search .input {
   width: 100%;
   padding-left: 38px;
 }
@@ -3716,34 +3720,51 @@ table.table tr:last-child td {
   flex-shrink: 0;
 }
 
-/* Tabela da aba Registros: cabecalho suave, linhas zebradas e divisorias discretas entre colunas */
+/* Tabela de dados (Registros da Auditoria e Membros): cabecalho suave, linhas zebradas, divisorias discretas entre
+   colunas e destaque da linha sob o cursor. `.data-table-card` e o mesmo visual para tabelas que nao podem cortar o
+   que sai delas (a lista de grupos de Membros abre fora da tabela), por isso nao leva o overflow da Auditoria. */
 
 .audit-table-card {
   overflow-x: auto;
   border-radius: var(--radius-md);
 }
 
-.audit-table-card table.table {
+.audit-table-card table.table,
+.data-table-card table.table {
   border-collapse: separate;
   border-spacing: 0;
 }
 
-.audit-table-card table.table thead th {
+.audit-table-card table.table thead th,
+.data-table-card table.table thead th {
   background-color: color-mix(in srgb, var(--color-text) 4%, var(--color-surface));
   border-bottom: 1px solid var(--color-border);
   white-space: nowrap;
 }
 
+/* Sem overflow escondido, o fundo do cabecalho passaria dos cantos arredondados do cartao: arredonda as pontas */
+.data-table-card table.table thead th:first-child {
+  border-top-left-radius: var(--radius-md);
+}
+
+.data-table-card table.table thead th:last-child {
+  border-top-right-radius: var(--radius-md);
+}
+
 .audit-table-card table.table th + th,
-.audit-table-card table.table td + td {
+.audit-table-card table.table td + td,
+.data-table-card table.table th + th,
+.data-table-card table.table td + td {
   border-left: 1px solid color-mix(in srgb, var(--color-border) 65%, transparent);
 }
 
-.audit-table-card table.table tbody tr:nth-child(even) td {
+.audit-table-card table.table tbody tr:nth-child(even) td,
+.data-table-card table.table tbody tr:nth-child(even) td {
   background-color: color-mix(in srgb, var(--color-text) 2.5%, transparent);
 }
 
-.audit-table-card table.table tbody tr:hover td {
+.audit-table-card table.table tbody tr:hover td,
+.data-table-card table.table tbody tr:hover td {
   background-color: var(--color-surface-hover);
 }
 
