@@ -13,5 +13,5 @@ google-auth==2.58.0
 # google.auth.transport.requests (usado em routers/auth.py pra verificar o id_token do login
 # Google) importa a biblioteca `requests` por baixo -- sem ela no requirements, o login com
 # Google quebra em runtime com ModuleNotFoundError, mesmo o resto do app funcionando normal.
-requests==2.32.3
+requests==2.34.2
 tzdata==2026.4
