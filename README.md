@@ -6,7 +6,7 @@
 </h1>
 
 Portal self-hosted para hospedar e gerenciar relatórios do Power BI, com autenticação de
-usuários, controle de acesso por grupo e embedding via "app owns the data" (Service Principal
+usuários, controle de acesso por grupo e por pessoa, com permissões separadas, e embedding via "app owns the data" (Service Principal
 do Azure AD) — os usuários acessam os relatórios sem precisar de licença/conta própria no
 Power BI.
 
@@ -74,6 +74,26 @@ sozinho — **é um acesso root-equivalente ao host**, então só ative se confi
 máquina onde está rodando. O container detecta sozinho, ao subir, o GID do grupo dono do
 socket montado e ajusta a própria permissão antes de trocar para o usuário sem privilégios
 (`docker-entrypoint.sh`) — não precisa rebuildar nem informar nada manualmente.
+
+## Usuários, grupos e permissões
+
+Tudo isso fica em **Gerenciar usuários** (menu de módulos, no canto superior), separado da Administração:
+as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões **Por membro** e **Por grupo**.
+
+- **Permissões separadas.** Cada coisa que dá para fazer tem a sua permissão (ver uma coleção, publicar, editar ou
+  excluir relatório, criar assinatura, gerenciar a IA, adicionar membro, ver a auditoria etc.). As que têm várias
+  partes aparecem agrupadas, com um interruptor para ligar todas e outros para ligar uma a uma.
+- **Por coleção ou no sistema todo.** Uma permissão vale numa coleção específica ou em todo o sistema.
+- **Grupo e pessoa.** Um grupo tem uma lista de permissões; uma pessoa recebe a soma das permissões de todos os grupos
+  dela mais as que foram dadas só para ela. Permissão só soma, nunca nega.
+- **Só se dá o que se tem.** Quem recebe o poder de dar permissões, de gerenciar grupos ou de adicionar membros só
+  consegue dar e tirar o que ele mesmo tem. Colocar alguém num grupo é dar as permissões do grupo, então vale a mesma
+  regra, e o grupo Administradores é só de quem já é administrador da plataforma.
+- **Administrador da plataforma** (grupo Administradores) tem tudo. Nenhuma permissão dá esse papel.
+
+Quem atualiza de uma versão anterior não perde nada: no primeiro boot, os papéis antigos (Leitor, Editor,
+Administrador de cada coleção) e as permissões de IA e de analíticos dos grupos são copiados, uma vez, para as
+permissões novas. As tabelas antigas continuam no banco, sem uso.
 
 ## Desenvolvimento local (sem Docker)
 
