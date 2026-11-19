@@ -3,6 +3,7 @@ import { useSearchParams } from "react-router-dom";
 import * as usersApi from "../../api/users";
 import * as groupsApi from "../../api/groups";
 import * as accessApi from "../../api/access";
+import { getEmailStatus } from "../../api/emailSettings";
 import { listAllWorkspaces } from "../../api/workspaces";
 import type { Workspace } from "../../api/workspaces";
 import type { UserDirectoryEntry, PendingInvite } from "../../api/users";
@@ -236,6 +237,7 @@ export default function UsersPanel() {
   const canChangeGroups = access.canAny("membros.editar", "grupos.participantes");
   const canGivePermissions = access.can("permissoes.editar");
   const canResetPassword = access.can("membros.senha");
+  const canBlock = access.can("membros.bloquear");
   const canRemoveMember = access.can("membros.remover");
   const canManageInvites = access.can("membros.convites");
   const canSeeGroups = access.can("grupos.ver");
@@ -253,6 +255,10 @@ export default function UsersPanel() {
   const [newMemberEmail, setNewMemberEmail] = useState("");
   const [addError, setAddError] = useState<string | null>(null);
   const [addingSaving, setAddingSaving] = useState(false);
+  // E-mail de aviso: só dá para mandar com o servidor de e-mail configurado. Desligado por padrão ao adicionar.
+  const [emailConfigured, setEmailConfigured] = useState(false);
+  const [notifyByEmail, setNotifyByEmail] = useState(false);
+  const [confirmingBlockUser, setConfirmingBlockUser] = useState<UserDirectoryEntry | null>(null);
   // Grupos extras escolhidos na janela de adicionar (o padrão é automático e não entra aqui)
   const [newMemberGroupIds, setNewMemberGroupIds] = useState<Set<number>>(new Set());
   const [confirmingRemoveUser, setConfirmingRemoveUser] = useState<UserDirectoryEntry | null>(null);
@@ -300,6 +306,9 @@ export default function UsersPanel() {
     load()
       .catch(() => showToast("Não foi possível carregar os membros.", "error"))
       .finally(() => setLoading(false));
+    getEmailStatus()
+      .then((status) => setEmailConfigured(status.configured))
+      .catch(() => setEmailConfigured(false));
     Promise.all([accessApi.getAccessCatalog(), listAllWorkspaces()])
       .then(([loadedCatalog, loadedWorkspaces]) => {
         setCatalog(loadedCatalog);
@@ -360,8 +369,38 @@ export default function UsersPanel() {
     }
   }
 
+  async function handleSendResetEmail(user: UserDirectoryEntry) {
+    try {
+      await usersApi.sendResetEmail(user.id);
+      showToast(`Link de redefinição enviado para ${user.email}.`);
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Não foi possível enviar o e-mail.", "error");
+    }
+  }
+
+  async function handleSendWelcomeEmail(email: string) {
+    try {
+      await usersApi.sendWelcomeEmail(email);
+      showToast(`E-mail enviado para ${email}.`);
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Não foi possível enviar o e-mail.", "error");
+    }
+  }
+
+  async function handleBlock(user: UserDirectoryEntry, block: boolean) {
+    try {
+      if (block) await usersApi.blockUser(user.id);
+      else await usersApi.unblockUser(user.id);
+      await load();
+      showToast(block ? `${user.name} foi bloqueado.` : `${user.name} foi desbloqueado.`);
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Não foi possível alterar o bloqueio.", "error");
+    }
+  }
+
   function closeAddMember() {
     setAddingMember(false);
+    setNotifyByEmail(false);
     setNewMemberEmail("");
     setNewMemberGroupIds(new Set());
     setNewMemberDraft({});
@@ -409,11 +448,28 @@ export default function UsersPanel() {
           permissionsFailed = true;
         }
       }
+      // Aviso por e-mail (se ligado): a falha não desfaz a adição, só avisa
+      let emailFailed = false;
+      if (notifyByEmail && emailConfigured) {
+        try {
+          await usersApi.sendWelcomeEmail(newMemberEmail);
+        } catch {
+          emailFailed = true;
+        }
+      }
+      const emailSent = notifyByEmail && emailConfigured && !emailFailed;
       closeAddMember();
       await load();
 
       const done = chosen.filter((g) => !failed.includes(g.name)).map((g) => g.name);
       const added = result.status === "added";
+      if (emailFailed) {
+        showToast(
+          `${added ? "Membro adicionado" : "Convite criado"}, mas o e-mail de aviso não foi enviado. Use o menu dos 3 pontinhos para tentar de novo.`,
+          "error",
+        );
+        return;
+      }
       if (failed.length > 0 || permissionsFailed) {
         // A pessoa já foi adicionada (ou convidada); só uma parte falhou e pode ser refeita na própria tabela
         const start = added ? "Membro adicionado" : "Convite criado";
@@ -432,6 +488,7 @@ export default function UsersPanel() {
       const extras = [
         ...(done.length > 0 ? [`Grupos: ${done.join(", ")}.`] : []),
         ...(blocks.length > 0 ? ["Permissões salvas."] : []),
+        ...(emailSent ? ["E-mail de aviso enviado."] : []),
       ];
       showToast([base, ...extras].join(" "));
     } catch (err: any) {
@@ -720,20 +777,37 @@ export default function UsersPanel() {
                   </td>
                   <td style={{ color: "var(--color-text-muted)", whiteSpace: "nowrap" }}>Aguardando cadastro</td>
                   <td style={{ width: 40 }}>
-                    {canManageInvites && (
+                    {(canManageInvites || (canAddMember && emailConfigured)) && (
                       <KebabMenu>
                         {(close) => (
-                          <button
-                            type="button"
-                            className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
-                            onClick={() => {
-                              close();
-                              setConfirmingCancelInvite(row.invites);
-                            }}
-                          >
-                            <MenuIcon name="close" />
-                            Cancelar convite
-                          </button>
+                          <>
+                            {canAddMember && emailConfigured && (
+                              <button
+                                type="button"
+                                className="kebab-menu-item kebab-menu-item-with-icon"
+                                onClick={() => {
+                                  close();
+                                  handleSendWelcomeEmail(row.email);
+                                }}
+                              >
+                                <MenuIcon name="mail" />
+                                Enviar e-mail de convite
+                              </button>
+                            )}
+                            {canManageInvites && (
+                              <button
+                                type="button"
+                                className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
+                                onClick={() => {
+                                  close();
+                                  setConfirmingCancelInvite(row.invites);
+                                }}
+                              >
+                                <MenuIcon name="close" />
+                                Cancelar convite
+                              </button>
+                            )}
+                          </>
                         )}
                       </KebabMenu>
                     )}
@@ -747,6 +821,9 @@ export default function UsersPanel() {
                       {row.user.name}
                       {row.user.id === currentUser?.id && (
                         <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>(você)</span>
+                      )}
+                      {row.user.is_blocked && (
+                        <span style={{ fontSize: 12, fontWeight: 600, color: "var(--color-danger, #c0392b)" }}>Bloqueado</span>
                       )}
                     </div>
                   </td>
@@ -769,6 +846,32 @@ export default function UsersPanel() {
                     <KebabMenu>
                       {(close) => (
                         <>
+                          {canAddMember && emailConfigured && !row.user.is_blocked && (
+                            <button
+                              type="button"
+                              className="kebab-menu-item kebab-menu-item-with-icon"
+                              onClick={() => {
+                                close();
+                                handleSendWelcomeEmail(row.user.email);
+                              }}
+                            >
+                              <MenuIcon name="mail" />
+                              Enviar e-mail de acesso
+                            </button>
+                          )}
+                          {canResetPassword && emailConfigured && !row.user.is_blocked && (
+                            <button
+                              type="button"
+                              className="kebab-menu-item kebab-menu-item-with-icon"
+                              onClick={() => {
+                                close();
+                                handleSendResetEmail(row.user);
+                              }}
+                            >
+                              <MenuIcon name="forward_to_inbox" />
+                              Enviar link de redefinição por e-mail
+                            </button>
+                          )}
                           {canResetPassword && (
                             <button
                               type="button"
@@ -780,6 +883,20 @@ export default function UsersPanel() {
                             >
                               <MenuIcon name="link" />
                               Gerar link de redefinição
+                            </button>
+                          )}
+                          {canBlock && row.user.id !== currentUser?.id && (
+                            <button
+                              type="button"
+                              className="kebab-menu-item kebab-menu-item-with-icon"
+                              onClick={() => {
+                                close();
+                                if (row.user.is_blocked) handleBlock(row.user, false);
+                                else setConfirmingBlockUser(row.user);
+                              }}
+                            >
+                              <MenuIcon name={row.user.is_blocked ? "lock_open" : "block"} />
+                              {row.user.is_blocked ? "Desbloquear" : "Bloquear"}
                             </button>
                           )}
                           <button
@@ -894,6 +1011,20 @@ export default function UsersPanel() {
               </div>
             )}
 
+            <label className="field" style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <input
+                type="checkbox"
+                role="switch"
+                checked={notifyByEmail && emailConfigured}
+                onChange={(e) => setNotifyByEmail(e.target.checked)}
+                disabled={!emailConfigured || addingSaving}
+              />
+              <span>Avisar a pessoa por e-mail, com o link para entrar</span>
+            </label>
+            {!emailConfigured && (
+              <span className="field-hint">Para ligar, configure o servidor de e-mail em Configurações &gt; E-mail.</span>
+            )}
+
             {addError && <p className="auth-error">{addError}</p>}
             <div style={{ display: "flex", gap: 8 }}>
               <button type="submit" className="btn btn-primary" style={{ flex: 1 }} disabled={addingSaving}>
@@ -965,6 +1096,20 @@ export default function UsersPanel() {
             handleRemoveUser(userId);
           }}
           onCancel={() => setConfirmingRemoveUser(null)}
+        />
+      )}
+
+      {confirmingBlockUser && (
+        <ConfirmDialog
+          title="Bloquear pessoa"
+          message={`Bloquear ${confirmingBlockUser.name}? Ela não consegue mais entrar e a sessão aberta é encerrada na hora. Nada é apagado e dá para desbloquear depois.`}
+          confirmLabel="Bloquear"
+          onConfirm={() => {
+            const user = confirmingBlockUser;
+            setConfirmingBlockUser(null);
+            handleBlock(user, true);
+          }}
+          onCancel={() => setConfirmingBlockUser(null)}
         />
       )}
 

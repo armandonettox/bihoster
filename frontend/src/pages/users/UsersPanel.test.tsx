@@ -5,6 +5,7 @@ import * as accessApi from "../../api/access";
 import * as groupsApi from "../../api/groups";
 import * as usersApi from "../../api/users";
 import * as workspacesApi from "../../api/workspaces";
+import * as emailApi from "../../api/emailSettings";
 import type { PendingInvite, UserDirectoryEntry, UserGroup } from "../../api/users";
 import { ADMIN_ACCESS, AccessContext, buildAccess } from "../../context/AccessContext";
 import UsersPanel from "./UsersPanel";
@@ -19,7 +20,12 @@ vi.mock("../../api/users", () => ({
   listPendingInvites: vi.fn(),
   generateResetLink: vi.fn(),
   deleteUser: vi.fn(),
+  sendResetEmail: vi.fn(),
+  sendWelcomeEmail: vi.fn(),
+  blockUser: vi.fn(),
+  unblockUser: vi.fn(),
 }));
+vi.mock("../../api/emailSettings", () => ({ getEmailStatus: vi.fn() }));
 vi.mock("../../api/groups", () => ({
   listGroups: vi.fn(),
   createGroup: vi.fn(),
@@ -60,6 +66,11 @@ const listUsers = vi.mocked(usersApi.listUsers);
 const listInvites = vi.mocked(usersApi.listPendingInvites);
 const generateResetLink = vi.mocked(usersApi.generateResetLink);
 const deleteUser = vi.mocked(usersApi.deleteUser);
+const sendResetEmail = vi.mocked(usersApi.sendResetEmail);
+const sendWelcomeEmail = vi.mocked(usersApi.sendWelcomeEmail);
+const blockUser = vi.mocked(usersApi.blockUser);
+const unblockUser = vi.mocked(usersApi.unblockUser);
+const getEmailStatus = vi.mocked(emailApi.getEmailStatus);
 const listGroups = vi.mocked(groupsApi.listGroups);
 const addGroupMember = vi.mocked(groupsApi.addGroupMember);
 const inviteGroupMember = vi.mocked(groupsApi.inviteGroupMember);
@@ -79,7 +90,7 @@ const GRUPOS = [PADRAO, DADOS, DIRETORIA, FINANCEIRO];
 /** Pessoa n (o id 1 é a pessoa logada). Por padrão só está no grupo padrão. */
 function pessoa(n: number, groups: UserGroup[] = [PADRAO]): UserDirectoryEntry {
   const nome = `Pessoa ${String(n).padStart(2, "0")}`;
-  return { id: n, name: nome, email: `pessoa${n}@exemplo.com`, groups, last_login: null };
+  return { id: n, name: nome, email: `pessoa${n}@exemplo.com`, groups, last_login: null, is_blocked: false };
 }
 
 function pessoas(total: number): UserDirectoryEntry[] {
@@ -115,6 +126,12 @@ const paginacao = () => screen.getByRole("navigation", { name: "Paginação" });
 beforeEach(() => {
   mocks.me = ADMIN_ACCESS;
   mocks.showToast.mockClear();
+  for (const fn of [sendResetEmail, sendWelcomeEmail, blockUser, unblockUser, getEmailStatus]) fn.mockReset();
+  getEmailStatus.mockResolvedValue({ configured: true, allowed_domains: [] });
+  sendResetEmail.mockResolvedValue(undefined);
+  sendWelcomeEmail.mockResolvedValue({ status: "sent", email: "x", kind: "added" });
+  blockUser.mockResolvedValue(undefined);
+  unblockUser.mockResolvedValue(undefined);
   for (const fn of [listUsers, listInvites, generateResetLink, deleteUser, listGroups, addGroupMember, inviteGroupMember, getCatalog, getReport, grantByEmail, listWorkspaces, listGroupsGrants]) fn.mockReset();
   listGroupsGrants.mockResolvedValue([]);
   getCatalog.mockResolvedValue(CATALOGO);
@@ -1136,7 +1153,10 @@ describe("UsersPanel - cada acao pela sua permissao", () => {
   it("convite pendente: so quem pode gerenciar convites ve o menu de cancelar e mexe nos grupos", async () => {
     como("membros.adicionar");
     await abrir([pessoa(1)], [convite("novo@exemplo.com", DADOS)]);
-    expect(within(linha("novo@exemplo.com")).queryByLabelText("Mais opcoes")).toBeNull();
+    // Com o e-mail configurado o menu existe para enviar o convite, mas sem a opcao de cancelar
+    abrirMenuDe("novo@exemplo.com");
+    expect(botao("Enviar e-mail de convite")).not.toBeNull();
+    expect(botao("Cancelar convite")).toBeNull();
     expect((gruposDe("novo@exemplo.com") as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -1465,5 +1485,125 @@ describe("UsersPanel - a visao por grupo na URL e por permissao", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Por membro" }));
     expect(screen.getByRole("button", { name: "Por membro" }).getAttribute("aria-pressed")).toBe("true");
+  });
+});
+
+describe("UsersPanel - bloquear e e-mails de conta", () => {
+  const abrirMenuDe = (nome: string) => fireEvent.click(within(linha(nome)).getByLabelText("Mais opcoes"));
+  const botao = (nome: string) => screen.queryByRole("button", { name: nome });
+
+  it("o menu tem enviar e-mail de acesso, enviar link por e-mail e bloquear, com icone", async () => {
+    await abrir([pessoa(1), pessoa(2)]);
+    abrirMenuDe("Pessoa 02");
+
+    for (const nome of ["Enviar e-mail de acesso", "Enviar link de redefinição por e-mail", "Bloquear"]) {
+      const item = screen.getByRole("button", { name: nome });
+      expect(item.className).toContain("kebab-menu-item-with-icon");
+      expect(item.querySelector(".material-symbols-outlined")?.getAttribute("aria-hidden")).toBe("true");
+    }
+  });
+
+  it("enviar e-mail de acesso e de redefinicao chamam a API com a pessoa certa", async () => {
+    await abrir([pessoa(1), pessoa(2)]);
+    abrirMenuDe("Pessoa 02");
+    fireEvent.click(screen.getByRole("button", { name: "Enviar e-mail de acesso" }));
+    await waitFor(() => expect(sendWelcomeEmail).toHaveBeenCalledWith("pessoa2@exemplo.com"));
+
+    abrirMenuDe("Pessoa 02");
+    fireEvent.click(screen.getByRole("button", { name: "Enviar link de redefinição por e-mail" }));
+    await waitFor(() => expect(sendResetEmail).toHaveBeenCalledWith(2));
+    expect(generateResetLink).not.toHaveBeenCalled();
+  });
+
+  it("sem servidor de e-mail os itens de e-mail somem e o link para copiar continua", async () => {
+    getEmailStatus.mockResolvedValue({ configured: false, allowed_domains: [] });
+    await abrir([pessoa(1), pessoa(2)]);
+    abrirMenuDe("Pessoa 02");
+
+    expect(botao("Enviar e-mail de acesso")).toBeNull();
+    expect(botao("Enviar link de redefinição por e-mail")).toBeNull();
+    expect(botao("Gerar link de redefinição")).not.toBeNull();
+  });
+
+  it("bloquear pede confirmacao e so entao bloqueia", async () => {
+    await abrir([pessoa(1), pessoa(2)]);
+    abrirMenuDe("Pessoa 02");
+    fireEvent.click(screen.getByRole("button", { name: "Bloquear" }));
+    expect(blockUser).not.toHaveBeenCalled();
+
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Bloquear" }));
+    await waitFor(() => expect(blockUser).toHaveBeenCalledWith(2));
+  });
+
+  it("pessoa bloqueada aparece marcada, desbloqueia direto e nao recebe e-mails", async () => {
+    await abrir([pessoa(1), { ...pessoa(2), is_blocked: true }]);
+    expect(within(linha("Pessoa 02")).getByText("Bloqueado")).toBeTruthy();
+
+    abrirMenuDe("Pessoa 02");
+    expect(botao("Enviar e-mail de acesso")).toBeNull();
+    expect(botao("Enviar link de redefinição por e-mail")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Desbloquear" }));
+    await waitFor(() => expect(unblockUser).toHaveBeenCalledWith(2));
+  });
+
+  it("nao da para bloquear a propria conta", async () => {
+    await abrir([pessoa(1), pessoa(2)]);
+    abrirMenuDe("Pessoa 01");
+
+    expect(botao("Bloquear")).toBeNull();
+  });
+
+  it("convite pendente tem Enviar e-mail de convite no menu", async () => {
+    await abrir([pessoa(1)], [convite("novo@exemplo.com", PADRAO)]);
+    abrirMenuDe("novo@exemplo.com");
+    fireEvent.click(screen.getByRole("button", { name: "Enviar e-mail de convite" }));
+
+    await waitFor(() => expect(sendWelcomeEmail).toHaveBeenCalledWith("novo@exemplo.com"));
+  });
+
+  it("ao adicionar, o aviso por e-mail vem desligado e so envia se ligado", async () => {
+    await abrir([pessoa(1)]);
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar membro" }));
+    const aviso = (await screen.findByRole("switch")) as HTMLInputElement;
+    expect(aviso.checked).toBe(false);
+
+    fireEvent.change(screen.getByPlaceholderText("pessoa@empresa.com"), { target: { value: "nova@exemplo.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+    await waitFor(() => expect(inviteGroupMember).toHaveBeenCalled());
+    expect(sendWelcomeEmail).not.toHaveBeenCalled();
+  });
+
+  it("ligado, adiciona e manda o e-mail de aviso", async () => {
+    await abrir([pessoa(1)]);
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar membro" }));
+    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.change(screen.getByPlaceholderText("pessoa@empresa.com"), { target: { value: "nova@exemplo.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() => expect(sendWelcomeEmail).toHaveBeenCalledWith("nova@exemplo.com"));
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining("E-mail de aviso enviado.")));
+  });
+
+  it("falha no e-mail nao desfaz a adicao e avisa", async () => {
+    sendWelcomeEmail.mockRejectedValue(new Error("falhou"));
+    await abrir([pessoa(1)]);
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar membro" }));
+    fireEvent.click(await screen.findByRole("switch"));
+    fireEvent.change(screen.getByPlaceholderText("pessoa@empresa.com"), { target: { value: "nova@exemplo.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "Adicionar" }));
+
+    await waitFor(() =>
+      expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining("o e-mail de aviso não foi enviado"), "error"),
+    );
+  });
+
+  it("sem servidor de e-mail o aviso fica desligado e travado, com a explicacao", async () => {
+    getEmailStatus.mockResolvedValue({ configured: false, allowed_domains: [] });
+    await abrir([pessoa(1)]);
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar membro" }));
+    const aviso = (await screen.findByRole("switch")) as HTMLInputElement;
+
+    expect(aviso.disabled).toBe(true);
+    expect(screen.getByText(/configure o servidor de e-mail/i)).toBeTruthy();
   });
 });
