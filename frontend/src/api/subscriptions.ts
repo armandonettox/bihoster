@@ -28,7 +28,12 @@ export interface Subscription {
   last_message: string | null;
   consecutive_failures: number;
   created_by_name: string | null;
+  created_by_id?: number | null;
   created_at: string | null;
+  /** O que quem esta olhando pode fazer com esta assinatura (o servidor decide: so as proprias, ou tambem as de outras pessoas) */
+  can_edit?: boolean;
+  can_delete?: boolean;
+  can_run?: boolean;
 }
 
 export interface SubscriptionInput {

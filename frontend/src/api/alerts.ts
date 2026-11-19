@@ -24,6 +24,10 @@ export interface Alert {
   collection_id: number;
   collection_name: string | null;
   created_by_name: string | null;
+  created_by_id?: number | null;
+  /** O que quem esta olhando pode fazer com este alerta (o servidor decide: so os proprios, ou tambem os de outras pessoas) */
+  can_edit?: boolean;
+  can_delete?: boolean;
   name: string | null;
   measure_name: string;
   table_name: string | null;

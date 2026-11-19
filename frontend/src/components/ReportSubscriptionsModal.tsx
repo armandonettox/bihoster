@@ -7,6 +7,7 @@ import type { Report } from "../api/reports";
 import * as api from "../api/subscriptions";
 import type { Subscription, SubscriptionInput, SubscriptionRun } from "../api/subscriptions";
 import { formatDateTime } from "../utils/datetime";
+import { formatPersonName } from "../utils/personName";
 import ConfirmDialog from "./ConfirmDialog";
 import Modal from "./Modal";
 import SubscriptionForm from "./SubscriptionForm";
@@ -211,6 +212,7 @@ export default function ReportSubscriptionsModal({
             {sub.name ? `${sub.schedule_text} - ` : ""}
             {sub.recipients.length} destinatario(s)
             {sub.enabled && sub.next_run_at ? ` - proximo envio: ${formatDateTime(sub.next_run_at, sub.timezone)}` : ""}
+            {sub.created_by_name ? ` - criada por ${formatPersonName(sub.created_by_name)}` : ""}
           </p>
           {sub.last_status === "error" && (
             <p style={{ margin: "4px 0 0", fontSize: 13, color: "var(--color-danger)" }}>
@@ -228,12 +230,12 @@ export default function ReportSubscriptionsModal({
             />
           ) : (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-              {can.run && (
+              {can.run && sub.can_run !== false && (
                 <button className="btn btn-secondary btn-sm" onClick={() => handleRunNow(sub)}>
                   Enviar agora
                 </button>
               )}
-              {can.edit && (
+              {can.edit && sub.can_edit !== false && (
                 <button
                   className="btn btn-ghost btn-sm"
                   onClick={() =>
@@ -246,7 +248,7 @@ export default function ReportSubscriptionsModal({
                   {sub.enabled ? "Pausar" : "Reativar"}
                 </button>
               )}
-              {can.edit && (
+              {can.edit && sub.can_edit !== false && (
                 <button className="btn btn-ghost btn-sm" onClick={() => setEditing(sub)}>
                   Editar
                 </button>
@@ -258,7 +260,7 @@ export default function ReportSubscriptionsModal({
               >
                 Historico
               </button>
-              {can.delete && (
+              {can.delete && sub.can_delete !== false && (
                 <button className="btn btn-ghost btn-sm" onClick={() => setToDelete(sub)}>
                   Excluir
                 </button>

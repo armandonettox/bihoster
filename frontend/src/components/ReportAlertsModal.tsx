@@ -4,6 +4,7 @@ import * as alertsApi from "../api/alerts";
 import type { Alert, AlertInput, Measure } from "../api/alerts";
 import type { Report } from "../api/reports";
 import { formatDateTime } from "../utils/datetime";
+import { formatPersonName } from "../utils/personName";
 import type { ReportEmbedHandle } from "./ReportEmbed";
 import AlertForm from "./AlertForm";
 import ConfirmDialog from "./ConfirmDialog";
@@ -164,6 +165,7 @@ export default function ReportAlertsModal({
             {alert.measure_name} {alert.condition} {alert.threshold}
             {" — "}
             {alert.recipients.length} destinatario(s)
+            {alert.created_by_name ? ` — criado por ${formatPersonName(alert.created_by_name)}` : ""}
           </p>
 
           {alert.last_value !== null && (
@@ -186,7 +188,7 @@ export default function ReportAlertsModal({
           )}
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            {can.edit && (
+            {can.edit && alert.can_edit !== false && (
               <button
                 className="btn btn-ghost btn-sm"
                 onClick={() =>
@@ -199,12 +201,12 @@ export default function ReportAlertsModal({
                 {alert.enabled ? "Pausar" : "Reativar"}
               </button>
             )}
-            {can.edit && (
+            {can.edit && alert.can_edit !== false && (
               <button className="btn btn-ghost btn-sm" onClick={() => setEditing(alert)}>
                 Editar
               </button>
             )}
-            {can.delete && (
+            {can.delete && alert.can_delete !== false && (
               <button className="btn btn-ghost btn-sm" onClick={() => setToDelete(alert)}>
                 Excluir
               </button>

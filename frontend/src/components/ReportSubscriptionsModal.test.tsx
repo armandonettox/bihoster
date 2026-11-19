@@ -342,3 +342,37 @@ describe("ReportSubscriptionsModal - enviar agora", () => {
     expect(screen.getByRole("alert").textContent).toContain("ja esta sendo enviada");
   });
 });
+
+describe("ReportSubscriptionsModal - o que cada assinatura permite a quem olha", () => {
+  const botao = (nome: string) => screen.queryByRole("button", { name: nome });
+
+  it("assinatura de outra pessoa, sem as permissoes de outras, nao mostra editar, pausar, excluir nem enviar agora", async () => {
+    listar.mockResolvedValue([assinatura({ can_edit: false, can_delete: false, can_run: false })]);
+    await abrir();
+    await screen.findByText("seg, qua, sex as 08:00");
+
+    expect(botao("Editar")).toBeNull();
+    expect(botao("Pausar")).toBeNull();
+    expect(botao("Excluir")).toBeNull();
+    expect(botao("Enviar agora")).toBeNull();
+    expect(botao("Historico")).not.toBeNull();
+  });
+
+  it("cada acao aparece so quando o servidor a libera naquele item", async () => {
+    listar.mockResolvedValue([assinatura({ can_edit: true, can_delete: false, can_run: false })]);
+    await abrir();
+    await screen.findByText("seg, qua, sex as 08:00");
+
+    expect(botao("Editar")).not.toBeNull();
+    expect(botao("Pausar")).not.toBeNull();
+    expect(botao("Excluir")).toBeNull();
+    expect(botao("Enviar agora")).toBeNull();
+  });
+
+  it("quem criou a assinatura aparece na linha", async () => {
+    listar.mockResolvedValue([assinatura({ created_by_name: "MARIA DA SILVA" })]);
+    await abrir();
+
+    expect(await screen.findByText(/criada por Maria da Silva/)).toBeTruthy();
+  });
+});
