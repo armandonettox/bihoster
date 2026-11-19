@@ -41,6 +41,16 @@ class AccessInviteGrant(Base):
     permission_key = Column(String, nullable=False)
 
 
+class AccessMigrationStep(Base):
+    """Marca de uma etapa de atualizacao de permissoes ja feita (uma linha por etapa), para o boot nao repetir.
+    E tabela nova, entao o create_all() cria sozinho."""
+
+    __tablename__ = "access_migration_steps"
+
+    name = Column(String, primary_key=True)
+    done_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
 class AccessMigrationMark(Base):
     """Marca que a copia dos dados antigos (papel por colecao e permissoes de grupo) ja foi feita.
     Sem isso, reiniciar o servidor devolveria permissoes que o admin tirou na tela nova."""

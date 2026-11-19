@@ -335,8 +335,26 @@ class TestEdicaoPausaEExclusao:
 
         assert resp.status_code == 403
 
-    def test_editor_edita_a_assinatura_criada_por_outra_pessoa_da_mesma_colecao(self, client, cenario):
+    def test_editor_so_edita_o_que_criou_e_nao_o_de_outra_pessoa_da_mesma_colecao(self, client, cenario):
         sub = _criar(client, cenario).json()  # criada pelo admin
+        minha = _criar(client, cenario, headers=cenario.pessoa).json()
+
+        negado = client.put(self._base(cenario, sub), json={"name": "Renomeada"}, headers=cenario.pessoa)
+        feito = client.put(self._base(cenario, minha), json={"name": "Renomeada"}, headers=cenario.pessoa)
+
+        assert negado.status_code == 403
+        assert feito.status_code == 200 and feito.json()["name"] == "Renomeada"
+
+    def test_com_a_permissao_de_editar_as_de_outras_pessoas_edita_a_criada_por_outra(self, client, cenario):
+        from app.core.access_catalog import with_implied
+
+        sub = _criar(client, cenario).json()  # criada pelo admin
+        pessoa_id = next(u["id"] for u in client.get("/users/", headers=cenario.admin).json() if u["email"] == "pessoa@empresa.com")
+        client.put(
+            f"/access/users/{pessoa_id}",
+            json={"blocks": [{"workspace_id": cenario.ws_a["id"], "permissions": with_implied(["assinatura.editar-outras"])}]},
+            headers=cenario.admin,
+        )
 
         resp = client.put(self._base(cenario, sub), json={"name": "Renomeada"}, headers=cenario.pessoa)
 

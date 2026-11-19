@@ -135,7 +135,12 @@ class SubscriptionOut(BaseModel):
     last_message: Optional[str]
     consecutive_failures: int
     created_by_name: Optional[str]
+    created_by_id: Optional[int] = None
     created_at: Optional[UtcDatetime]
+    # O que quem esta olhando pode fazer com esta assinatura (a tela so mostra os botoes permitidos; o servidor confere)
+    can_edit: bool = False
+    can_delete: bool = False
+    can_run: bool = False
 
 
 class SubscriptionRunOut(BaseModel):

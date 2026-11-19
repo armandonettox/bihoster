@@ -50,6 +50,10 @@ class AlertOut(BaseModel):
     collection_id: int
     collection_name: Optional[str] = None
     created_by_name: Optional[str] = None
+    created_by_id: Optional[int] = None
+    # O que quem esta olhando pode fazer com este alerta (a tela so mostra os botoes permitidos; o servidor confere)
+    can_edit: bool = False
+    can_delete: bool = False
     name: Optional[str]
     measure_name: str
     table_name: Optional[str]

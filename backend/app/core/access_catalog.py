@@ -18,6 +18,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - relatorio.editar: PUT do relatório;  relatorio.reordenar: /move;  relatorio.miniatura: /thumbnail
 - assinatura.*: rotas de /subscriptions;  alerta.*: rotas de /alerts
 - relatorio.exportar: /reports/{id}/export-email;  colecao.criar: POST /workspaces;  colecao.todas: GET /workspaces/all
+- assinatura.*-outras e alerta.*-outras: as mesmas rotas, quando o item foi criado por outra pessoa;
 - assinatura.todas: GET /subscriptions (visão do portal todo);  sistema.versao: GET /system/version, /history e /logs
 - membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.adicionar: /users/welcome-email)
 - grupos.*: rotas de /groups (grupos.participantes: /groups/{id}/members);  permissoes.editar: PUT de /access/*
@@ -68,6 +69,8 @@ def _global(key, label, description, section, *, feature=None, requires=()):
 _REPORT_EDIT = ("relatorio-editar", "Editar relatórios", "Mudar um relatório que já existe na coleção.")
 _SUBSCRIPTIONS = ("assinaturas", "Assinaturas por e-mail", "Envio recorrente de relatório por e-mail.")
 _ALERTS = ("alertas", "Alertas de medidas", "Aviso por e-mail quando uma medida passa de um limite.")
+_SUBSCRIPTIONS_OTHERS = ("assinaturas-outras", "Assinaturas de outras pessoas", "Ver e mexer nas assinaturas que outras pessoas criaram.")
+_ALERTS_OTHERS = ("alertas-outras", "Alertas de outras pessoas", "Ver e mexer nos alertas que outras pessoas criaram.")
 _AI_MANAGE = ("ia-gerenciar", "Gerenciar a IA", "Configurar a IA do portal: chaves, modelos, bloqueios e acompanhamento.")
 _ANALYTICS = ("analiticos", "Painel de analíticos", "O painel de análise da auditoria.")
 _MEMBERS = ("membros", "Membros", "Ver e cuidar das pessoas do portal.")
@@ -88,11 +91,11 @@ CATALOG: tuple[Permission, ...] = (
     _workspace("relatorio.excluir", "Excluir relatório", "Remover um relatório da coleção.", "Relatórios"),
     _workspace("relatorio.exportar", "Exportar por e-mail", "Enviar um relatório por e-mail, na hora, em PDF ou imagem.", "Relatórios"),
     _workspace("powerbi.atualizar", "Atualizar dados no Power BI", "Disparar a atualização do conjunto de dados.", "Relatórios"),
-    _workspace("assinatura.ver", "Ver as assinaturas", "Ver quem recebe o quê, e o histórico de envios.", "Envios e alertas", feature=_SUBSCRIPTIONS),
+    _workspace("assinatura.ver", "Ver as minhas assinaturas", "Ver as assinaturas que você criou: quem recebe o quê, e o histórico de envios.", "Envios e alertas", feature=_SUBSCRIPTIONS),
     _workspace("assinatura.criar", "Criar assinaturas", "Cadastrar um envio recorrente novo.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
-    _workspace("assinatura.editar", "Editar assinaturas", "Mudar destinatários, dias e horários.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
-    _workspace("assinatura.excluir", "Excluir assinaturas", "Apagar um envio recorrente.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
-    _workspace("assinatura.executar", "Enviar agora", "Disparar um envio na hora, fora do horário.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
+    _workspace("assinatura.editar", "Editar as minhas assinaturas", "Mudar destinatários, dias e horários das assinaturas que você criou.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
+    _workspace("assinatura.excluir", "Excluir as minhas assinaturas", "Apagar um envio recorrente que você criou.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
+    _workspace("assinatura.executar", "Enviar agora as minhas assinaturas", "Disparar na hora, fora do horário, um envio que você criou.", "Envios e alertas", feature=_SUBSCRIPTIONS, requires=("assinatura.ver",)),
     _workspace(
         "assinatura.qualquer-dominio",
         "Enviar para qualquer domínio",
@@ -101,10 +104,17 @@ CATALOG: tuple[Permission, ...] = (
         feature=_SUBSCRIPTIONS,
         requires=("assinatura.criar",),
     ),
-    _workspace("alerta.ver", "Ver os alertas", "Ver os alertas e as medidas do relatório.", "Envios e alertas", feature=_ALERTS),
+    _workspace("assinatura.ver-outras", "Ver as assinaturas de outras pessoas", "Ver as assinaturas criadas por outras pessoas na coleção.", "Envios e alertas", feature=_SUBSCRIPTIONS_OTHERS, requires=("assinatura.ver",)),
+    _workspace("assinatura.editar-outras", "Editar as assinaturas de outras pessoas", "Mudar destinatários, dias e horários de assinaturas criadas por outras pessoas.", "Envios e alertas", feature=_SUBSCRIPTIONS_OTHERS, requires=("assinatura.editar", "assinatura.ver-outras")),
+    _workspace("assinatura.excluir-outras", "Excluir as assinaturas de outras pessoas", "Apagar um envio recorrente criado por outra pessoa.", "Envios e alertas", feature=_SUBSCRIPTIONS_OTHERS, requires=("assinatura.excluir", "assinatura.ver-outras")),
+    _workspace("assinatura.executar-outras", "Enviar agora as assinaturas de outras pessoas", "Disparar na hora um envio criado por outra pessoa.", "Envios e alertas", feature=_SUBSCRIPTIONS_OTHERS, requires=("assinatura.executar", "assinatura.ver-outras")),
+    _workspace("alerta.ver", "Ver os meus alertas", "Ver os alertas que você criou e as medidas do relatório.", "Envios e alertas", feature=_ALERTS),
     _workspace("alerta.criar", "Criar alertas", "Cadastrar um alerta novo.", "Envios e alertas", feature=_ALERTS, requires=("alerta.ver",)),
-    _workspace("alerta.editar", "Editar alertas", "Mudar o limite e os destinatários.", "Envios e alertas", feature=_ALERTS, requires=("alerta.ver",)),
-    _workspace("alerta.excluir", "Excluir alertas", "Apagar um alerta.", "Envios e alertas", feature=_ALERTS, requires=("alerta.ver",)),
+    _workspace("alerta.editar", "Editar os meus alertas", "Mudar o limite e os destinatários dos alertas que você criou.", "Envios e alertas", feature=_ALERTS, requires=("alerta.ver",)),
+    _workspace("alerta.excluir", "Excluir os meus alertas", "Apagar um alerta que você criou.", "Envios e alertas", feature=_ALERTS, requires=("alerta.ver",)),
+    _workspace("alerta.ver-outras", "Ver os alertas de outras pessoas", "Ver os alertas criados por outras pessoas na coleção.", "Envios e alertas", feature=_ALERTS_OTHERS, requires=("alerta.ver",)),
+    _workspace("alerta.editar-outras", "Editar os alertas de outras pessoas", "Mudar o limite e os destinatários de alertas criados por outras pessoas.", "Envios e alertas", feature=_ALERTS_OTHERS, requires=("alerta.editar", "alerta.ver-outras")),
+    _workspace("alerta.excluir-outras", "Excluir os alertas de outras pessoas", "Apagar um alerta criado por outra pessoa.", "Envios e alertas", feature=_ALERTS_OTHERS, requires=("alerta.excluir", "alerta.ver-outras")),
     _global("ia.usar", "Usar o chat de IA", "Conversar com a IA sobre os dados dos relatórios e ver o próprio histórico.", "Inteligência artificial"),
     _global("ia.chaves", "Configurar chaves e provedores", "Cadastrar, trocar e testar as chaves de API da IA.", "Inteligência artificial", feature=_AI_MANAGE),
     _global("ia.modelos", "Escolher modelos e opções", "Escolher os modelos disponíveis e as opções da IA.", "Inteligência artificial", feature=_AI_MANAGE),
@@ -168,7 +178,21 @@ def _items_of(feature: str) -> tuple[str, ...]:
 # sair do sistema e hoje é só do administrador da plataforma, então o atalho "Administrador" da coleção não o inclui.
 NOT_IN_PRESETS: frozenset[str] = frozenset({"relatorio.exportar"})
 
-# Atalhos da tela: só preenchem caixas, não ficam guardados
+# Cada permissão de assinatura e de alerta vale só para o que a própria pessoa criou; as "-outras" valem para o que outras
+# pessoas criaram. Na atualização, quem já tinha a permissão simples ganha a "-outras" equivalente (ver
+# core/access_migration.py), para ninguém perder acesso.
+OWN_TO_OTHERS: dict[str, str] = {
+    "assinatura.ver": "assinatura.ver-outras",
+    "assinatura.editar": "assinatura.editar-outras",
+    "assinatura.excluir": "assinatura.excluir-outras",
+    "assinatura.executar": "assinatura.executar-outras",
+    "alerta.ver": "alerta.ver-outras",
+    "alerta.editar": "alerta.editar-outras",
+    "alerta.excluir": "alerta.excluir-outras",
+}
+
+# Atalhos da tela: só preenchem caixas, não ficam guardados. O atalho Editor liga só as permissões "minhas": mexer no que
+# outras pessoas criaram se liga à parte. O Administrador da coleção liga tudo.
 PRESETS: dict[str, tuple[str, ...]] = {
     "leitor": (COLLECTION_VIEW,),
     "editor": (

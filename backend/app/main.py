@@ -58,11 +58,12 @@ Base.metadata.create_all(bind=engine)
 ensure_schema_up_to_date(engine, Base)
 
 # Copia, uma vez, os papeis e permissoes antigos para o modelo novo de permissoes (idempotente; ver core/access_migration.py)
-from app.core.access_migration import migrate_legacy_access
+from app.core.access_migration import migrate_legacy_access, migrate_own_scope_split
 from app.core.database import SessionLocal as _SessionLocal
 _seed_db = _SessionLocal()
 try:
     migrate_legacy_access(_seed_db)
+    migrate_own_scope_split(_seed_db)
 finally:
     _seed_db.close()
 

@@ -11,8 +11,8 @@ import logging
 
 from sqlalchemy.orm import Session
 
-from app.core.access_catalog import GLOBAL, LEGACY_EXPANSIONS, PRESETS, scope_of, with_implied
-from app.models.access_grant import AccessGrant, AccessMigrationMark
+from app.core.access_catalog import GLOBAL, LEGACY_EXPANSIONS, OWN_TO_OTHERS, PRESETS, scope_of, with_implied
+from app.models.access_grant import AccessGrant, AccessInviteGrant, AccessMigrationMark, AccessMigrationStep
 from app.models.group_permission import GroupPermission
 from app.models.user import UserRole
 from app.models.workspace import GroupWorkspaceAccess
@@ -51,4 +51,48 @@ def migrate_legacy_access(db: Session) -> int:
     db.add(AccessMigrationMark())
     db.commit()
     logger.warning("Permissoes unificadas: %s linhas copiadas para access_grants", created)
+    return created
+
+
+OWN_SCOPE_STEP = "assinaturas-e-alertas-de-outras-pessoas"
+
+
+def migrate_own_scope_split(db: Session) -> int:
+    """Assinaturas e alertas passaram a ter permissoes separadas para o que a pessoa criou e para o que outras criaram.
+    Antes, quem podia ver, editar, excluir ou enviar agora fazia isso em tudo da colecao. Para ninguem perder acesso,
+    quem tinha cada permissao simples ganha a "-outras" equivalente, uma unica vez (a marca impede de repetir, senao
+    reiniciar o servidor devolveria o que o administrador tirou depois). Vale para grupos, pessoas e convites pendentes.
+    Devolve quantas linhas criou."""
+    if db.get(AccessMigrationStep, OWN_SCOPE_STEP):
+        return 0
+
+    created = 0
+    # So entra a permissao "-outras" equivalente a cada uma que ja tinham, e so se ainda nao tiverem; nada alem disso
+    # (nem o que ela exige: quem tinha a simples ja tinha ver a colecao e as outras exigencias)
+    held = {(row.group_id, row.user_id, row.workspace_id, row.permission_key) for row in db.query(AccessGrant).all()}
+    wanted: dict[tuple, set[str]] = {}
+    for row in db.query(AccessGrant).filter(AccessGrant.permission_key.in_(list(OWN_TO_OTHERS))).all():
+        wanted.setdefault((row.group_id, row.user_id, row.workspace_id), set()).add(OWN_TO_OTHERS[row.permission_key])
+    for (group_id, user_id, workspace_id), keys in wanted.items():
+        for key in sorted(keys):
+            if (group_id, user_id, workspace_id, key) in held:
+                continue
+            db.add(AccessGrant(group_id=group_id, user_id=user_id, workspace_id=workspace_id, permission_key=key))
+            created += 1
+
+    # Permissoes reservadas para quem ainda vai se cadastrar
+    invite_existing = {
+        (row.email, row.workspace_id, row.permission_key)
+        for row in db.query(AccessInviteGrant).filter(AccessInviteGrant.permission_key.in_(list(OWN_TO_OTHERS.values()))).all()
+    }
+    for row in db.query(AccessInviteGrant).filter(AccessInviteGrant.permission_key.in_(list(OWN_TO_OTHERS))).all():
+        key = OWN_TO_OTHERS[row.permission_key]
+        if (row.email, row.workspace_id, key) not in invite_existing:
+            invite_existing.add((row.email, row.workspace_id, key))
+            db.add(AccessInviteGrant(email=row.email, workspace_id=row.workspace_id, permission_key=key))
+            created += 1
+
+    db.add(AccessMigrationStep(name=OWN_SCOPE_STEP))
+    db.commit()
+    logger.warning("Permissoes de assinaturas e alertas de outras pessoas: %s linhas criadas", created)
     return created

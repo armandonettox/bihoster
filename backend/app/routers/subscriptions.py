@@ -12,6 +12,7 @@ from app.core.email_sender import allowed_domains, disallowed_recipients, load_s
 from app.core.rate_limit import limiter
 from app.core.access_deps import require_global_permission, require_workspace_permission
 from app.core.access_engine import can_in_workspace
+from app.core.access_ownership import can_act, require_can_act
 from app.models.report import Report
 from app.models.settings import AppSettings
 from app.models.subscription import ReportSubscription, SubscriptionRun
@@ -44,10 +45,20 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _out(db: Session, sub: ReportSubscription) -> SubscriptionOut:
+def _out(db: Session, sub: ReportSubscription, viewer: Optional[User] = None) -> SubscriptionOut:
     report = db.get(Report, sub.report_id)
     workspace = db.get(Workspace, report.collection_id) if report else None
+    flags = {}
+    if viewer is not None and report is not None:
+        ws = report.collection_id
+        flags = {
+            "can_edit": can_act(db, viewer, ws, sub.created_by_id, "assinatura.editar"),
+            "can_delete": can_act(db, viewer, ws, sub.created_by_id, "assinatura.excluir"),
+            "can_run": can_act(db, viewer, ws, sub.created_by_id, "assinatura.executar"),
+        }
     return SubscriptionOut(
+        **flags,
+        created_by_id=sub.created_by_id,
         id=sub.id,
         report_id=sub.report_id,
         report_name=report.name if report else "(relatorio removido)",
@@ -122,8 +133,15 @@ def _apply_schedule(sub: ReportSubscription) -> None:
         raise HTTPException(status_code=400, detail="O periodo informado ja terminou: nao ha nenhum horario futuro de envio.")
 
 
+def _visible(db: Session, user: User, workspace_id: int, subs: list[ReportSubscription]) -> list[ReportSubscription]:
+    """Sem a permissao de ver as de outras pessoas, so as que a propria pessoa criou."""
+    if can_in_workspace(db, user.id, "assinatura.ver-outras", workspace_id):
+        return subs
+    return [s for s in subs if s.created_by_id == user.id]
+
+
 @router.get("/subscriptions", response_model=list[SubscriptionOut])
-def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))):
+def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))):
     subs = (
         db.query(ReportSubscription)
         .join(Report, Report.id == ReportSubscription.report_id)
@@ -131,16 +149,16 @@ def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db
         .order_by(ReportSubscription.id)
         .all()
     )
-    return [_out(db, s) for s in subs]
+    return [_out(db, s, current_user) for s in _visible(db, current_user, workspace_id, subs)]
 
 
 @router.get("/reports/{report_id}/subscriptions", response_model=list[SubscriptionOut])
 def list_report_subscriptions(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     subs = db.query(ReportSubscription).filter(ReportSubscription.report_id == report.id).order_by(ReportSubscription.id).all()
-    return [_out(db, s) for s in subs]
+    return [_out(db, s, current_user) for s in _visible(db, current_user, workspace_id, subs)]
 
 
 @router.post("/reports/{report_id}/subscriptions", response_model=SubscriptionOut, status_code=201)
@@ -184,12 +202,14 @@ def create_subscription(
         db, action="subscription_created", entity="subscription", user_id=current_user.id, workspace_id=workspace_id,
         entity_id=str(sub.id), details=f"{sub.fmt}, {len(sub.recipients)} destinatario(s), {sched.describe(sub.days, sub.times)}",
     )
-    return _out(db, sub)
+    return _out(db, sub, current_user)
 
 
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionOut)
-def get_subscription(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))):
-    return _out(db, _get_subscription(db, workspace_id, subscription_id))
+def get_subscription(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))):
+    sub = _get_subscription(db, workspace_id, subscription_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.ver", "Voce so ve as assinaturas que voce criou.")
+    return _out(db, sub, current_user)
 
 
 @router.put("/subscriptions/{subscription_id}", response_model=SubscriptionOut)
@@ -201,6 +221,7 @@ def update_subscription(
     current_user: User = Depends(require_workspace_permission("assinatura.editar")),
 ):
     sub = _get_subscription(db, workspace_id, subscription_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.editar", "Voce so edita as assinaturas que voce criou.")
     changes = data.model_dump(exclude_unset=True)
     row = _settings(db)
 
@@ -237,7 +258,7 @@ def update_subscription(
         db, action="subscription_updated", entity="subscription", user_id=current_user.id, workspace_id=workspace_id,
         entity_id=str(sub.id), details=", ".join(sorted(changes.keys())),  # so os nomes dos campos
     )
-    return _out(db, sub)
+    return _out(db, sub, current_user)
 
 
 @router.delete("/subscriptions/{subscription_id}", status_code=204)
@@ -245,6 +266,7 @@ def delete_subscription(
     workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.excluir"))
 ):
     sub = _get_subscription(db, workspace_id, subscription_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.excluir", "Voce so exclui as assinaturas que voce criou.")
     sub_id = sub.id
     db.query(SubscriptionRun).filter(SubscriptionRun.subscription_id == sub_id).delete(synchronize_session=False)
     db.delete(sub)
@@ -268,6 +290,7 @@ def run_subscription_now(
     """Envia agora, fora da agenda (o proximo horario agendado nao muda). O andamento sai em
     /powerbi/export-jobs/{job_id}, o mesmo acompanhamento do envio avulso."""
     sub = _get_subscription(db, workspace_id, subscription_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.executar", "Voce so envia agora as assinaturas que voce criou.")
     _check_recipients(db, current_user, workspace_id, sub.recipients, _settings(db))
     if subscription_runner.is_running(sub.id):
         raise HTTPException(status_code=409, detail="Essa assinatura ja esta sendo enviada. Aguarde terminar.")
@@ -283,8 +306,9 @@ def run_subscription_now(
 
 
 @router.get("/subscriptions/{subscription_id}/runs", response_model=list[SubscriptionRunOut])
-def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))):
+def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))):
     sub = _get_subscription(db, workspace_id, subscription_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.ver", "Voce so ve as assinaturas que voce criou.")
     return (
         db.query(SubscriptionRun)
         .filter(SubscriptionRun.subscription_id == sub.id)

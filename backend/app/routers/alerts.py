@@ -7,6 +7,8 @@ from app.core import powerbi
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.access_deps import require_workspace_permission
+from app.core.access_engine import can_in_workspace
+from app.core.access_ownership import can_act, require_can_act
 from app.models.alert import ALERT_CONDITIONS, ReportAlert
 from app.models.report import Report
 from app.models.user import User
@@ -27,10 +29,18 @@ def _isoformat(dt) -> str | None:
     return dt.isoformat()
 
 
-def _out(db: Session, alert: ReportAlert) -> AlertOut:
+def _out(db: Session, alert: ReportAlert, viewer: User | None = None) -> AlertOut:
     report = db.get(Report, alert.report_id)
     workspace = db.get(Workspace, report.collection_id) if report else None
+    flags = {}
+    if viewer is not None and report is not None:
+        flags = {
+            "can_edit": can_act(db, viewer, report.collection_id, alert.created_by_id, "alerta.editar"),
+            "can_delete": can_act(db, viewer, report.collection_id, alert.created_by_id, "alerta.excluir"),
+        }
     return AlertOut(
+        **flags,
+        created_by_id=alert.created_by_id,
         id=alert.id,
         report_id=alert.report_id,
         report_name=report.name if report else "(relatorio removido)",
@@ -67,11 +77,14 @@ def _get_alert(db: Session, workspace_id: int, alert_id: int) -> ReportAlert:
 
 @router.get("/reports/{report_id}/alerts", response_model=list[AlertOut])
 def list_report_alerts(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("alerta.ver"))
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("alerta.ver"))
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     alerts = db.query(ReportAlert).filter(ReportAlert.report_id == report.id).order_by(ReportAlert.id).all()
-    return [_out(db, a) for a in alerts]
+    # Sem a permissao de ver os de outras pessoas, so os que a propria pessoa criou
+    if not can_in_workspace(db, current_user.id, "alerta.ver-outras", workspace_id):
+        alerts = [a for a in alerts if a.created_by_id == current_user.id]
+    return [_out(db, a, current_user) for a in alerts]
 
 
 @router.get("/reports/{report_id}/measures", response_model=list[MeasureOut])
@@ -129,7 +142,7 @@ def create_alert(
     log_action(db, action="alert_created", entity="alert", user_id=current_user.id,
                workspace_id=workspace_id, entity_id=str(alert.id),
                details=f"{alert.measure_name} {alert.condition} {alert.threshold:g}")
-    return _out(db, alert)
+    return _out(db, alert, current_user)
 
 
 @router.put("/alerts/{alert_id}", response_model=AlertOut)
@@ -141,6 +154,7 @@ def update_alert(
     current_user: User = Depends(require_workspace_permission("alerta.editar")),
 ):
     alert = _get_alert(db, workspace_id, alert_id)
+    require_can_act(db, current_user, workspace_id, alert.created_by_id, "alerta.editar", "Voce so edita os alertas que voce criou.")
     changes = data.model_dump(exclude_unset=True)
     if "recipients" in changes:
         alert.recipients = changes.pop("recipients")
@@ -151,7 +165,7 @@ def update_alert(
     log_action(db, action="alert_updated", entity="alert", user_id=current_user.id,
                workspace_id=workspace_id, entity_id=str(alert_id),
                details=", ".join(sorted(changes.keys())))
-    return _out(db, alert)
+    return _out(db, alert, current_user)
 
 
 @router.delete("/alerts/{alert_id}", status_code=204)
@@ -159,6 +173,7 @@ def delete_alert(
     workspace_id: int, alert_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("alerta.excluir"))
 ):
     alert = _get_alert(db, workspace_id, alert_id)
+    require_can_act(db, current_user, workspace_id, alert.created_by_id, "alerta.excluir", "Voce so exclui os alertas que voce criou.")
     db.delete(alert)
     db.commit()
     log_action(db, action="alert_deleted", entity="alert", user_id=current_user.id,
