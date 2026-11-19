@@ -1,13 +1,38 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as authApi from "../api/auth";
+import * as extensionsApi from "../api/accessExtensions";
+import type { ExtensionRequest } from "../api/accessExtensions";
+import OutsideHoursScreen from "./OutsideHoursScreen";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { OUTSIDE_HOURS_EVENT, formatNextOpen, outsideHoursFrom } from "../utils/outsideHours";
 import type { OutsideHoursInfo } from "../utils/outsideHours";
 
 vi.mock("../api/auth", () => ({ me: vi.fn(), refreshSession: vi.fn(), login: vi.fn(), loginWithGoogle: vi.fn(), updateName: vi.fn(), changePassword: vi.fn() }));
 
+vi.mock("../api/accessExtensions", () => ({ getMyRequest: vi.fn(), requestMoreTime: vi.fn() }));
+
 const me = vi.mocked(authApi.me);
+const getMyRequest = vi.mocked(extensionsApi.getMyRequest);
+const requestMoreTime = vi.mocked(extensionsApi.requestMoreTime);
+
+function pedido(extra: Partial<ExtensionRequest> = {}): ExtensionRequest {
+  return {
+    id: 1,
+    user_id: 7,
+    user_name: "Ana",
+    user_email: "ana@x.com",
+    reason: "Fechar o relatorio",
+    status: "pending",
+    created_at: "2026-11-21T13:00:00Z",
+    decided_at: null,
+    decided_by_name: null,
+    note: null,
+    grant_until: null,
+    active: false,
+    ...extra,
+  };
+}
 
 const INFO: OutsideHoursInfo = {
   code: "outside_hours",
@@ -23,6 +48,9 @@ function App() {
 }
 
 beforeEach(() => {
+  getMyRequest.mockReset();
+  requestMoreTime.mockReset();
+  getMyRequest.mockResolvedValue(null);
   me.mockReset();
   localStorage.clear();
   localStorage.setItem("token", "abc");
@@ -93,5 +121,74 @@ describe("AuthProvider fora do horario", () => {
 
     expect(await screen.findByText("Fora do horário de acesso")).toBeTruthy();
     expect(localStorage.getItem("token")).toBe("abc");
+  });
+});
+
+describe("OutsideHoursScreen - pedir mais tempo", () => {
+  const abrir = (extra: Partial<React.ComponentProps<typeof OutsideHoursScreen>> = {}) =>
+    render(<OutsideHoursScreen info={INFO} onRetry={vi.fn()} onLeave={vi.fn()} pollMs={20} {...extra} />);
+
+  it("sem pedido aberto mostra o campo do motivo e o botao so liga com o motivo escrito", async () => {
+    abrir();
+    const botao = (await screen.findByRole("button", { name: "Pedir mais tempo" })) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText("Motivo do pedido"), { target: { value: "ab" } });
+    expect(botao.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText("Motivo do pedido"), { target: { value: "Preciso fechar o mes" } });
+    expect(botao.disabled).toBe(false);
+  });
+
+  it("envia o pedido e passa a mostrar que esta aguardando", async () => {
+    requestMoreTime.mockResolvedValue(pedido({ reason: "Preciso fechar o mes" }));
+    abrir();
+    fireEvent.change(await screen.findByLabelText("Motivo do pedido"), { target: { value: "  Preciso fechar o mes  " } });
+    fireEvent.click(screen.getByRole("button", { name: "Pedir mais tempo" }));
+
+    await waitFor(() => expect(requestMoreTime).toHaveBeenCalledWith("Preciso fechar o mes"));
+    expect(await screen.findByText("Pedido enviado")).toBeTruthy();
+    expect(screen.queryByLabelText("Motivo do pedido")).toBeNull();
+  });
+
+  it("mostra a mensagem do servidor quando o pedido falha", async () => {
+    requestMoreTime.mockRejectedValue({ response: { data: { detail: "Você está dentro do horário de acesso." } } });
+    abrir();
+    fireEvent.change(await screen.findByLabelText("Motivo do pedido"), { target: { value: "Preciso fechar o mes" } });
+    fireEvent.click(screen.getByRole("button", { name: "Pedir mais tempo" }));
+
+    expect(await screen.findByText("Você está dentro do horário de acesso.")).toBeTruthy();
+  });
+
+  it("com pedido aberto ao abrir a tela, ja mostra aguardando", async () => {
+    getMyRequest.mockResolvedValue(pedido());
+    abrir();
+
+    expect(await screen.findByText("Pedido enviado")).toBeTruthy();
+    expect(screen.getByText(/Fechar o relatorio/)).toBeTruthy();
+  });
+
+  it("entra sozinha quando o pedido e aprovado", async () => {
+    const onRetry = vi.fn();
+    getMyRequest.mockResolvedValueOnce(pedido()).mockResolvedValue(pedido({ status: "approved", active: true, grant_until: "2026-11-21T15:00:00Z" }));
+    abrir({ onRetry });
+
+    await waitFor(() => expect(onRetry).toHaveBeenCalled());
+  });
+
+  it("pedido recusado mostra quem recusou e o motivo, e deixa pedir de novo", async () => {
+    getMyRequest.mockResolvedValue(pedido({ status: "denied", decided_by_name: "MARIA DA SILVA", note: "Fecha amanha" }));
+    abrir();
+
+    expect(await screen.findByText(/recusado por Maria da Silva: Fecha amanha/)).toBeTruthy();
+    expect(screen.getByLabelText("Motivo do pedido")).toBeTruthy();
+  });
+
+  it("liberacao que ja acabou nao entra sozinha e deixa pedir de novo", async () => {
+    const onRetry = vi.fn();
+    getMyRequest.mockResolvedValue(pedido({ status: "approved", active: false, grant_until: "2026-11-21T14:00:00Z" }));
+    abrir({ onRetry });
+
+    expect(await screen.findByText("A liberação do seu último pedido terminou.")).toBeTruthy();
+    expect(onRetry).not.toHaveBeenCalled();
   });
 });

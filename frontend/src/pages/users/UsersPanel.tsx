@@ -31,6 +31,7 @@ import KebabMenu from "../../components/KebabMenu";
 import MenuIcon from "../../components/MenuIcon";
 import UserAvatar from "../../components/UserAvatar";
 import ScheduleEditor from "../../components/ScheduleEditor";
+import AccessRequestsPanel from "../../components/AccessRequestsPanel";
 import { formatPersonName } from "../../utils/personName";
 import TablePagination from "../../components/TablePagination";
 import { extractErrorMessage } from "../../api/client";
@@ -605,6 +606,8 @@ export default function UsersPanel() {
           </button>
         )}
       </div>
+
+      <AccessRequestsPanel timezone={settings?.timezone} />
 
       <div className="access-view-toggle" role="group" aria-label="Ver permissões">
         <button

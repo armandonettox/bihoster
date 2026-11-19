@@ -5076,3 +5076,39 @@ table.table tr:last-child td {
   font-size: 14px;
   line-height: 1.6;
 }
+
+/* --- Pedidos de mais tempo de acesso: painel de quem aprova e pedido na tela de fora do horario --- */
+
+.access-requests {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.access-request {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding-top: 8px;
+  border-top: 1px solid var(--color-border);
+}
+
+.outside-hours-request {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 12px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.outside-hours-request textarea.input {
+  resize: vertical;
+}

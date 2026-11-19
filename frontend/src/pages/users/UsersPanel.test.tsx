@@ -28,6 +28,7 @@ vi.mock("../../api/users", () => ({
 }));
 vi.mock("../../api/emailSettings", () => ({ getEmailStatus: vi.fn() }));
 vi.mock("../../api/schedules", () => ({ getSchedule: vi.fn(), setSchedule: vi.fn() }));
+vi.mock("../../api/accessExtensions", () => ({ listExtensionRequests: vi.fn().mockResolvedValue([]) }));
 vi.mock("../../api/groups", () => ({
   listGroups: vi.fn(),
   createGroup: vi.fn(),
