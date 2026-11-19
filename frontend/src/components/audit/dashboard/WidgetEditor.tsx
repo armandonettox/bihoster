@@ -1,3 +1,4 @@
+import { formatPersonName } from "../../../utils/personName";
 import { useState } from "react";
 import type {
   AuditFilters,
@@ -154,7 +155,7 @@ export default function WidgetEditor({ initial, filters, options = null, summary
                 <p className="editor-note">Valem junto com os filtros da pagina. Nada marcado nao filtra.</p>
                 <MultiSelect
                   label="Pessoa"
-                  options={(options?.users ?? []).map((u) => ({ value: String(u.id), label: u.name, hint: u.email }))}
+                  options={(options?.users ?? []).map((u) => ({ value: String(u.id), label: formatPersonName(u.name), hint: u.email }))}
                   selected={(own.user_id ?? []).map(String)}
                   onChange={(next) => setOwn({ ...own, user_id: next.map(Number) })}
                 />

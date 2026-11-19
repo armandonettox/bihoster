@@ -1607,3 +1607,23 @@ describe("UsersPanel - bloquear e e-mails de conta", () => {
     expect(screen.getByText(/configure o servidor de e-mail/i)).toBeTruthy();
   });
 });
+
+describe("UsersPanel - nome formatado e foto", () => {
+  it("o nome aparece com a primeira letra de cada nome em maiuscula e o resto em minuscula", async () => {
+    await abrir([pessoa(1), { ...pessoa(2), name: "MARIA DA SILVA" }, { ...pessoa(3), name: "joão pedro" }]);
+
+    const nomes = nomesNaTabela().join("|");
+    expect(nomes).toContain("Maria da Silva");
+    expect(nomes).toContain("João Pedro");
+    expect(nomes).not.toContain("MARIA DA SILVA");
+  });
+
+  it("mostra a foto de quem tem e as iniciais de quem nao tem", async () => {
+    await abrir([pessoa(1), { ...pessoa(2), picture_url: "/static/uploads/avatar-2.jpg" }]);
+
+    expect(linha("pessoa2@exemplo.com").querySelector("img")?.getAttribute("src")).toContain("avatar-2.jpg");
+    const semFoto = linha("pessoa1@exemplo.com");
+    expect(semFoto.querySelector("img")).toBeNull();
+    expect(semFoto.querySelector(".user-avatar")?.textContent).toBe("PE");
+  });
+});

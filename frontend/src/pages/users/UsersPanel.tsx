@@ -29,6 +29,8 @@ import type { AccessSummary } from "../../utils/accessInherited";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import KebabMenu from "../../components/KebabMenu";
 import MenuIcon from "../../components/MenuIcon";
+import UserAvatar from "../../components/UserAvatar";
+import { formatPersonName } from "../../utils/personName";
 import TablePagination from "../../components/TablePagination";
 import { extractErrorMessage } from "../../api/client";
 
@@ -156,7 +158,7 @@ function GroupsCell({
 }) {
   return (
     <GroupsDropdown
-      owner={user.name}
+      owner={formatPersonName(user.name)}
       summary={summarizeGroups(user.groups)}
       groups={groups}
       isMember={(g) => user.groups.some((ug) => ug.id === g.id)}
@@ -392,7 +394,7 @@ export default function UsersPanel() {
       if (block) await usersApi.blockUser(user.id);
       else await usersApi.unblockUser(user.id);
       await load();
-      showToast(block ? `${user.name} foi bloqueado.` : `${user.name} foi desbloqueado.`);
+      showToast(block ? `${formatPersonName(user.name)} foi bloqueado.` : `${formatPersonName(user.name)} foi desbloqueado.`);
     } catch (err: any) {
       showToast(extractErrorMessage(err) || "Não foi possível alterar o bloqueio.", "error");
     }
@@ -817,8 +819,8 @@ export default function UsersPanel() {
                 <tr key={row.user.id}>
                   <td>
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                      <div className="user-avatar">{initials(row.user.name)}</div>
-                      {row.user.name}
+                      <UserAvatar name={row.user.name} pictureUrl={row.user.picture_url} />
+                      {formatPersonName(row.user.name)}
                       {row.user.id === currentUser?.id && (
                         <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>(você)</span>
                       )}
@@ -1050,7 +1052,8 @@ export default function UsersPanel() {
         >
           <AccessHero
             initials={initials(editingAccessUser.name)}
-            name={editingAccessUser.name}
+            pictureUrl={editingAccessUser.picture_url}
+            name={formatPersonName(editingAccessUser.name)}
             subtitle={editingAccessUser.email}
             tagsLabel="Grupos"
             // O grupo padrão é de todo mundo: só aparece quando a pessoa não tem outro
@@ -1088,7 +1091,7 @@ export default function UsersPanel() {
       {confirmingRemoveUser && (
         <ConfirmDialog
           title="Remover membro"
-          message={`Remover ${confirmingRemoveUser.name} do sistema? A conta, os grupos e os favoritos da pessoa são apagados. Essa ação não pode ser desfeita.`}
+          message={`Remover ${formatPersonName(confirmingRemoveUser.name)} do sistema? A conta, os grupos e os favoritos da pessoa são apagados. Essa ação não pode ser desfeita.`}
           confirmLabel="Remover"
           onConfirm={() => {
             const userId = confirmingRemoveUser.id;
@@ -1102,7 +1105,7 @@ export default function UsersPanel() {
       {confirmingBlockUser && (
         <ConfirmDialog
           title="Bloquear pessoa"
-          message={`Bloquear ${confirmingBlockUser.name}? Ela não consegue mais entrar e a sessão aberta é encerrada na hora. Nada é apagado e dá para desbloquear depois.`}
+          message={`Bloquear ${formatPersonName(confirmingBlockUser.name)}? Ela não consegue mais entrar e a sessão aberta é encerrada na hora. Nada é apagado e dá para desbloquear depois.`}
           confirmLabel="Bloquear"
           onConfirm={() => {
             const user = confirmingBlockUser;

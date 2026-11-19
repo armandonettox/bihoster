@@ -1,3 +1,4 @@
+import { formatPersonName } from "../utils/personName";
 import { useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useBranding } from "../context/BrandingContext";
@@ -47,7 +48,7 @@ export default function Home() {
   return (
     <div>
       <div className="settings-header">
-        <h1>Ola, {firstName(user?.name) || "tudo bem"}</h1>
+        <h1>Ola, {firstName(formatPersonName(user?.name ?? "")) || "tudo bem"}</h1>
         <p>Suas colecoes, recomendacoes e relatorios recentes.</p>
       </div>
       <HomeDashboard />

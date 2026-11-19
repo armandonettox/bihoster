@@ -1,3 +1,4 @@
+import { formatPersonName } from "../utils/personName";
 import { lazy, Suspense } from "react";
 import { useAuth } from "../context/AuthContext";
 import PageLoading from "../components/PageLoading";
@@ -11,7 +12,7 @@ export default function AnalyticsOnly() {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "flex-end", alignItems: "center", gap: 12, padding: "12px 24px" }}>
-        <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{user?.name}</span>
+        <span style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{formatPersonName(user?.name ?? "")}</span>
         <button type="button" className="btn btn-ghost btn-sm" onClick={logout}>
           Sair
         </button>

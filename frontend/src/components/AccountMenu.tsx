@@ -1,3 +1,4 @@
+import { formatPersonName } from "../utils/personName";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useDropdownMenu } from "../hooks/useDropdownMenu";
@@ -29,7 +30,7 @@ export default function AccountMenu() {
             <UserAvatar name={user?.name} pictureUrl={user?.picture_url} />
             <div style={{ minWidth: 0 }}>
               <div className="user-name" style={{ maxWidth: 200 }}>
-                {user?.name}
+                {formatPersonName(user?.name ?? "")}
               </div>
               <div className="account-menu-email">{user?.email}</div>
             </div>

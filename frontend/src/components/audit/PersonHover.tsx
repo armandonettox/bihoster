@@ -1,3 +1,4 @@
+import { formatPersonName } from "../../utils/personName";
 import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import type { AuditPerson } from "../../api/audit";
@@ -30,7 +31,7 @@ export default function PersonHover({ name, email, person, timezone, onFilter }:
   const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [anchor, setAnchor] = useState<{ top: number; left: number } | null>(null);
 
-  const label = name || email;
+  const label = name ? formatPersonName(name) : email;
 
   function cancelClose() {
     if (closeTimer.current) clearTimeout(closeTimer.current);
@@ -103,7 +104,7 @@ export default function PersonHover({ name, email, person, timezone, onFilter }:
             <div className="person-card-head">
               <UserAvatar name={name ?? email ?? undefined} pictureUrl={person?.picture_url} large />
               <div className="person-card-id">
-                <strong>{name ?? "Usuario removido"}</strong>
+                <strong>{name ? formatPersonName(name) : "Usuario removido"}</strong>
                 {email && <span className="person-card-email">{email}</span>}
               </div>
             </div>

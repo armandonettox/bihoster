@@ -1,3 +1,4 @@
+import { formatPersonName } from "../utils/personName";
 import { useState, type FormEvent } from "react";
 import * as workspacesApi from "../api/workspaces";
 import { useAccess } from "../context/AccessContext";
@@ -39,7 +40,7 @@ export default function WorkspaceOnboarding() {
         ) : (
           <DefaultBrandLogo className="auth-logo" />
         )}
-        <h1 className="auth-title">Bem-vindo, {user?.name}</h1>
+        <h1 className="auth-title">Bem-vindo, {formatPersonName(user?.name ?? "")}</h1>
 
         {canCreateCollection ? (
           <form onSubmit={handleSubmit}>

@@ -1,3 +1,4 @@
+import { formatPersonName } from "../../../utils/personName";
 import { useEffect, useState } from "react";
 import {
   queryAudit,
@@ -157,7 +158,7 @@ function SummaryBody({ widget, summary, pick }: { widget: DashboardWidget; summa
         <p className="audit-empty">Sem dados.</p>
       ) : (
         <BarList
-          items={summary.top_users.map((u) => ({ key: String(u.user_id), label: u.name, value: u.count, hint: u.email ?? undefined }))}
+          items={summary.top_users.map((u) => ({ key: String(u.user_id), label: formatPersonName(u.name), value: u.count, hint: u.email ?? undefined }))}
           unit={(n) => plural(n, "evento", "eventos")}
           {...pick}
         />

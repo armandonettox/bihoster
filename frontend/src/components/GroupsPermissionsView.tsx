@@ -1,3 +1,4 @@
+import { formatPersonName } from "../utils/personName";
 import { useState } from "react";
 import type { GroupGrants } from "../api/access";
 import { extractErrorMessage } from "../api/client";
@@ -253,7 +254,7 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
                     style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "6px 0", fontSize: 13 }}
                   >
                     <span>
-                      {user.name} <span style={{ color: "var(--color-text-muted)" }}>({user.email})</span>
+                      {formatPersonName(user.name)} <span style={{ color: "var(--color-text-muted)" }}>({user.email})</span>
                     </span>
                     {canTakeOut(editing) && (
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => setConfirmingRemove({ group: editing, user })}>
@@ -307,7 +308,7 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
       {confirmingRemove && (
         <ConfirmDialog
           title="Remover do grupo"
-          message={`Remover ${confirmingRemove.user.name} do grupo?`}
+          message={`Remover ${formatPersonName(confirmingRemove.user.name)} do grupo?`}
           confirmLabel="Remover"
           onConfirm={() => {
             const { group, user } = confirmingRemove;

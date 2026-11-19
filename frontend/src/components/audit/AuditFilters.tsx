@@ -1,3 +1,4 @@
+import { formatPersonName } from "../../utils/personName";
 import type { AuditOptions } from "../../api/audit";
 import MultiSelect from "../MultiSelect";
 import { DEFAULT_FILTERS, type AuditFilterState } from "../../utils/auditFilterState";
@@ -63,7 +64,7 @@ export default function AuditFilters({ value, options, onChange }: Props) {
         )}
         <MultiSelect
           label="Pessoa"
-          options={(options?.users ?? []).map((u) => ({ value: String(u.id), label: u.name, hint: u.email }))}
+          options={(options?.users ?? []).map((u) => ({ value: String(u.id), label: formatPersonName(u.name), hint: u.email }))}
           selected={value.userIds}
           onChange={(userIds) => set({ userIds })}
         />

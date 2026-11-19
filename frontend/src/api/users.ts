@@ -14,6 +14,7 @@ export interface UserDirectoryEntry {
   groups: UserGroup[];
   last_login: string | null;
   is_blocked: boolean;
+  picture_url?: string | null;
 }
 
 export async function listUsers(): Promise<UserDirectoryEntry[]> {

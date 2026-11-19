@@ -1,3 +1,4 @@
+import { formatPersonName } from "../../utils/personName";
 import { useEffect, useState } from "react";
 import * as subscriptionsApi from "../../api/subscriptions";
 import type { Subscription } from "../../api/subscriptions";
@@ -100,7 +101,7 @@ export default function SubscriptionsTab() {
                       {s.enabled ? "Ativa" : "Pausada"}
                     </span>
                   </td>
-                  <td style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{s.created_by_name ?? "--"}</td>
+                  <td style={{ fontSize: 13, color: "var(--color-text-muted)" }}>{s.created_by_name ? formatPersonName(s.created_by_name) : "--"}</td>
                 </tr>
               ))}
             </tbody>

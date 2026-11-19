@@ -1,3 +1,4 @@
+import { formatPersonName } from "../../utils/personName";
 import { useState, type FormEvent } from "react";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
@@ -84,7 +85,7 @@ export default function AccountTab() {
       <div className="account-identity">
         <UserAvatar name={user?.name} pictureUrl={user?.picture_url} large />
         <div>
-          <div style={{ fontWeight: 600, fontSize: 16 }}>{user?.name}</div>
+          <div style={{ fontWeight: 600, fontSize: 16 }}>{formatPersonName(user?.name ?? "")}</div>
           <div style={{ color: "var(--color-text-muted)", fontSize: 13 }}>{user?.email}</div>
           {viaGoogle && (
             <span className="account-provider-badge" title="O login desta conta e feito pelo Google">

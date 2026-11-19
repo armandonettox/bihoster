@@ -1,3 +1,5 @@
+import UserAvatar from "./UserAvatar";
+
 export interface HeroStat {
   label: string;
   value: string;
@@ -12,7 +14,10 @@ export default function AccessHero({
   tags = [],
   tagsLabel,
   stats,
+  pictureUrl,
 }: {
+  /** Foto da pessoa; sem ela (ou se falhar), valem as iniciais */
+  pictureUrl?: string | null;
   initials: string;
   name: string;
   subtitle?: string;
@@ -24,9 +29,13 @@ export default function AccessHero({
   return (
     <section className="access-hero" aria-label={`Resumo de ${name}`}>
       <div className="access-hero-top">
-        <div className="user-avatar access-hero-avatar" aria-hidden="true">
-          {initials}
-        </div>
+        {pictureUrl ? (
+          <UserAvatar name={initials} pictureUrl={pictureUrl} className="access-hero-avatar" />
+        ) : (
+          <div className="user-avatar access-hero-avatar" aria-hidden="true">
+            {initials}
+          </div>
+        )}
         <div className="access-hero-id">
           <strong>{name}</strong>
           {subtitle && <span>{subtitle}</span>}
