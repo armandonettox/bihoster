@@ -19,14 +19,8 @@ export interface WorkspaceInput {
   icon?: string | null;
   color?: string | null;
   tv_interval_seconds?: number;
-}
-
-export interface AccessEntry {
-  group_id: number;
-  group_name: string;
-  is_default: boolean;
-  is_admin_group: boolean;
-  role: UserRole | null;
+  /** Ao criar: toda colecao nova pode ser vista por todas as pessoas, a nao ser que seja desligado (colecao privada) */
+  everyone_can_view?: boolean;
 }
 
 export async function listWorkspaces(): Promise<Workspace[]> {
@@ -51,19 +45,4 @@ export async function updateWorkspace(id: number, input: Partial<WorkspaceInput>
 
 export async function deleteWorkspace(id: number): Promise<void> {
   await api.delete(`/workspaces/${id}`);
-}
-
-export async function getWorkspaceAccess(workspaceId: number): Promise<AccessEntry[]> {
-  const { data } = await api.get(`/workspaces/${workspaceId}/access`);
-  return data;
-}
-
-export async function setWorkspaceAccess(workspaceId: number, groupId: number, role: UserRole): Promise<AccessEntry> {
-  const { data } = await api.put(`/workspaces/${workspaceId}/access/${groupId}`, { role });
-  return data;
-}
-
-export async function removeWorkspaceAccess(workspaceId: number, groupId: number): Promise<AccessEntry> {
-  const { data } = await api.delete(`/workspaces/${workspaceId}/access/${groupId}`);
-  return data;
 }

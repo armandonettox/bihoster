@@ -7,6 +7,7 @@ import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
 import * as workspacesApi from "../api/workspaces";
 import type { Workspace } from "../api/workspaces";
+import { AccessContext, buildAccess } from "../context/AccessContext";
 import { makeReport, makeWorkspace } from "../test-fixtures";
 import { preloadPowerBi } from "../utils/powerbiService";
 import CollectionHome from "./CollectionHome";
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   showToast: vi.fn(),
   toggleFavorite: vi.fn(),
   podeEnviarPorEmail: false,
+  permissoes: [] as string[],
 }));
 
 vi.mock("../context/WorkspaceContext", () => ({
@@ -87,20 +89,45 @@ function PaginaDoRelatorio() {
   return <div data-testid="pagina-relatorio">{`${workspaceId}/${reportId}`}</div>;
 }
 
+// O que cada papel antigo faz, escrito como as permissoes de hoje: a pagina decide por elas, nao pelo papel
+const DO_EDITOR = [
+  "relatorio.publicar",
+  "relatorio.editar",
+  "relatorio.reordenar",
+  "relatorio.miniatura",
+  "relatorio.excluir",
+  "powerbi.atualizar",
+];
+const PERMISSOES_POR_PAPEL: Record<Workspace["role"], string[]> = {
+  viewer: ["colecao.ver"],
+  editor: ["colecao.ver", ...DO_EDITOR],
+  admin: ["colecao.ver", ...DO_EDITOR, "colecao.editar", "colecao.excluir", "colecao.auditoria"],
+};
+
 /** A colecao dentro de um roteador de memoria, com a rota da pagina de tela cheia do relatorio */
 function montar(entrada: string | { pathname: string; state?: unknown } = "/collection") {
+  const acesso = buildAccess({ is_admin: false, global_permissions: [], workspace_permissions: { "3": mocks.permissoes } });
   return (
-    <MemoryRouter initialEntries={[entrada]}>
-      <Routes>
-        <Route path="/collection" element={<CollectionHome />} />
-        <Route path="/collection/:workspaceId/report/:reportId" element={<PaginaDoRelatorio />} />
-      </Routes>
-    </MemoryRouter>
+    <AccessContext.Provider value={acesso}>
+      <MemoryRouter initialEntries={[entrada]}>
+        <Routes>
+          <Route path="/collection" element={<CollectionHome />} />
+          <Route path="/collection/:workspaceId/report/:reportId" element={<PaginaDoRelatorio />} />
+        </Routes>
+      </MemoryRouter>
+    </AccessContext.Provider>
   );
 }
 
 function comRole(role: Workspace["role"]) {
   mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role, tv_interval_seconds: 15 });
+  mocks.permissoes = PERMISSOES_POR_PAPEL[role];
+}
+
+/** A colecao com so as permissoes escolhidas (alem de ver a colecao) */
+function comPermissoes(...chaves: string[]) {
+  mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role: "viewer", tv_interval_seconds: 15 });
+  mocks.permissoes = ["colecao.ver", ...chaves];
 }
 
 async function renderLoaded() {
@@ -447,5 +474,98 @@ describe("CollectionHome - tempo do Modo TV", () => {
 
     await waitFor(() => expect(updateWorkspace).toHaveBeenCalledWith(3, { tv_interval_seconds: 30 }));
     await waitFor(() => expect(mocks.reload).toHaveBeenCalled());
+  });
+});
+
+describe("CollectionHome - cada acao pela sua permissao", () => {
+  // O menu da colecao e o primeiro "Mais opcoes" da pagina; os menus dos relatorios vem depois
+  const menuDaColecao = () => fireEvent.click(screen.getAllByLabelText("Mais opcoes")[0]);
+  const menuDoPrimeiroRelatorio = () => fireEvent.click(screen.getAllByLabelText("Mais opcoes")[1]);
+  const botao = (nome: string) => screen.queryByRole("button", { name: nome });
+
+  it("so publicar mostra Adicionar e nao mostra Editar colecao", async () => {
+    comPermissoes("relatorio.publicar");
+    await renderLoaded();
+    menuDaColecao();
+
+    expect(botao("+ Adicionar")).not.toBeNull();
+    expect(botao("Editar colecao")).toBeNull();
+  });
+
+  it("so editar a colecao mostra Editar colecao e nao mostra Adicionar", async () => {
+    comPermissoes("colecao.editar");
+    await renderLoaded();
+    menuDaColecao();
+
+    expect(botao("Editar colecao")).not.toBeNull();
+    expect(botao("+ Adicionar")).toBeNull();
+  });
+
+  it("so editar um relatorio mostra Editar no menu dele, sem Excluir nem miniatura", async () => {
+    comPermissoes("relatorio.editar");
+    await renderLoaded();
+    menuDoPrimeiroRelatorio();
+
+    expect(botao("Editar")).not.toBeNull();
+    expect(botao("Excluir")).toBeNull();
+    expect(botao("Atualizar miniatura")).toBeNull();
+  });
+
+  it("so excluir mostra Excluir no menu do relatorio, sem Editar", async () => {
+    comPermissoes("relatorio.excluir");
+    await renderLoaded();
+    menuDoPrimeiroRelatorio();
+
+    expect(botao("Excluir")).not.toBeNull();
+    expect(botao("Editar")).toBeNull();
+  });
+
+  it("so a miniatura mostra Atualizar miniatura, sem Editar nem Excluir", async () => {
+    comPermissoes("relatorio.miniatura");
+    await renderLoaded();
+    menuDoPrimeiroRelatorio();
+
+    expect(botao("Atualizar miniatura")).not.toBeNull();
+    expect(botao("Editar")).toBeNull();
+    expect(botao("Excluir")).toBeNull();
+  });
+
+  it("so reordenar mostra os botoes de mover, e nenhuma outra acao", async () => {
+    comPermissoes("relatorio.reordenar");
+    await renderLoaded();
+
+    expect(screen.getByLabelText("Mover Apresentacao A para baixo")).toBeTruthy();
+    menuDoPrimeiroRelatorio();
+    expect(botao("Editar")).toBeNull();
+    expect(botao("Excluir")).toBeNull();
+  });
+
+  it("editar relatorios nao libera os botoes de mover", async () => {
+    comPermissoes("relatorio.editar", "relatorio.excluir", "relatorio.miniatura");
+    await renderLoaded();
+
+    expect(screen.queryByLabelText(/^Mover /)).toBeNull();
+  });
+
+  it("o campo de tempo da TV e de quem pode editar a colecao", async () => {
+    comPermissoes("relatorio.editar", "relatorio.reordenar");
+    await renderLoaded();
+    expect(screen.queryByLabelText("Tempo (s)")).toBeNull();
+
+    comPermissoes("colecao.editar");
+    const outra = await renderLoaded();
+    outra.unmount();
+    await renderLoaded();
+    expect(screen.getByLabelText("Tempo (s)")).toBeTruthy();
+  });
+
+  it("a permissao dada em outra colecao nao vale nesta", async () => {
+    mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role: "viewer", tv_interval_seconds: 15 });
+    mocks.permissoes = ["colecao.ver"];
+    await renderLoaded();
+
+    fireEvent.click(screen.getAllByLabelText("Mais opcoes")[0]);
+    expect(botao("+ Adicionar")).toBeNull();
+    expect(botao("Editar colecao")).toBeNull();
   });
 });

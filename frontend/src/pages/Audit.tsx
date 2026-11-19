@@ -4,7 +4,7 @@ import { getAuditOptions, type AuditFilters, type AuditOptions } from "../api/au
 import AuditAnalytics from "../components/audit/AuditAnalytics";
 import AuditFiltersBar from "../components/audit/AuditFilters";
 import AuditTable from "../components/audit/AuditTable";
-import { useAuth } from "../context/AuthContext";
+import { useAccess } from "../context/AccessContext";
 import { useBranding } from "../context/BrandingContext";
 import { useAnalyticsAccess } from "../hooks/useAnalyticsAccess";
 import { useUrlTab } from "../hooks/useUrlTab";
@@ -18,16 +18,22 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "analytics", label: "Analiticos", icon: "monitoring" },
 ];
 
-/** Pagina propria da auditoria (so administrador da plataforma): tabela com busca e analiticos,
- * as duas abas com os mesmos filtros. */
+/** Pagina propria da auditoria: tabela de registros com busca (quem pode ver o log geral) e analiticos (quem pode ver os
+ * analiticos), as duas abas com os mesmos filtros. Cada aba aparece so para quem tem o item dela. */
 export default function Audit() {
-  const { user } = useAuth();
+  const access = useAccess();
   const { settings } = useBranding();
   const analytics = useAnalyticsAccess();
-  const isAdmin = user?.is_platform_admin === true;
-  const [storedTab, setTab] = useUrlTab<Tab>(["records", "analytics"], "records", { storageKey: "audit_tab" });
-  // Quem so tem a permissao de ver os analiticos nao tem a tabela de registros
-  const tab: Tab = isAdmin ? storedTab : "analytics";
+  const canRecords = access.can("auditoria.ver");
+  const canAnalytics = analytics.canView;
+  const allowedTabs = TABS.filter((t) => (t.key === "records" ? canRecords : canAnalytics));
+  const [storedTab, setTab] = useUrlTab<Tab>(
+    allowedTabs.map((t) => t.key),
+    allowedTabs[0]?.key ?? "analytics",
+    { storageKey: "audit_tab" },
+  );
+  // Uma aba que a pessoa nao pode ver (na URL ou lembrada de antes) cai na primeira que pode
+  const tab: Tab = allowedTabs.some((t) => t.key === storedTab) ? storedTab : (allowedTabs[0]?.key ?? "analytics");
   const [filterState, setFilterState] = useState<AuditFilterState>(DEFAULT_FILTERS);
   const [options, setOptions] = useState<AuditOptions | null>(null);
 
@@ -57,15 +63,13 @@ export default function Audit() {
     };
   }, [filterState, timezone]);
 
-  if (!isAdmin) {
-    if (analytics.loading) return null;
-    if (!analytics.canView) return <Navigate to="/" replace />;
-  }
+  if (access.loading || analytics.loading) return null;
+  if (allowedTabs.length === 0) return <Navigate to="/" replace />;
 
   return (
     <div className="settings-page audit-page">
       <div className="settings-header">
-        <h1>{isAdmin ? "Auditoria" : "Analiticos"}</h1>
+        <h1>{canRecords ? "Auditoria" : "Analiticos"}</h1>
         <p>
           Historico de acoes no sistema: acessos, mudancas de configuracao e de permissao. Horarios no fuso{" "}
           {timezone || "America/Sao_Paulo"} (configuravel em Geral).
@@ -73,7 +77,7 @@ export default function Audit() {
       </div>
 
       <div className="settings-tabs" role="tablist">
-        {TABS.filter((t) => isAdmin || t.key === "analytics").map((t) => (
+        {allowedTabs.map((t) => (
           <button
             key={t.key}
             id={`audit-tab-${t.key}`}
@@ -103,9 +107,9 @@ export default function Audit() {
           <AuditAnalytics
             options={options}
             filters={filters}
-            canCreate={isAdmin || analytics.canCreate}
-            canEdit={isAdmin || analytics.canEdit}
-            canDelete={isAdmin || analytics.canDelete}
+            canCreate={analytics.canCreate}
+            canEdit={analytics.canEdit}
+            canDelete={analytics.canDelete}
             onFilterBy={(patch) => setFilterState((current) => toggleFilter(current, patch))}
           />
         )}

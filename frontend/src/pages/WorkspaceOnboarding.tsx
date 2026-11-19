@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import * as workspacesApi from "../api/workspaces";
+import { useAccess } from "../context/AccessContext";
 import { useAuth } from "../context/AuthContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { assetUrl, extractErrorMessage } from "../api/client";
@@ -28,7 +29,7 @@ export default function WorkspaceOnboarding() {
     }
   }
 
-  const canCreateCollection = !!user?.is_platform_admin;
+  const canCreateCollection = useAccess().can("colecao.criar");
 
   return (
     <div className="auth-screen">

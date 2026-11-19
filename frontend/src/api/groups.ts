@@ -65,29 +65,3 @@ export async function listGroupInvites(groupId: number): Promise<GroupInvite[]> 
 export async function cancelGroupInvite(groupId: number, inviteId: number): Promise<void> {
   await api.delete(`/groups/${groupId}/invites/${inviteId}`);
 }
-
-/** Chaves de permissao de IA que um grupo pode ter. */
-export const AI_PERMISSION_MANAGE = "ia.gerenciar";
-export const AI_PERMISSION_USE = "ia.usar";
-
-export interface GroupPermissions {
-  permissions: string[];
-  /** False no grupo Administradores: ele tem todas as permissoes sempre */
-  editable: boolean;
-}
-
-export async function getGroupPermissions(groupId: number): Promise<GroupPermissions> {
-  const { data } = await api.get(`/groups/${groupId}/permissions`);
-  return data;
-}
-
-export async function setGroupPermissions(groupId: number, permissions: string[]): Promise<GroupPermissions> {
-  const { data } = await api.put(`/groups/${groupId}/permissions`, { permissions });
-  return data;
-}
-
-/** Chaves de permissao dos analiticos (criar, editar e excluir pressupoem ver). */
-export const ANALYTICS_PERMISSION_VIEW = "analiticos.ver";
-export const ANALYTICS_PERMISSION_CREATE = "analiticos.criar";
-export const ANALYTICS_PERMISSION_EDIT = "analiticos.editar";
-export const ANALYTICS_PERMISSION_DELETE = "analiticos.excluir";

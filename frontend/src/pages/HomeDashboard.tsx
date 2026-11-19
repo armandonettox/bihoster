@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import * as homeApi from "../api/home";
 import type { HomeCollectionEntry } from "../api/home";
 import type { Report } from "../api/reports";
+import { useAccess } from "../context/AccessContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import CollectionCard from "../components/CollectionCard";
 import CollectionEntryList from "../components/CollectionEntryList";
@@ -47,7 +48,7 @@ export default function HomeDashboard() {
 
   const [collectionFilter, setCollectionFilter] = useState("");
   const [creating, setCreating] = useState(false);
-  const isAnyAdmin = workspaces.some((w) => w.role === "admin");
+  const canCreateCollection = useAccess().can("colecao.criar");
   const visibleWorkspaces = filterByName(workspaces, collectionFilter, (w) => w.name);
   const { showToast } = useToast();
 
@@ -124,7 +125,7 @@ export default function HomeDashboard() {
             <div>
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
                 <p style={{ color: "var(--color-text-muted)", fontSize: 14, margin: 0 }}>Colecoes que voce tem acesso.</p>
-                {isAnyAdmin && !creating && (
+                {canCreateCollection && !creating && (
                   <button className="btn btn-secondary btn-sm" onClick={() => setCreating(true)}>
                     + Nova colecao
                   </button>

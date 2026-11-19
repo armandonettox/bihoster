@@ -1,32 +1,49 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MyAccess } from "../../api/access";
 import * as workspacesApi from "../../api/workspaces";
+import { AccessContext, buildAccess } from "../../context/AccessContext";
 import CollectionsTab from "./CollectionsTab";
 
 const mocks = vi.hoisted(() => ({
   showToast: vi.fn(),
   reload: vi.fn(),
-  loading: false,
-  workspaces: [] as unknown[],
+  // O que a pessoa tem em cada colecao (id -> permissoes) e no sistema todo
+  permissoes: {} as Record<string, string[]>,
+  globais: [] as string[],
 }));
 
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 vi.mock("../../context/WorkspaceContext", () => ({
-  useWorkspace: () => ({ workspaces: mocks.workspaces, loading: mocks.loading, reload: mocks.reload }),
+  useWorkspace: () => ({ reload: mocks.reload }),
 }));
-vi.mock("../../api/workspaces", () => ({ deleteWorkspace: vi.fn() }));
-// A janela de editar tem teste próprio: aqui só importa quando abre e com que propriedades
+vi.mock("../../api/workspaces", () => ({ deleteWorkspace: vi.fn(), listAllWorkspaces: vi.fn() }));
+// A janela de editar tem teste próprio: aqui só importa quando abre e para qual coleção
 vi.mock("../../components/EditCollectionModal", () => ({
-  default: ({ workspace, manageAccess, onClose }: { workspace: { name: string }; manageAccess?: boolean; onClose: () => void }) => (
+  default: ({ workspace, onClose }: { workspace: { name: string }; onClose: () => void }) => (
     <div role="dialog" aria-label="janela de editar">
       <span>editando {workspace.name}</span>
-      <span>{manageAccess ? "com acesso dos grupos" : "sem acesso dos grupos"}</span>
       <button onClick={onClose}>fechar janela</button>
     </div>
   ),
 }));
 
 const deleteWorkspace = vi.mocked(workspacesApi.deleteWorkspace);
+const listAllWorkspaces = vi.mocked(workspacesApi.listAllWorkspaces);
+
+const EDITAR_E_EXCLUIR = ["colecao.ver", "colecao.editar", "colecao.excluir"];
+
+/** A aba com o acesso montado: por padrao a pessoa edita e exclui as duas colecoes */
+async function abrir() {
+  const me: MyAccess = { is_admin: false, global_permissions: mocks.globais, workspace_permissions: mocks.permissoes };
+  const utils = render(
+    <AccessContext.Provider value={buildAccess(me)}>
+      <CollectionsTab />
+    </AccessContext.Provider>,
+  );
+  await screen.findByText("Comercial");
+  return utils;
+}
 
 const COLECOES = [
   { id: 1, name: "Comercial", description: "Vendas do mês", icon: null, color: null },
@@ -39,15 +56,17 @@ const abrirMenu = (nome: string) => fireEvent.click(within(linha(nome)).getByLab
 beforeEach(() => {
   mocks.showToast.mockClear();
   mocks.reload.mockClear();
-  mocks.loading = false;
-  mocks.workspaces = COLECOES;
+  mocks.permissoes = { "1": EDITAR_E_EXCLUIR, "2": EDITAR_E_EXCLUIR };
+  mocks.globais = ["colecao.todas"];
+  listAllWorkspaces.mockReset();
+  listAllWorkspaces.mockResolvedValue(COLECOES as never);
   deleteWorkspace.mockReset();
   deleteWorkspace.mockResolvedValue(undefined as never);
 });
 
 describe("CollectionsTab - lista", () => {
-  it("mostra cada coleção com nome e descrição, sem a tabela de grupos no cartão", () => {
-    render(<CollectionsTab />);
+  it("mostra cada coleção com nome e descrição, sem a tabela de grupos no cartão", async () => {
+    await abrir();
 
     expect(screen.getByText("Comercial")).toBeTruthy();
     expect(screen.getByText("Vendas do mês")).toBeTruthy();
@@ -57,32 +76,45 @@ describe("CollectionsTab - lista", () => {
     expect(screen.queryByRole("table")).toBeNull();
   });
 
-  it("coleção sem descrição não mostra linha de descrição", () => {
-    render(<CollectionsTab />);
+  it("coleção sem descrição não mostra linha de descrição", async () => {
+    await abrir();
 
     expect(linha("Saúde").querySelector(".collection-row-desc")).toBeNull();
     expect(linha("Comercial").querySelector(".collection-row-desc")).not.toBeNull();
   });
 
-  it("enquanto carrega não mostra as coleções", () => {
-    mocks.loading = true;
-    render(<CollectionsTab />);
+  it("enquanto carrega não mostra as coleções", async () => {
+    listAllWorkspaces.mockReturnValue(new Promise(() => {}));
+    render(
+      <AccessContext.Provider value={buildAccess({ is_admin: true, global_permissions: [], workspace_permissions: {} })}>
+        <CollectionsTab />
+      </AccessContext.Provider>,
+    );
 
     expect(screen.queryByText("Comercial")).toBeNull();
   });
 
-  it("o texto de ajuda manda abrir o menu e escolher Editar para mudar o acesso", () => {
-    render(<CollectionsTab />);
+  it("mostra todas as coleções do sistema, mesmo as que a pessoa não acessa", async () => {
+    mocks.permissoes = {};
+    await abrir();
 
-    expect(screen.getByText(/abra o menu da coleção e escolha Editar/)).toBeTruthy();
+    expect(listAllWorkspaces).toHaveBeenCalledTimes(1);
+    expect(screen.getByText("Saúde")).toBeTruthy();
+  });
+
+  it("o texto de ajuda manda escolher o acesso em Gerenciar usuários", async () => {
+    await abrir();
+
+    expect(screen.getByText("Gerenciar usuários")).toBeTruthy();
+    expect(screen.queryByText(/abra o menu da coleção e escolha Editar/)).toBeNull();
   });
 });
 
 describe("CollectionsTab - menu dos 3 pontinhos", () => {
   const icone = (botao: HTMLElement) => botao.querySelector(".material-symbols-outlined");
 
-  it("Editar e Excluir têm ícone, escondido do leitor de tela", () => {
-    render(<CollectionsTab />);
+  it("Editar e Excluir têm ícone, escondido do leitor de tela", async () => {
+    await abrir();
     abrirMenu("Comercial");
 
     const editar = screen.getByRole("button", { name: "Editar" });
@@ -93,8 +125,8 @@ describe("CollectionsTab - menu dos 3 pontinhos", () => {
     expect(icone(excluir)?.getAttribute("aria-hidden")).toBe("true");
   });
 
-  it("Excluir continua em vermelho e as opções usam o layout com ícone", () => {
-    render(<CollectionsTab />);
+  it("Excluir continua em vermelho e as opções usam o layout com ícone", async () => {
+    await abrir();
     abrirMenu("Comercial");
 
     const editar = screen.getByRole("button", { name: "Editar" });
@@ -105,19 +137,18 @@ describe("CollectionsTab - menu dos 3 pontinhos", () => {
     expect(editar.className).not.toContain("kebab-menu-item-danger");
   });
 
-  it("Editar abre a janela da coleção certa, com o acesso dos grupos ligado, e fecha o menu", () => {
-    render(<CollectionsTab />);
+  it("Editar abre a janela da coleção certa e fecha o menu", async () => {
+    await abrir();
     abrirMenu("Saúde");
 
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
 
     expect(screen.getByText("editando Saúde")).toBeTruthy();
-    expect(screen.getByText("com acesso dos grupos")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Excluir" })).toBeNull();
   });
 
-  it("fechar a janela de editar volta para a lista", () => {
-    render(<CollectionsTab />);
+  it("fechar a janela de editar volta para a lista", async () => {
+    await abrir();
     abrirMenu("Comercial");
     fireEvent.click(screen.getByRole("button", { name: "Editar" }));
 
@@ -128,8 +159,8 @@ describe("CollectionsTab - menu dos 3 pontinhos", () => {
 });
 
 describe("CollectionsTab - excluir", () => {
-  it("Excluir pede confirmação, com ícones, e ainda não exclui", () => {
-    render(<CollectionsTab />);
+  it("Excluir pede confirmação, com ícones, e ainda não exclui", async () => {
+    await abrir();
     abrirMenu("Comercial");
 
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
@@ -140,8 +171,8 @@ describe("CollectionsTab - excluir", () => {
     expect(deleteWorkspace).not.toHaveBeenCalled();
   });
 
-  it("Cancelar volta para Editar e Excluir sem excluir", () => {
-    render(<CollectionsTab />);
+  it("Cancelar volta para Editar e Excluir sem excluir", async () => {
+    await abrir();
     abrirMenu("Comercial");
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -152,7 +183,7 @@ describe("CollectionsTab - excluir", () => {
   });
 
   it("Confirmar exclusão exclui a coleção certa, recarrega a lista e avisa", async () => {
-    render(<CollectionsTab />);
+    await abrir();
     abrirMenu("Saúde");
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -165,7 +196,7 @@ describe("CollectionsTab - excluir", () => {
 
   it("falha ao excluir avisa o erro do servidor e não recarrega", async () => {
     deleteWorkspace.mockRejectedValue({ response: { data: { detail: "A coleção tem relatórios" } } });
-    render(<CollectionsTab />);
+    await abrir();
     abrirMenu("Comercial");
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -177,7 +208,7 @@ describe("CollectionsTab - excluir", () => {
 
   it("falha sem mensagem do servidor mostra um aviso padrão", async () => {
     deleteWorkspace.mockRejectedValue(new Error("rede"));
-    render(<CollectionsTab />);
+    await abrir();
     abrirMenu("Comercial");
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -186,8 +217,8 @@ describe("CollectionsTab - excluir", () => {
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Não foi possível excluir a coleção.", "error"));
   });
 
-  it("fechar o menu no meio da confirmação volta ao estado inicial", () => {
-    render(<CollectionsTab />);
+  it("fechar o menu no meio da confirmação volta ao estado inicial", async () => {
+    await abrir();
     abrirMenu("Comercial");
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -196,5 +227,41 @@ describe("CollectionsTab - excluir", () => {
 
     expect(screen.getByRole("button", { name: "Editar" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Confirmar exclusão" })).toBeNull();
+  });
+});
+
+
+describe("CollectionsTab - cada acao pela sua permissao na coleção", () => {
+  it("só editar mostra Editar, sem Excluir", async () => {
+    mocks.permissoes = { "1": ["colecao.ver", "colecao.editar"], "2": ["colecao.ver", "colecao.editar"] };
+    await abrir();
+    abrirMenu("Comercial");
+
+    expect(screen.getByRole("button", { name: "Editar" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Excluir" })).toBeNull();
+  });
+
+  it("só excluir mostra Excluir, sem Editar", async () => {
+    mocks.permissoes = { "1": ["colecao.ver", "colecao.excluir"], "2": ["colecao.ver", "colecao.excluir"] };
+    await abrir();
+    abrirMenu("Comercial");
+
+    expect(screen.getByRole("button", { name: "Excluir" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Editar" })).toBeNull();
+  });
+
+  it("sem editar nem excluir a linha não tem menu de três pontinhos", async () => {
+    mocks.permissoes = { "1": ["colecao.ver"], "2": ["colecao.ver"] };
+    await abrir();
+
+    expect(within(linha("Comercial")).queryByLabelText("Mais opcoes")).toBeNull();
+  });
+
+  it("a permissão vale só na coleção em que foi dada", async () => {
+    mocks.permissoes = { "1": EDITAR_E_EXCLUIR, "2": ["colecao.ver"] };
+    await abrir();
+
+    expect(within(linha("Comercial")).queryByLabelText("Mais opcoes")).not.toBeNull();
+    expect(within(linha("Saúde")).queryByLabelText("Mais opcoes")).toBeNull();
   });
 });

@@ -21,15 +21,26 @@ const STATUS_LABEL: Record<string, string> = {
   skipped: "Aguardando",
 };
 
+export interface AlertActions {
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+}
+
+const ALL_ALERT_ACTIONS: AlertActions = { create: true, edit: true, delete: true };
+
 export default function ReportAlertsModal({
   report,
   workspaceId,
   embedRef,
+  can = ALL_ALERT_ACTIONS,
   onClose,
 }: {
   report: Report;
   workspaceId: number;
   embedRef: RefObject<ReportEmbedHandle | null>;
+  /** O que a pessoa pode fazer aqui; sem isso, tudo (quem ve a janela ja passou pelas permissoes) */
+  can?: AlertActions;
   onClose: () => void;
 }) {
   const [items, setItems] = useState<Alert[] | null>(null);
@@ -175,31 +186,39 @@ export default function ReportAlertsModal({
           )}
 
           <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-            <button
-              className="btn btn-ghost btn-sm"
-              onClick={() =>
-                attempt(
-                  () => alertsApi.updateAlert(workspaceId, alert.id, { enabled: !alert.enabled }),
-                  "Nao foi possivel alterar o alerta.",
-                )
-              }
-            >
-              {alert.enabled ? "Pausar" : "Reativar"}
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setEditing(alert)}>
-              Editar
-            </button>
-            <button className="btn btn-ghost btn-sm" onClick={() => setToDelete(alert)}>
-              Excluir
-            </button>
+            {can.edit && (
+              <button
+                className="btn btn-ghost btn-sm"
+                onClick={() =>
+                  attempt(
+                    () => alertsApi.updateAlert(workspaceId, alert.id, { enabled: !alert.enabled }),
+                    "Nao foi possivel alterar o alerta.",
+                  )
+                }
+              >
+                {alert.enabled ? "Pausar" : "Reativar"}
+              </button>
+            )}
+            {can.edit && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(alert)}>
+                Editar
+              </button>
+            )}
+            {can.delete && (
+              <button className="btn btn-ghost btn-sm" onClick={() => setToDelete(alert)}>
+                Excluir
+              </button>
+            )}
           </div>
         </div>
       ))}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <button className="btn btn-primary" onClick={() => setEditing("new")}>
-          Novo alerta
-        </button>
+        {can.create && (
+          <button className="btn btn-primary" onClick={() => setEditing("new")}>
+            Novo alerta
+          </button>
+        )}
         <button className="btn btn-ghost" onClick={onClose}>
           Fechar
         </button>

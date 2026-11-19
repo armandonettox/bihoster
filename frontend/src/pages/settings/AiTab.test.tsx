@@ -2,16 +2,18 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as aiApi from "../../api/aiSettings";
 import type { AIProvider } from "../../api/aiSettings";
+import { AccessContext, buildAccess } from "../../context/AccessContext";
 import AiTab from "./AiTab";
 
 const mocks = vi.hoisted(() => ({ showToast: vi.fn() }));
 
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 // O bloco de opcoes do chat e o de consumo tem teste proprio; aqui so interessa o provedor
-vi.mock("../../components/AiOptionsCard", () => ({ default: () => null }));
-vi.mock("../../components/AiReportCard", () => ({ default: () => null }));
-vi.mock("../../components/AiLogCard", () => ({ default: () => null }));
-vi.mock("../../components/AiUsageCard", () => ({ default: () => null }));
+// (cada um vira uma marca, para o teste saber quais cartoes a pessoa ve)
+vi.mock("../../components/AiOptionsCard", () => ({ default: () => <div>cartao-modelos</div> }));
+vi.mock("../../components/AiReportCard", () => ({ default: () => <div>cartao-bloqueios</div> }));
+vi.mock("../../components/AiLogCard", () => ({ default: () => <div>cartao-registro</div> }));
+vi.mock("../../components/AiUsageCard", () => ({ default: () => <div>cartao-consumo</div> }));
 vi.mock("../../api/aiSettings", () => ({
   listAIProviders: vi.fn(),
   updateAIProvider: vi.fn(),
@@ -43,9 +45,21 @@ const VAZIOS: AIProvider[] = [
   provedor("openrouter", "OpenRouter"),
 ];
 
+const ITENS_DA_IA = ["ia.chaves", "ia.modelos", "ia.bloqueios", "ia.registro", "ia.consumo"];
+
+/** A aba da IA com so os itens escolhidos (por padrao, todos os de gerencia) */
+function renderAi(itens: string[] = ITENS_DA_IA) {
+  const access = buildAccess({ is_admin: false, global_permissions: itens, workspace_permissions: {} });
+  return render(
+    <AccessContext.Provider value={access}>
+      <AiTab />
+    </AccessContext.Provider>,
+  );
+}
+
 async function abrir(dados: AIProvider[] = VAZIOS) {
   list.mockResolvedValue(dados);
-  render(<AiTab />);
+  renderAi();
   await screen.findByRole("heading", { name: "Provedor de IA" });
 }
 
@@ -117,7 +131,7 @@ describe("AiTab - lista de provedores", () => {
 
   it("avisa quando nao consegue carregar", async () => {
     list.mockRejectedValue(new Error("403"));
-    render(<AiTab />);
+    renderAi();
 
     expect(await screen.findByText("Nao foi possivel carregar as configuracoes de IA.")).toBeTruthy();
   });
@@ -390,5 +404,39 @@ describe("AiTab - testar conexao", () => {
     fireEvent.click(screen.getByRole("button", { name: "Testar conexao" }));
 
     expect(await screen.findByText(/O provedor recusou a chave de API/)).toBeTruthy();
+  });
+});
+
+
+describe("AiTab - cada parte pelo seu item", () => {
+  const marcas = ["cartao-registro", "cartao-bloqueios", "cartao-modelos", "cartao-consumo"];
+  const visiveis = () => marcas.filter((marca) => screen.queryByText(marca) !== null);
+
+  it("com todos os itens aparecem o provedor e os quatro cartoes", async () => {
+    await abrir();
+
+    expect(visiveis()).toEqual(marcas);
+  });
+
+  it.each([
+    ["ia.registro", "cartao-registro"],
+    ["ia.bloqueios", "cartao-bloqueios"],
+    ["ia.modelos", "cartao-modelos"],
+    ["ia.consumo", "cartao-consumo"],
+  ])("so %s mostra so o cartao dele, sem o provedor e sem consultar as chaves", async (item, marca) => {
+    renderAi([item]);
+
+    expect(await screen.findByText(marca)).toBeTruthy();
+    expect(visiveis()).toEqual([marca]);
+    expect(screen.queryByRole("heading", { name: "Provedor de IA" })).toBeNull();
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("so as chaves mostram o provedor e nenhum cartao", async () => {
+    list.mockResolvedValue(VAZIOS);
+    renderAi(["ia.chaves"]);
+
+    expect(await screen.findByRole("heading", { name: "Provedor de IA" })).toBeTruthy();
+    expect(visiveis()).toEqual([]);
   });
 });

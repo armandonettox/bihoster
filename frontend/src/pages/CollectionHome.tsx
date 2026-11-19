@@ -23,6 +23,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { safeStorage } from "../utils/safeStorage";
 import { useCollectionReports } from "../hooks/useCollectionReports";
 import { useCanSendByEmail } from "../hooks/useCanSendByEmail";
+import { useAccess } from "../context/AccessContext";
 import { useAuth } from "../context/AuthContext";
 import SendReportEmailModal from "../components/SendReportEmailModal";
 import ThumbnailPickerModal from "../components/ThumbnailPickerModal";
@@ -63,7 +64,6 @@ export default function CollectionHome() {
   const [creatingReport, setCreatingReport] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
   const [editingCollection, setEditingCollection] = useState(false);
-  const canSendByEmail = useCanSendByEmail();
   const { user } = useAuth();
   const [emailingReport, setEmailingReport] = useState<Report | null>(null);
   const [showingRefreshDetails, setShowingRefreshDetails] = useState(false);
@@ -86,9 +86,16 @@ export default function CollectionHome() {
     safeStorage.setItem(VIEW_MODE_KEY, mode);
   }
 
-  const role = currentWorkspace?.role;
-  const canWrite = role === "admin" || role === "editor";
-  const isAdmin = role === "admin";
+  // Cada acao tem a sua permissao nesta colecao: nada aqui depende do papel Leitor, Editor ou Administrador
+  const access = useAccess();
+  const can = (key: string) => access.canIn(key, workspaceId);
+  const canPublish = can("relatorio.publicar");
+  const canEditReport = can("relatorio.editar");
+  const canDeleteReport = can("relatorio.excluir");
+  const canReorder = can("relatorio.reordenar");
+  const canThumbnail = can("relatorio.miniatura");
+  const canEditCollection = can("colecao.editar");
+  const canSendByEmail = useCanSendByEmail(workspaceId);
 
   // O filtro e a janela de atualizacoes sao da colecao aberta: ao trocar, comecam limpos
   useEffect(() => {
@@ -151,7 +158,7 @@ export default function CollectionHome() {
   function reorderControls(report: Report, sectionReports: Report[]) {
     // Com filtro a secao mostrada e so uma parte: "subir" pareceria pular itens escondidos, porque
     // o servidor troca com o vizinho da secao completa. Limpe o filtro pra reordenar.
-    if (!canWrite || filtering || sectionReports.length < 2) return null;
+    if (!canReorder || filtering || sectionReports.length < 2) return null;
     if (report.display_type !== "tv" && report.display_type !== "apresentacao") return null;
     const index = sectionReports.findIndex((r) => r.id === report.id);
     return (
@@ -171,13 +178,12 @@ export default function CollectionHome() {
         {reorderControls(report, sectionReports)}
         <ReportActionsMenu
           report={report}
-          canWrite={canWrite}
           isFavorite={favoriteIds.has(report.id)}
           onToggleFavorite={(r) => toggleFavorite(r.id, r)}
-          onEdit={setEditingReport}
-          onDelete={setConfirmingDeleteReportId}
+          onEdit={canEditReport ? setEditingReport : undefined}
+          onDelete={canDeleteReport ? setConfirmingDeleteReportId : undefined}
           onSendByEmail={canSendByEmail ? setEmailingReport : undefined}
-          onRefreshThumbnail={canWrite ? setThumbnailPickerReport : undefined}
+          onRefreshThumbnail={canThumbnail ? setThumbnailPickerReport : undefined}
         />
       </>
     );
@@ -211,7 +217,7 @@ export default function CollectionHome() {
         <KebabMenu>
           {(close) => (
             <>
-              {canWrite && (
+              {canPublish && (
                 <button
                   className="kebab-menu-item"
                   onClick={() => {
@@ -222,7 +228,7 @@ export default function CollectionHome() {
                   + Adicionar
                 </button>
               )}
-              {isAdmin && (
+              {canEditCollection && (
                 <button
                   className="kebab-menu-item"
                   onClick={() => {
@@ -280,7 +286,7 @@ export default function CollectionHome() {
               <TvSectionHeader
                 title={SECTION_TITLES.tv}
                 workspaceId={currentWorkspace.id}
-                isAdmin={isAdmin}
+                isAdmin={canEditCollection}
                 intervalDraft={tvInterval.draft}
                 onIntervalChange={tvInterval.setDraft}
                 onIntervalCommit={tvInterval.commit}
@@ -296,7 +302,7 @@ export default function CollectionHome() {
         </>
       )}
 
-      {canWrite && creatingReport && (
+      {canPublish && creatingReport && (
         <NewReportForm
           onCreated={() => {
             refreshReports();
@@ -306,7 +312,7 @@ export default function CollectionHome() {
         />
       )}
 
-      {canWrite && editingReport && (
+      {canEditReport && editingReport && (
         <NewReportForm
           key={editingReport.id}
           editingReport={editingReport}

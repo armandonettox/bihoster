@@ -2,6 +2,7 @@ import { useState } from "react";
 import * as workspacesApi from "../api/workspaces";
 import type { Workspace } from "../api/workspaces";
 import { extractErrorMessage } from "../api/client";
+import { useAccess } from "../context/AccessContext";
 import { useToast } from "../context/ToastContext";
 import CollectionIcon from "./CollectionIcon";
 import EditCollectionModal from "./EditCollectionModal";
@@ -22,7 +23,10 @@ export default function CollectionCard({
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const canManage = workspace.role === "admin";
+  // Editar e excluir tem cada um a sua permissao nesta colecao; o menu so aparece se a pessoa tiver alguma
+  const access = useAccess();
+  const canEdit = access.canIn("colecao.editar", workspace.id);
+  const canDelete = access.canIn("colecao.excluir", workspace.id);
   const { showToast } = useToast();
 
   async function handleDelete() {
@@ -63,23 +67,27 @@ export default function CollectionCard({
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontWeight: 700 }}>{workspace.name}</div>
       </div>
-      {canManage && (
+      {(canEdit || canDelete) && (
         <KebabMenu onClose={() => setConfirmingDelete(false)}>
           {(close) =>
             !confirmingDelete ? (
               <>
-                <button
-                  className="kebab-menu-item"
-                  onClick={() => {
-                    setEditing(true);
-                    close();
-                  }}
-                >
-                  Editar
-                </button>
-                <button className="kebab-menu-item kebab-menu-item-danger" onClick={() => setConfirmingDelete(true)}>
-                  Excluir
-                </button>
+                {canEdit && (
+                  <button
+                    className="kebab-menu-item"
+                    onClick={() => {
+                      setEditing(true);
+                      close();
+                    }}
+                  >
+                    Editar
+                  </button>
+                )}
+                {canDelete && (
+                  <button className="kebab-menu-item kebab-menu-item-danger" onClick={() => setConfirmingDelete(true)}>
+                    Excluir
+                  </button>
+                )}
               </>
             ) : (
               <>

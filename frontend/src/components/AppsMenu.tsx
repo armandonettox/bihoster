@@ -1,27 +1,28 @@
 import { useNavigate } from "react-router-dom";
-import { useAuth } from "../context/AuthContext";
+import { useAccess } from "../context/AccessContext";
 import { useChat } from "../context/ChatContext";
-import { useWorkspace } from "../context/WorkspaceContext";
 import { useAnalyticsAccess } from "../hooks/useAnalyticsAccess";
 import { useDropdownMenu } from "../hooks/useDropdownMenu";
+import { ADMIN_AREA_KEYS, USERS_AREA_KEYS } from "../utils/adminTabs";
 
 /** Quadradinho da barra do topo: janela suspensa com os modulos do sistema (Administracao, Auditoria e Chat de IA).
  * Cada modulo so aparece para quem tem permissao; sem nenhum, o botao nem e mostrado. */
 export default function AppsMenu() {
   const { open, setOpen, containerRef, triggerRef } = useDropdownMenu();
-  const { workspaces } = useWorkspace();
   const { canUse: canUseChat, setPanelOpen } = useChat();
   const navigate = useNavigate();
 
-  const { user } = useAuth();
+  const access = useAccess();
 
-  const isAnyAdmin = workspaces.some((w) => w.role === "admin");
-  // A auditoria e so do administrador da plataforma (grupo Administradores)
-  const canSeeAudit = user?.is_platform_admin === true;
+  // A Administracao aparece para quem tem ao menos uma das abas dela; Gerenciar usuarios e uma area propria
+  const isAnyAdmin = access.canAny(...ADMIN_AREA_KEYS);
+  const canManageUsers = access.canAny(...USERS_AREA_KEYS);
+  // O log geral da auditoria tem permissao propria
+  const canSeeAudit = access.can("auditoria.ver");
   // Quem so tem a permissao de ver os analiticos entra direto no painel, sem a tabela de registros
   const { canView: canViewAnalytics } = useAnalyticsAccess();
   const canSeeAnalytics = canViewAnalytics && !canSeeAudit;
-  if (!isAnyAdmin && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
+  if (!isAnyAdmin && !canManageUsers && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
 
   return (
     <div ref={containerRef} className="topbar-menu">
@@ -44,6 +45,18 @@ export default function AppsMenu() {
 
       {open && (
         <div className="topbar-menu-dropdown">
+          {canManageUsers && (
+            <button
+              className="topbar-menu-item"
+              onClick={() => {
+                setOpen(false);
+                navigate("/users");
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">group</span>
+              Gerenciar usuarios
+            </button>
+          )}
           {isAnyAdmin && (
             <button
               className="topbar-menu-item"

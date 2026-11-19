@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import * as aiApi from "../../api/aiSettings";
 import type { AIProvider } from "../../api/aiSettings";
 import { SkeletonList } from "../../components/Skeleton";
+import { useAccess } from "../../context/AccessContext";
 import AiLogCard from "../../components/AiLogCard";
 import AiOptionsCard from "../../components/AiOptionsCard";
 import AiProviderPanel from "../../components/AiProviderPanel";
@@ -21,6 +22,10 @@ function firstSelection(providers: AIProvider[]): string {
 }
 
 export default function AiTab() {
+  // Cada parte da IA tem a sua permissao: a pessoa ve so os cartoes dos itens que tem. Os provedores (chaves) so sao
+  // buscados por quem tem o item das chaves.
+  const access = useAccess();
+  const canKeys = access.can("ia.chaves");
   const [providers, setProviders] = useState<AIProvider[] | null>(null);
   const [loadError, setLoadError] = useState(false);
   const [selected, setSelected] = useState("");
@@ -28,6 +33,7 @@ export default function AiTab() {
   const [models, setModels] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
+    if (!canKeys) return;
     let cancelled = false;
     aiApi
       .listAIProviders()
@@ -42,7 +48,7 @@ export default function AiTab() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canKeys]);
 
   function handleSaved(saved: AIProvider) {
     // So um provedor responde o chat: quando o salvo virou o escolhido, os outros perdem a marca
@@ -63,13 +69,14 @@ export default function AiTab() {
     });
   }
 
-  if (loadError) return <p className="auth-error">Nao foi possivel carregar as configuracoes de IA.</p>;
-  if (!providers) return <SkeletonList count={3} />;
+  if (canKeys && loadError) return <p className="auth-error">Nao foi possivel carregar as configuracoes de IA.</p>;
+  if (canKeys && !providers) return <SkeletonList count={3} />;
 
-  const current = providers.find((p) => p.provider === selected) ?? providers[0];
+  const current = providers ? (providers.find((p) => p.provider === selected) ?? providers[0]) : null;
 
   return (
     <div>
+      {providers && current && (
       <section className="settings-section" aria-label="Provedor de IA">
         <h2 className="settings-section-title">Provedor de IA</h2>
         <p className="settings-section-desc">
@@ -97,10 +104,11 @@ export default function AiTab() {
           />
         </div>
       </section>
-      <AiLogCard />
-      <AiReportCard />
-      <AiOptionsCard />
-      <AiUsageCard />
+      )}
+      {access.can("ia.registro") && <AiLogCard />}
+      {access.can("ia.bloqueios") && <AiReportCard />}
+      {access.can("ia.modelos") && <AiOptionsCard />}
+      {access.can("ia.consumo") && <AiUsageCard />}
     </div>
   );
 }

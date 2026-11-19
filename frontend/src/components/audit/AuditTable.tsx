@@ -7,6 +7,7 @@ import {
   type AuditPerson,
 } from "../../api/audit";
 import { SkeletonList } from "../Skeleton";
+import { useAccess } from "../../context/AccessContext";
 import { useToast } from "../../context/ToastContext";
 import { formatDateTime } from "../../utils/datetime";
 import type { AuditFilterState } from "../../utils/auditFilterState";
@@ -70,6 +71,8 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
   // Sobe a cada reversao feita para a tabela buscar de novo e mostrar a acao como revertida
   const [refresh, setRefresh] = useState(0);
   const { showToast } = useToast();
+  // Desfazer uma acao exige a permissao propria; quem so ve o registro nao ve o botao
+  const canRevert = useAccess().can("auditoria.reverter");
 
   // Espera a pessoa parar de digitar para nao buscar a cada letra
   useEffect(() => {
@@ -190,7 +193,7 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
                     )}
                   </td>
                   <td className="audit-revert-cell">
-                    {log.revertible ? (
+                    {log.revertible && canRevert ? (
                       <button
                         type="button"
                         className="btn btn-ghost audit-revert"
@@ -200,7 +203,7 @@ export default function AuditTable({ filters, timezone, people, onFilterBy }: Pr
                         <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">undo</span>
                         Reverter
                       </button>
-                    ) : log.reverted_at ? (
+                    ) : log.revertible ? null : log.reverted_at ? (
                       <span
                         className="audit-reverted"
                         title={`Revertida em ${formatDateTime(log.reverted_at, timezone)}`}

@@ -27,7 +27,7 @@ export default function ReportFullscreen() {
 
   const navigate = useNavigate();
   const location = useLocation();
-  const { selectWorkspace, workspaces } = useWorkspace();
+  const { selectWorkspace } = useWorkspace();
   const { setOpenReport } = useChat();
 
   const [report, setReport] = useState<Report | null>(null);
@@ -41,7 +41,7 @@ export default function ReportFullscreen() {
   const [zoom, setZoom] = useState(1.0);
   const [showZoomHint, setShowZoomHint] = useState(true);
   const [headerVisible, setHeaderVisible] = useState(false);
-  const { canSubscribe, allowedDomains } = useSubscriptionAccess(workspaces.find((w) => w.id === wsId)?.role);
+  const { canSubscribe, canAlert, subscriptions, alerts, allowedDomains } = useSubscriptionAccess(wsId);
 
   const ZOOM_MIN = 0.5;
   const ZOOM_MAX = 2.0;
@@ -227,30 +227,30 @@ export default function ReportFullscreen() {
                 </button>
               )}
               {canSubscribe && (
-                <>
-                  <button
-                    type="button"
-                    className="fullscreen-action"
-                    onClick={() => setSubscriptionsOpen(true)}
-                    title="Assinaturas: envio recorrente por e-mail"
-                  >
-                    <span className="material-symbols-outlined" aria-hidden="true">
-                      mail
-                    </span>
-                    <span>Assinar</span>
-                  </button>
-                  <button
-                    type="button"
-                    className="fullscreen-action"
-                    onClick={() => setAlertsOpen(true)}
-                    title="Alertas: notificacao quando uma medida atingir um limite"
-                  >
-                    <span className="material-symbols-outlined" aria-hidden="true">
-                      notifications
-                    </span>
-                    <span>Alertas</span>
-                  </button>
-                </>
+                <button
+                  type="button"
+                  className="fullscreen-action"
+                  onClick={() => setSubscriptionsOpen(true)}
+                  title="Assinaturas: envio recorrente por e-mail"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    mail
+                  </span>
+                  <span>Assinar</span>
+                </button>
+              )}
+              {canAlert && (
+                <button
+                  type="button"
+                  className="fullscreen-action"
+                  onClick={() => setAlertsOpen(true)}
+                  title="Alertas: notificacao quando uma medida atingir um limite"
+                >
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    notifications
+                  </span>
+                  <span>Alertas</span>
+                </button>
               )}
               <ChatPanelToggle className="fullscreen-action" showLabel />
             </>
@@ -296,6 +296,7 @@ export default function ReportFullscreen() {
           report={report}
           workspaceId={wsId}
           allowedDomains={allowedDomains}
+          can={subscriptions}
           onClose={() => setSubscriptionsOpen(false)}
         />
       )}
@@ -304,6 +305,7 @@ export default function ReportFullscreen() {
           report={report}
           workspaceId={wsId}
           embedRef={embedRef}
+          can={alerts}
           onClose={() => setAlertsOpen(false)}
         />
       )}

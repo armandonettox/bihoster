@@ -3,6 +3,7 @@ import * as systemApi from "../../api/system";
 import type { ReleaseInfo, VersionStatus } from "../../api/system";
 import ConfirmDialog from "../../components/ConfirmDialog";
 import { SkeletonCard } from "../../components/Skeleton";
+import { useAccess } from "../../context/AccessContext";
 import { useToast } from "../../context/ToastContext";
 import { extractErrorMessage } from "../../api/client";
 import { formatDateTime } from "../../utils/datetime";
@@ -20,6 +21,8 @@ export default function UpdatesTab() {
   const [loading, setLoading] = useState(true);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [applying, setApplying] = useState(false);
+  // Ver a versao e o historico tem permissao propria; aplicar a atualizacao mexe no servidor e e so do administrador da plataforma
+  const isAdmin = useAccess().isAdmin;
   const [expandedVersions, setExpandedVersions] = useState<Set<string>>(new Set());
   const { showToast } = useToast();
 
@@ -115,7 +118,11 @@ export default function UpdatesTab() {
                   </span>
                 )}
               </div>
-              {status.auto_update_enabled ? (
+              {status.auto_update_enabled && !isAdmin ? (
+                <span style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
+                  So o administrador da plataforma aplica a atualizacao
+                </span>
+              ) : status.auto_update_enabled ? (
                 <button className="btn btn-primary btn-sm" onClick={() => setConfirmOpen(true)} disabled={applying}>
                   {applying ? "Atualizando..." : "Atualizar agora"}
                 </button>

@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react";
 import * as emailApi from "../api/emailSettings";
-import { useAuth } from "../context/AuthContext";
+import { useAccess } from "../context/AccessContext";
 
-/** O envio de relatorio por e-mail esta disponivel pra esta pessoa? So administradores da plataforma
- * (por enquanto) e so quando o servidor de e-mail ja foi configurado. Quem nao e administrador nem
- * chega a consultar o servidor. Em caso de falha na consulta, o envio simplesmente nao aparece. */
-export function useCanSendByEmail(): boolean {
-  const { user } = useAuth();
-  const isAdmin = user?.is_platform_admin ?? false;
+/** O envio de relatorio por e-mail esta disponivel pra esta pessoa nesta colecao? So com a permissao de exportar por
+ * e-mail (que nenhum atalho liga: so o administrador da plataforma e quem recebeu esse item de proposito) e so quando o
+ * servidor de e-mail ja foi configurado. Quem nao tem a permissao nem chega a consultar o servidor. Em caso de falha na
+ * consulta, o envio simplesmente nao aparece. */
+export function useCanSendByEmail(workspaceId: number | null | undefined): boolean {
+  const allowed = useAccess().canIn("relatorio.exportar", workspaceId);
   const [configured, setConfigured] = useState(false);
 
   useEffect(() => {
-    if (!isAdmin) return;
+    if (!allowed) return;
     let cancelled = false;
     emailApi
       .getEmailStatus()
@@ -22,7 +22,7 @@ export function useCanSendByEmail(): boolean {
     return () => {
       cancelled = true;
     };
-  }, [isAdmin]);
+  }, [allowed]);
 
-  return isAdmin && configured;
+  return allowed && configured;
 }

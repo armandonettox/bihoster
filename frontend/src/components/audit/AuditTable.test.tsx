@@ -2,13 +2,16 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AuditTable from "./AuditTable";
 
-const mocks = vi.hoisted(() => ({ search: vi.fn(), revert: vi.fn(), toast: vi.fn() }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), revert: vi.fn(), toast: vi.fn(), canRevert: true }));
 vi.mock("../../api/audit", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../api/audit")>()),
   searchAuditLogs: mocks.search,
   revertAuditAction: mocks.revert,
 }));
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.toast }) }));
+vi.mock("../../context/AccessContext", () => ({
+  useAccess: () => ({ can: (key: string) => key === "auditoria.reverter" && mocks.canRevert }),
+}));
 
 function entry(id: number, over: Record<string, unknown> = {}) {
   return {
@@ -41,9 +44,36 @@ beforeEach(() => {
   mocks.search.mockReset();
   mocks.revert.mockReset();
   mocks.toast.mockReset();
+  mocks.canRevert = true;
 });
 
 describe("AuditTable", () => {
+  it("sem a permissao de reverter, a acao reversivel nao mostra o botao", async () => {
+    mocks.canRevert = false;
+    mocks.search.mockResolvedValue(page([entry(1, { action: "update", action_label: "Edicao", revertible: true, revert_summary: "Volta o nome" })]));
+    render(<AuditTable filters={{}} timezone="America/Sao_Paulo" />);
+
+    expect(await screen.findByText("Edicao")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Reverter/ })).toBeNull();
+  });
+
+  it("com a permissao de reverter, o botao aparece na acao reversivel", async () => {
+    mocks.search.mockResolvedValue(page([entry(1, { action: "update", action_label: "Edicao", revertible: true, revert_summary: "Volta o nome" })]));
+    render(<AuditTable filters={{}} timezone="America/Sao_Paulo" />);
+
+    expect(await screen.findByRole("button", { name: /Reverter/ })).toBeTruthy();
+  });
+
+  it("a acao ja revertida continua aparecendo como revertida para quem so ve o log", async () => {
+    mocks.canRevert = false;
+    mocks.search.mockResolvedValue(
+      page([entry(1, { action: "update", action_label: "Edicao", reverted_at: "2026-11-11T10:00:00Z", reverted_by_name: "Bia" })]),
+    );
+    render(<AuditTable filters={{}} timezone="America/Sao_Paulo" />);
+
+    expect(await screen.findByText(/Revertida por Bia/)).toBeTruthy();
+  });
+
   it("mostra os registros com o nome da acao em portugues e quem fez", async () => {
     mocks.search.mockResolvedValue(
       page([

@@ -77,15 +77,27 @@ function History({ workspaceId, subscriptionId, timezone }: { workspaceId: numbe
 }
 
 /** Assinaturas de um relatorio: envio recorrente por e-mail em dias e horarios escolhidos. */
+export interface SubscriptionActions {
+  create: boolean;
+  edit: boolean;
+  delete: boolean;
+  run: boolean;
+}
+
+const ALL_SUBSCRIPTION_ACTIONS: SubscriptionActions = { create: true, edit: true, delete: true, run: true };
+
 export default function ReportSubscriptionsModal({
   report,
   workspaceId,
   allowedDomains,
+  can = ALL_SUBSCRIPTION_ACTIONS,
   onClose,
 }: {
   report: Report;
   workspaceId: number;
   allowedDomains: string[];
+  /** O que a pessoa pode fazer aqui; sem isso, tudo (quem ve a janela ja passou pelas permissoes) */
+  can?: SubscriptionActions;
   onClose: () => void;
 }) {
   const [items, setItems] = useState<Subscription[] | null>(null);
@@ -216,23 +228,29 @@ export default function ReportSubscriptionsModal({
             />
           ) : (
             <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => handleRunNow(sub)}>
-                Enviar agora
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                onClick={() =>
-                  attempt(
-                    () => api.updateSubscription(workspaceId, sub.id, { enabled: !sub.enabled }),
-                    "Nao foi possivel alterar a assinatura.",
-                  )
-                }
-              >
-                {sub.enabled ? "Pausar" : "Reativar"}
-              </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setEditing(sub)}>
-                Editar
-              </button>
+              {can.run && (
+                <button className="btn btn-secondary btn-sm" onClick={() => handleRunNow(sub)}>
+                  Enviar agora
+                </button>
+              )}
+              {can.edit && (
+                <button
+                  className="btn btn-ghost btn-sm"
+                  onClick={() =>
+                    attempt(
+                      () => api.updateSubscription(workspaceId, sub.id, { enabled: !sub.enabled }),
+                      "Nao foi possivel alterar a assinatura.",
+                    )
+                  }
+                >
+                  {sub.enabled ? "Pausar" : "Reativar"}
+                </button>
+              )}
+              {can.edit && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setEditing(sub)}>
+                  Editar
+                </button>
+              )}
               <button
                 className="btn btn-ghost btn-sm"
                 aria-expanded={historyOf === sub.id}
@@ -240,9 +258,11 @@ export default function ReportSubscriptionsModal({
               >
                 Historico
               </button>
-              <button className="btn btn-ghost btn-sm" onClick={() => setToDelete(sub)}>
-                Excluir
-              </button>
+              {can.delete && (
+                <button className="btn btn-ghost btn-sm" onClick={() => setToDelete(sub)}>
+                  Excluir
+                </button>
+              )}
             </div>
           )}
           {historyOf === sub.id && <History workspaceId={workspaceId} subscriptionId={sub.id} timezone={sub.timezone} />}
@@ -250,9 +270,11 @@ export default function ReportSubscriptionsModal({
       ))}
 
       <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-        <button className="btn btn-primary" onClick={() => setEditing("new")}>
-          Nova assinatura
-        </button>
+        {can.create && (
+          <button className="btn btn-primary" onClick={() => setEditing("new")}>
+            Nova assinatura
+          </button>
+        )}
         <button className="btn btn-ghost" onClick={onClose}>
           Fechar
         </button>

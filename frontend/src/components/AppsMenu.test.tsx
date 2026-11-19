@@ -1,25 +1,34 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MyAccess } from "../api/access";
+import { ADMIN_ACCESS, AccessContext, buildAccess } from "../context/AccessContext";
 import AppsMenu from "./AppsMenu";
 
 const mocks = vi.hoisted(() => ({
   navigate: vi.fn(),
   setPanelOpen: vi.fn(),
   canUse: false,
-  platformAdmin: false,
   canViewAnalytics: false,
-  workspaces: [] as { id: number; role: string }[],
 }));
 
 vi.mock("react-router-dom", () => ({ useNavigate: () => mocks.navigate }));
-vi.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { is_platform_admin: mocks.platformAdmin } }) }));
-vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ workspaces: mocks.workspaces }) }));
 vi.mock("../hooks/useAnalyticsAccess", () => ({
   useAnalyticsAccess: () => ({ canView: mocks.canViewAnalytics, canCreate: false, canEdit: false, canDelete: false, loading: false }),
 }));
 vi.mock("../context/ChatContext", () => ({
   useChat: () => ({ canUse: mocks.canUse, setPanelOpen: mocks.setPanelOpen }),
 }));
+
+function renderMenu(globais: string[] = [], opcoes: { admin?: boolean; colecoes?: Record<string, string[]> } = {}) {
+  const me: MyAccess = opcoes.admin
+    ? ADMIN_ACCESS
+    : { is_admin: false, global_permissions: globais, workspace_permissions: opcoes.colecoes ?? {} };
+  return render(
+    <AccessContext.Provider value={buildAccess(me)}>
+      <AppsMenu />
+    </AccessContext.Provider>,
+  );
+}
 
 function openMenu() {
   fireEvent.click(screen.getByRole("button", { name: "Modulos" }));
@@ -29,21 +38,17 @@ beforeEach(() => {
   mocks.navigate.mockReset();
   mocks.setPanelOpen.mockReset();
   mocks.canUse = false;
-  mocks.platformAdmin = false;
   mocks.canViewAnalytics = false;
-  mocks.workspaces = [];
 });
 
 describe("AppsMenu", () => {
   it("sem nenhum modulo disponivel, o botao nem aparece", () => {
-    mocks.workspaces = [{ id: 1, role: "viewer" }];
-    render(<AppsMenu />);
+    renderMenu([], { colecoes: { "1": ["colecao.ver"] } });
     expect(screen.queryByRole("button", { name: "Modulos" })).toBeNull();
   });
 
-  it("administrador ve Administracao, que abre Configuracoes", () => {
-    mocks.workspaces = [{ id: 1, role: "admin" }];
-    render(<AppsMenu />);
+  it("quem tem uma aba da Administracao ve Administracao, que abre Configuracoes", () => {
+    renderMenu(["sistema.geral"]);
     openMenu();
 
     expect(screen.queryByRole("button", { name: "Chat de IA" })).toBeNull();
@@ -53,29 +58,72 @@ describe("AppsMenu", () => {
     expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull(); // menu fechou
   });
 
-  it("administrador da plataforma ve Auditoria, que abre a pagina propria", () => {
-    mocks.workspaces = [{ id: 1, role: "admin" }];
-    mocks.platformAdmin = true;
-    render(<AppsMenu />);
+  it.each(["sistema.geral", "colecao.todas", "sistema.email", "ia.registro", "assinatura.todas", "sistema.versao", "sistema.cache"])(
+    "o item %s ja basta para mostrar a Administracao",
+    (chave) => {
+      renderMenu([chave]);
+      openMenu();
+      expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
+    },
+  );
+
+  it("quem pode ver os membros ve Gerenciar usuarios, que abre a pagina propria e nao as Configuracoes", () => {
+    renderMenu(["membros.ver"]);
     openMenu();
 
+    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Gerenciar usuarios" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/users");
+  });
+
+  it("so ver os grupos tambem abre Gerenciar usuarios", () => {
+    renderMenu(["grupos.ver"]);
+    openMenu();
+
+    expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
+  });
+
+  it("Administracao e Gerenciar usuarios sao itens separados: quem tem os dois ve os dois", () => {
+    renderMenu(["membros.ver", "sistema.cache"]);
+    openMenu();
+
+    expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
+  });
+
+  it("quem so tem uma aba de Configuracoes nao ve Gerenciar usuarios", () => {
+    renderMenu(["sistema.cache"]);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Gerenciar usuarios" })).toBeNull();
+  });
+
+  it("administrar uma colecao (editar, publicar) nao mostra a Administracao do sistema", () => {
+    renderMenu([], { colecoes: { "1": ["colecao.ver", "colecao.editar", "colecao.excluir", "relatorio.publicar"] } });
+    expect(screen.queryByRole("button", { name: "Modulos" })).toBeNull();
+  });
+
+  it("quem pode ver o log geral ve Auditoria, que abre a pagina propria", () => {
+    renderMenu(["auditoria.ver"]);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Auditoria" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/audit");
   });
 
-  it("quem so administra uma colecao nao ve Auditoria", () => {
-    mocks.workspaces = [{ id: 1, role: "admin" }];
-    render(<AppsMenu />);
+  it("quem so tem Administracao nao ve Auditoria", () => {
+    renderMenu(["sistema.versao"]);
     openMenu();
 
     expect(screen.queryByRole("button", { name: "Auditoria" })).toBeNull();
   });
 
   it("quem usa o chat ve Chat de IA, que abre o painel do chat", () => {
-    mocks.workspaces = [{ id: 1, role: "viewer" }];
     mocks.canUse = true;
-    render(<AppsMenu />);
+    renderMenu();
     openMenu();
 
     expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
@@ -85,9 +133,8 @@ describe("AppsMenu", () => {
   });
 
   it("quem tem os dois modulos ve os dois itens", () => {
-    mocks.workspaces = [{ id: 1, role: "admin" }];
     mocks.canUse = true;
-    render(<AppsMenu />);
+    renderMenu(["sistema.email"]);
     openMenu();
 
     expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
@@ -96,10 +143,28 @@ describe("AppsMenu", () => {
 
   it("quem so pode ver analiticos ve o item Analiticos, que abre a pagina", () => {
     mocks.canViewAnalytics = true;
-    render(<AppsMenu />);
+    renderMenu();
     openMenu();
     expect(screen.queryByText("Auditoria")).toBeNull();
     fireEvent.click(screen.getByText("Analiticos"));
     expect(mocks.navigate).toHaveBeenCalledWith("/audit");
+  });
+
+  it("quem ve o log geral nao ve Analiticos separado: eles ficam dentro da Auditoria", () => {
+    mocks.canViewAnalytics = true;
+    renderMenu(["auditoria.ver"]);
+    openMenu();
+
+    expect(screen.getByRole("button", { name: "Auditoria" })).toBeTruthy();
+    expect(screen.queryByText("Analiticos")).toBeNull();
+  });
+
+  it("administrador da plataforma ve Administracao e Auditoria", () => {
+    renderMenu([], { admin: true });
+    openMenu();
+
+    expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Auditoria" })).toBeTruthy();
   });
 });

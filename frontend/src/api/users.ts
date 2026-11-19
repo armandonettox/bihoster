@@ -13,7 +13,6 @@ export interface UserDirectoryEntry {
   email: string;
   groups: UserGroup[];
   last_login: string | null;
-  permission_level_id: number | null;
 }
 
 export async function listUsers(): Promise<UserDirectoryEntry[]> {

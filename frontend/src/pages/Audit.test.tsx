@@ -1,20 +1,29 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { AccessContext, buildAccess } from "../context/AccessContext";
 import Audit from "./Audit";
 
 const mocks = vi.hoisted(() => ({
-  platformAdmin: true,
-  canViewAnalytics: false,
+  // Pode ver o log geral (auditoria.ver)
+  canRecords: true,
+  // Permissoes de analiticos: por padrao a pessoa ve, cria, edita e exclui visuais
+  canViewAnalytics: true,
+  analyticsChanges: true,
   options: vi.fn(),
   table: vi.fn(),
   analytics: vi.fn(),
 }));
 
-vi.mock("../context/AuthContext", () => ({ useAuth: () => ({ user: { is_platform_admin: mocks.platformAdmin } }) }));
 vi.mock("../context/BrandingContext", () => ({ useBranding: () => ({ settings: { timezone: "America/Sao_Paulo" } }) }));
 vi.mock("../hooks/useAnalyticsAccess", () => ({
-  useAnalyticsAccess: () => ({ canView: mocks.canViewAnalytics, canCreate: false, canEdit: false, canDelete: false, loading: false }),
+  useAnalyticsAccess: () => ({
+    canView: mocks.canViewAnalytics,
+    canCreate: mocks.analyticsChanges,
+    canEdit: mocks.analyticsChanges,
+    canDelete: mocks.analyticsChanges,
+    loading: false,
+  }),
 }));
 vi.mock("../api/audit", () => ({ getAuditOptions: mocks.options }));
 // Tabela e analiticos fazem chamadas de rede; aqui so importa o que a pagina entrega a cada um
@@ -32,19 +41,24 @@ vi.mock("../components/audit/AuditAnalytics", () => ({
 }));
 
 function renderAt(url = "/audit") {
+  const globais = mocks.canRecords ? ["auditoria.ver"] : [];
+  const access = buildAccess({ is_admin: false, global_permissions: globais, workspace_permissions: {} });
   return render(
-    <MemoryRouter initialEntries={[url]}>
-      <Routes>
-        <Route path="/audit" element={<Audit />} />
-        <Route path="/" element={<div data-testid="home">inicio</div>} />
-      </Routes>
-    </MemoryRouter>,
+    <AccessContext.Provider value={access}>
+      <MemoryRouter initialEntries={[url]}>
+        <Routes>
+          <Route path="/audit" element={<Audit />} />
+          <Route path="/" element={<div data-testid="home">inicio</div>} />
+        </Routes>
+      </MemoryRouter>
+    </AccessContext.Provider>,
   );
 }
 
 beforeEach(() => {
-  mocks.platformAdmin = true;
-  mocks.canViewAnalytics = false;
+  mocks.canRecords = true;
+  mocks.canViewAnalytics = true;
+  mocks.analyticsChanges = true;
   mocks.options.mockReset();
   mocks.options.mockResolvedValue({
     actions: [{ action: "login", label: "Login" }],
@@ -61,16 +75,39 @@ const lastProps = (fn: ReturnType<typeof vi.fn>) => fn.mock.calls[fn.mock.calls.
 const lastTableProps = () => mocks.table.mock.calls[mocks.table.mock.calls.length - 1][0] as Record<string, unknown>;
 
 describe("Audit", () => {
-  it("quem nao e administrador da plataforma volta para o inicio", () => {
-    mocks.platformAdmin = false;
+  it("quem nao pode ver o log geral nem os analiticos volta para o inicio", () => {
+    mocks.canRecords = false;
+    mocks.canViewAnalytics = false;
     renderAt();
     expect(screen.queryByTestId("home")).not.toBeNull();
     expect(screen.queryByRole("heading", { name: "Auditoria" })).toBeNull();
   });
 
+  it("quem so pode ver o log geral ve so a aba Registros", () => {
+    mocks.canViewAnalytics = false;
+    renderAt();
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Auditoria");
+    expect(screen.queryByTestId("records")).not.toBeNull();
+    expect(screen.queryByTestId("analytics")).toBeNull();
+    expect(screen.getAllByRole("tab")).toHaveLength(1);
+  });
+
+  it("quem so pode ver o log geral e abre ?tab=analytics na URL cai nos registros", () => {
+    mocks.canViewAnalytics = false;
+    renderAt("/audit?tab=analytics");
+    expect(screen.queryByTestId("records")).not.toBeNull();
+    expect(screen.queryByTestId("analytics")).toBeNull();
+  });
+
+  it("os botoes de criar, editar e excluir visuais seguem as permissoes de analiticos, nao o log geral", () => {
+    mocks.analyticsChanges = false;
+    renderAt("/audit?tab=analytics");
+    const props = mocks.analytics.mock.calls[mocks.analytics.mock.calls.length - 1][0] as Record<string, unknown>;
+    expect(props).toMatchObject({ canCreate: false, canEdit: false, canDelete: false });
+  });
+
   it("quem so pode ver analiticos entra direto no painel, sem a aba de registros", () => {
-    mocks.platformAdmin = false;
-    mocks.canViewAnalytics = true;
+    mocks.canRecords = false;
     renderAt();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Analiticos");
     expect(screen.queryByTestId("records")).toBeNull();

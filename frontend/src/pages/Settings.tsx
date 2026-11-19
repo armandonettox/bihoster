@@ -1,14 +1,12 @@
 import { useRef, type KeyboardEvent } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
-import { useWorkspace } from "../context/WorkspaceContext";
+import { useAccess } from "../context/AccessContext";
 import { useUrlTab } from "../hooks/useUrlTab";
-import { useAiAccess } from "../hooks/useAiAccess";
+import { ADMIN_TABS, type AdminTab } from "../utils/adminTabs";
 import PageLoading from "../components/PageLoading";
 import GeneralTab from "./settings/GeneralTab";
 import CollectionsTab from "./settings/CollectionsTab";
 import BrandTab from "./settings/BrandTab";
-import MembersTab from "./settings/MembersTab";
-import GroupsTab from "./settings/GroupsTab";
 import AuthTab from "./settings/AuthTab";
 import EmailTab from "./settings/EmailTab";
 import UpdatesTab from "./settings/UpdatesTab";
@@ -16,54 +14,37 @@ import SubscriptionsTab from "./settings/SubscriptionsTab";
 import CacheTab from "./settings/CacheTab";
 import AiTab from "./settings/AiTab";
 
-type Tab = "general" | "collections" | "brand" | "members" | "groups" | "auth" | "email" | "ai" | "subscriptions" | "updates" | "cache";
-
-// A aba de IA aparece para quem tem a permissao "Gerenciar IA" (grupos), administre ou nao alguma colecao
-const AI_TAB: { key: Tab; label: string } = { key: "ai", label: "IA" };
-
-// Abas de administracao: so quem administra alguma colecao. O servidor protege cada rota de
-// qualquer jeito; aqui e so o que a pessoa ve.
-const ADMIN_TABS: { key: Tab; label: string }[] = [
-  { key: "general", label: "Geral" },
-  { key: "collections", label: "Coleções" },
-  { key: "brand", label: "Marca" },
-  { key: "members", label: "Membros" },
-  { key: "groups", label: "Grupos" },
-  { key: "auth", label: "Autenticacao" },
-  { key: "email", label: "E-mail" },
-  AI_TAB,
-  { key: "subscriptions", label: "Assinaturas" },
-  { key: "updates", label: "Atualizacoes" },
-  { key: "cache", label: "Cache" },
-];
+type Tab = AdminTab;
 
 export default function Settings() {
-  const { workspaces, loading } = useWorkspace();
-  const { canManage: canManageAi, loading: aiLoading } = useAiAccess();
+  const access = useAccess();
   const [searchParams] = useSearchParams();
   const tabButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
-  const isAnyAdmin = workspaces.some((w) => w.role === "admin");
-  const adminTabs = ADMIN_TABS.filter((t) => t.key !== AI_TAB.key || canManageAi);
-  // A conta da pessoa tem pagina propria (/account); aqui ficam so as abas de administracao.
-  const tabs = isAnyAdmin ? adminTabs : canManageAi ? [AI_TAB] : [];
+  // A conta da pessoa tem pagina propria (/account); aqui ficam so as abas de administracao que ela pode usar.
+  const tabs = ADMIN_TABS.filter((t) => access.canAny(...t.keys));
+  const onlyAi = tabs.length === 1 && tabs[0].key === "ai";
 
   // Aba na URL (?tab=): recarregar mantem a aba e da pra compartilhar um link direto; lembra a ultima.
-  // Quem nao e admin so tem a aba de IA (se gerenciar): qualquer outro valor na URL cai nela.
+  // Uma aba que a pessoa nao pode ver (na URL ou lembrada de antes) cai na primeira que ela pode.
   const [tab, setTab] = useUrlTab<Tab>(
     tabs.map((t) => t.key),
-    isAnyAdmin ? "general" : "ai",
+    tabs[0]?.key ?? "general",
     { storageKey: "settings_tab" },
   );
 
-  // Sem saber se a pessoa administra alguma colecao nem se gerencia a IA, nao da pra decidir quais abas mostrar
-  if (loading || aiLoading) return <PageLoading />;
+  // Sem saber o que a pessoa pode, nao da pra decidir quais abas mostrar
+  if (access.loading) return <PageLoading />;
 
   // Sem nada para administrar, ou link antigo da aba da conta (/settings?tab=account): vai para a pagina da conta
   if (tabs.length === 0 || searchParams.get("tab") === "account") return <Navigate to="/account" replace />;
 
   // Link antigo da aba de auditoria (/settings?tab=audit): a auditoria tem pagina propria
   if (searchParams.get("tab") === "audit") return <Navigate to="/audit" replace />;
+
+  // Links antigos das abas Membros e Grupos: agora ficam em Gerenciar usuarios
+  if (searchParams.get("tab") === "members") return <Navigate to="/users" replace />;
+  if (searchParams.get("tab") === "groups") return <Navigate to="/users?view=groups" replace />;
 
   function focusTab(key: Tab) {
     setTab(key);
@@ -85,7 +66,7 @@ export default function Settings() {
     <div className="settings-page">
       <div className="settings-header">
         <h1>Configuracoes</h1>
-        <p>{isAnyAdmin ? "Gerencie a marca do sistema, colecoes, membros e grupos de acesso." : "Gerencie a IA do sistema."}</p>
+        <p>{onlyAi ? "Gerencie a IA do sistema." : "Gerencie a marca do sistema, colecoes, membros e grupos de acesso."}</p>
       </div>
 
       {tabs.length > 1 && (
@@ -114,8 +95,6 @@ export default function Settings() {
         {tab === "general" && <GeneralTab />}
         {tab === "collections" && <CollectionsTab />}
         {tab === "brand" && <BrandTab />}
-        {tab === "members" && <MembersTab />}
-        {tab === "groups" && <GroupsTab />}
         {tab === "auth" && <AuthTab />}
         {tab === "email" && <EmailTab />}
         {tab === "ai" && <AiTab />}

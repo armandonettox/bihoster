@@ -1,6 +1,7 @@
 import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Outlet, useLocation } from "react-router-dom";
-import { AuthProvider, useAuth } from "./context/AuthContext";
+import { AccessProvider, useAccess } from "./context/AccessContext";
+import { AuthProvider } from "./context/AuthContext";
 import { FavoritesProvider } from "./context/FavoritesContext";
 import { BrandingProvider } from "./context/BrandingContext";
 import { ChatProvider } from "./context/ChatContext";
@@ -23,6 +24,7 @@ const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const Home = lazy(() => import("./pages/Home"));
 const CollectionHome = lazy(() => import("./pages/CollectionHome"));
 const Settings = lazy(() => import("./pages/Settings"));
+const ManageUsers = lazy(() => import("./pages/ManageUsers"));
 const Account = lazy(() => import("./pages/Account"));
 const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
@@ -34,16 +36,16 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 
 function WorkspaceGate() {
   const { currentWorkspace, loading } = useWorkspace();
-  const { user } = useAuth();
+  const access = useAccess();
   const analytics = useAnalyticsAccess();
 
-  if (loading || (!currentWorkspace && analytics.loading)) {
+  if (loading || (!currentWorkspace && (analytics.loading || access.loading))) {
     return <PageLoading />;
   }
 
   if (!currentWorkspace) {
-    // Quem so pode ver os analiticos (nao e administrador) nao precisa de colecao para usar o painel
-    if (analytics.canView && !user?.is_platform_admin) return <AnalyticsOnly />;
+    // Quem pode ver os analiticos ou o log geral, mas nao tem colecao nem pode criar uma, nao precisa de colecao para usar o painel
+    if ((analytics.canView || access.can("auditoria.ver")) && !access.can("colecao.criar")) return <AnalyticsOnly />;
     return <WorkspaceOnboarding />;
   }
 
@@ -108,6 +110,7 @@ function RoutedContent() {
             <Route index element={<Home />} />
             <Route path="collection" element={<CollectionHome />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="users" element={<ManageUsers />} />
             <Route path="account" element={<Account />} />
             <Route path="audit" element={<Audit />} />
             <Route path="chat" element={<ChatPage />} />
@@ -130,9 +133,11 @@ export default function App() {
         <BrandingProvider>
           <ToastProvider>
             <AuthProvider>
-              <BrowserRouter>
-                <RoutedContent />
-              </BrowserRouter>
+              <AccessProvider>
+                <BrowserRouter>
+                  <RoutedContent />
+                </BrowserRouter>
+              </AccessProvider>
             </AuthProvider>
           </ToastProvider>
         </BrandingProvider>

@@ -3,7 +3,6 @@ import KebabMenu from "./KebabMenu";
 
 export default function ReportActionsMenu({
   report,
-  canWrite,
   isFavorite,
   onToggleFavorite,
   onEdit,
@@ -12,14 +11,15 @@ export default function ReportActionsMenu({
   onRefreshThumbnail,
 }: {
   report: Report;
-  canWrite: boolean;
   isFavorite: boolean;
   onToggleFavorite: (report: Report) => void;
-  onEdit: (report: Report) => void;
-  onDelete: (reportId: number) => void;
+  /** Sem isso o item "Editar" nao aparece (so quem pode editar relatorios da colecao) */
+  onEdit?: (report: Report) => void;
+  /** Sem isso o item "Excluir" nao aparece (so quem pode excluir relatorios da colecao) */
+  onDelete?: (reportId: number) => void;
   /** Sem isso o item "Enviar por e-mail" nao aparece (so quem pode e com o e-mail configurado) */
   onSendByEmail?: (report: Report) => void;
-  /** Sem isso o item "Atualizar miniatura" nao aparece (so admin/editor) */
+  /** Sem isso o item "Atualizar miniatura" nao aparece (so quem pode gerenciar a miniatura) */
   onRefreshThumbnail?: (report: Report) => void;
 }) {
   return (
@@ -46,7 +46,7 @@ export default function ReportActionsMenu({
               Enviar por e-mail
             </button>
           )}
-          {canWrite && onRefreshThumbnail && (
+          {onRefreshThumbnail && (
             <button
               className="kebab-menu-item"
               onClick={() => {
@@ -57,7 +57,7 @@ export default function ReportActionsMenu({
               Atualizar miniatura
             </button>
           )}
-          {canWrite && (
+          {onEdit && (
             <button
               className="kebab-menu-item"
               onClick={() => {
@@ -68,7 +68,7 @@ export default function ReportActionsMenu({
               Editar
             </button>
           )}
-          {canWrite && (
+          {onDelete && (
             <button
               className="kebab-menu-item kebab-menu-item-danger"
               onClick={() => {

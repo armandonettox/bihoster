@@ -812,6 +812,8 @@ table.table tr:last-child td {
   border-bottom: 1px solid var(--color-border);
   position: sticky;
   top: 0;
+  /* Sem isto, o que tem posição no conteúdo (como a trilha de um interruptor) aparece por cima do título ao rolar */
+  z-index: 3;
   background-color: var(--color-surface);
 }
 
@@ -2540,6 +2542,20 @@ table.table tr:last-child td {
 .groups-cell-caret {
   flex-shrink: 0;
   font-size: 18px;
+  color: var(--color-text-muted);
+}
+
+/* Resumo de permissões na tabela: só texto, sem caixa nem clique (a edição fica no menu dos três pontinhos) */
+.permissions-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 200px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.permissions-summary-muted {
   color: var(--color-text-muted);
 }
 
@@ -4586,5 +4602,389 @@ table.table tr:last-child td {
 
 .audit-widget-table tr.chart-selected td {
   background-color: color-mix(in srgb, var(--color-secondary) 14%, transparent);
+  font-weight: 600;
+}
+
+
+/* --- Permissões unificadas: lista única de permissões de um grupo ou de uma pessoa, no sistema todo ou por coleção. --- */
+
+.access-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.access-intro,
+.access-empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.access-card {
+  padding: 14px 16px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.access-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.access-card-title {
+  margin: 0 0 10px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.access-card-head .access-card-title {
+  margin: 0;
+}
+
+.access-block-title {
+  margin: 8px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.access-presets {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.access-remove {
+  color: var(--color-danger, #c0392b);
+}
+
+/* As permissões ficam numa lista só, uma embaixo da outra, cada uma com o seu interruptor liga e desliga */
+.access-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.access-fieldset {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.access-fieldset[hidden] {
+  display: none;
+}
+
+/* Pesquisa e botões de abrir e fechar tudo, no alto da lista */
+.access-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.access-search {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* Cada seção da lista abre e fecha; o título mostra quantas permissões dela estão ligadas */
+.access-section + .access-section {
+  border-top: 1px solid var(--color-border);
+}
+
+.access-section-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 0;
+  background: none;
+  border: none;
+  color: var(--color-text);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.access-section-head[aria-expanded="true"] {
+  padding-bottom: 4px;
+}
+
+.access-section-caret {
+  flex-shrink: 0;
+  font-size: 20px;
+  color: var(--color-text-muted);
+  transition: transform 0.15s ease;
+  transform: rotate(-90deg);
+}
+
+.access-section-caret-open {
+  transform: rotate(0deg);
+}
+
+.access-section-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.access-section-count {
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.access-section-count-on {
+  color: var(--color-secondary);
+}
+
+.access-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.access-fieldset > .access-row:first-child {
+  border-top: none;
+}
+
+.access-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  min-width: 0;
+}
+
+.access-row-label {
+  font-weight: 500;
+}
+
+/* Grupo de itens: o interruptor do grupo liga ou desliga todos; os itens ficam recuados, com uma linha ao lado */
+.access-feature {
+  border-top: 1px solid var(--color-border);
+}
+
+.access-fieldset > .access-feature:first-child {
+  border-top: none;
+}
+
+.access-feature > .access-row-master {
+  border-top: none;
+  padding-bottom: 6px;
+}
+
+.access-row-master .access-row-label {
+  font-weight: 600;
+}
+
+.access-feature-count {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--color-secondary);
+}
+
+.access-feature-items {
+  margin: 0 0 8px 6px;
+  padding-left: 14px;
+  border-left: 2px solid var(--color-border);
+}
+
+.access-feature-items .access-row {
+  padding: 8px 0;
+}
+
+.access-feature-items .access-row:first-child {
+  border-top: none;
+}
+
+/* Interruptor travado (vem de grupo, ou a tela está salvando ou é só consulta) */
+.access-row .toggle-switch input:disabled + .toggle-switch-track {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.access-check-hint {
+  display: block;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.access-add {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.access-add .input {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* --- Relatório de permissões: filtros em linha e uma etiqueta por permissão, com a origem ao lado. --- */
+
+.access-report-filters {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.access-report-filters .input {
+  width: auto;
+  min-width: 180px;
+  max-width: 100%;
+}
+
+.access-report-search {
+  flex: 1 1 240px;
+  max-width: 320px;
+}
+
+.access-report-search .input {
+  width: 100%;
+}
+
+.access-report-direct {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+/* Permissão que a pessoa já recebe por grupo: aparece marcada e travada, com o nome do grupo logo abaixo */
+.access-check-origin {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--color-secondary);
+}
+
+.access-link {
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-decoration: underline;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+/* --- Aba Membros e permissões: alternância por membro ou por grupo, e o cabeçalho da janela de edição. --- */
+
+.access-view-toggle {
+  display: inline-flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  padding: 3px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+/* Cabeçalho da janela de edição (pessoa ou grupo): quem é, as etiquetas e os números-resumo */
+.access-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+  background: linear-gradient(135deg, color-mix(in srgb, var(--color-secondary) 10%, var(--color-surface)), var(--color-surface));
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.access-hero-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.access-hero-avatar {
+  width: 48px;
+  height: 48px;
+  flex-shrink: 0;
+  font-size: 16px;
+}
+
+.access-hero-id {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.access-hero-id strong {
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.access-hero-id span {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.access-hero-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.access-hero-tag {
+  padding: 3px 10px;
+  font-size: 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background-color: var(--color-surface);
+}
+
+.access-hero-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.access-hero-stat {
+  padding: 8px 12px;
+  background-color: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+}
+
+.access-hero-stat dt {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.access-hero-stat dd {
+  margin: 2px 0 0;
+  font-size: 15px;
   font-weight: 600;
 }
