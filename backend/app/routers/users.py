@@ -87,6 +87,7 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_global_permissio
             groups=groups_by_user.get(u.id, []),
             last_login=last_login_by_user.get(u.id),
             is_blocked=bool(u.is_blocked),
+            picture_url=u.picture_url,
         )
         for u in users
     ]

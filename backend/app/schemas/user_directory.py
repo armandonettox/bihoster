@@ -19,6 +19,7 @@ class UserDirectoryOut(BaseModel):
     groups: list[UserGroupOut]
     last_login: Optional[UtcDatetime]
     is_blocked: bool = False
+    picture_url: Optional[str] = None
 
     @field_validator("is_blocked", mode="before")
     @classmethod

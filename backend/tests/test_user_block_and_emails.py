@@ -154,3 +154,14 @@ class TestEmailDeBoasVindas:
         resposta = client.post("/users/welcome-email", json={"email": "alvo@example.com"}, headers=admin)
         assert resposta.status_code == 400
         assert "site" in resposta.json()["detail"]
+
+
+class TestListaDePessoas:
+    def test_lista_traz_a_foto_de_perfil(self, client, admin, alvo, db_session):
+        from app.models.user import User
+
+        db_session.query(User).filter(User.id == alvo).update({"picture_url": "/static/uploads/avatar-9.jpg"})
+        db_session.commit()
+        lista = {u["id"]: u for u in client.get("/users/", headers=admin).json()}
+        assert lista[alvo]["picture_url"] == "/static/uploads/avatar-9.jpg"
+        assert all(u["picture_url"] is None for i, u in lista.items() if i != alvo)
