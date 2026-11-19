@@ -1205,33 +1205,83 @@ describe("UsersPanel - gerenciar grupos (a antiga aba Grupos agora vive aqui)", 
     inviteGroupMember.mockReset().mockResolvedValue({ status: "added", email: "x@y.com" } as never);
   });
 
-  it("quem pode criar grupos ve o formulario, e criar chama a API, avisa e recarrega", async () => {
+  it("o botao do topo da visao por grupo abre a janela de criar, que chama a API, avisa e recarrega", async () => {
     await abrirPorGrupo();
 
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar grupo" }));
     fireEvent.change(screen.getByLabelText("Nome do novo grupo"), { target: { value: "Financeiro" } });
     fireEvent.click(screen.getByRole("button", { name: "Criar grupo" }));
 
     await waitFor(() => expect(createGroup).toHaveBeenCalledWith("Financeiro"));
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Grupo criado."));
-    // Recarregou a lista (uma vez ao abrir, outra depois de criar)
+    // Recarregou a lista (uma vez ao abrir, outra depois de criar) e a janela fechou
     await waitFor(() => expect(listGroups.mock.calls.length).toBeGreaterThanOrEqual(2));
+    expect(screen.queryByLabelText("Nome do novo grupo")).toBeNull();
+  });
+
+  it("Cancelar na janela de criar fecha sem criar nada", async () => {
+    await abrirPorGrupo();
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar grupo" }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByLabelText("Nome do novo grupo")).toBeNull();
+    expect(createGroup).not.toHaveBeenCalled();
+  });
+
+  it("nao ha formulario de criar grupo solto na tela: so o botao do topo", async () => {
+    await abrirPorGrupo();
+
+    expect(screen.queryByLabelText("Nome do novo grupo")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Criar grupo" })).toBeNull();
+  });
+
+  it("a visao por grupo tem so um botao no topo, Adicionar grupo, sem Adicionar membro", async () => {
+    await abrirPorGrupo();
+
+    expect(screen.getByRole("button", { name: "+ Adicionar grupo" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "+ Adicionar membro" })).toBeNull();
+  });
+
+  it("o botao do topo acompanha a visao: Adicionar membro por membro, Adicionar grupo por grupo", async () => {
+    await abrirPorGrupo();
+
+    fireEvent.click(screen.getByRole("button", { name: "Por membro" }));
+    expect(screen.getByRole("button", { name: "+ Adicionar membro" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "+ Adicionar grupo" })).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Por grupo" }));
+    expect(screen.getByRole("button", { name: "+ Adicionar grupo" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "+ Adicionar membro" })).toBeNull();
   });
 
   it("falha ao criar mostra o erro do servidor", async () => {
     createGroup.mockRejectedValue({ response: { data: { detail: "Ja existe um grupo com esse nome" } } });
     await abrirPorGrupo();
 
+    fireEvent.click(screen.getByRole("button", { name: "+ Adicionar grupo" }));
     fireEvent.change(screen.getByLabelText("Nome do novo grupo"), { target: { value: "Dados" } });
     fireEvent.click(screen.getByRole("button", { name: "Criar grupo" }));
 
     expect(await screen.findByText("Ja existe um grupo com esse nome")).toBeTruthy();
   });
 
-  it("sem a permissao de criar grupos o formulario nao aparece", async () => {
+  it("sem a permissao de criar grupos nao ha botao nenhum no topo da visao por grupo", async () => {
     como();
     await abrirPorGrupo();
 
-    expect(screen.queryByLabelText("Nome do novo grupo")).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ Adicionar grupo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ Adicionar membro" })).toBeNull();
+  });
+
+  it("quem pode criar grupos mas nao adicionar membros ve Adicionar grupo so na visao por grupo", async () => {
+    como("grupos.criar");
+    await abrirPorGrupo();
+    expect(screen.getByRole("button", { name: "+ Adicionar grupo" })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Por membro" }));
+    expect(screen.queryByRole("button", { name: "+ Adicionar grupo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "+ Adicionar membro" })).toBeNull();
   });
 
   it("o menu de um grupo comum tem editar, adicionar membro, renomear e excluir", async () => {

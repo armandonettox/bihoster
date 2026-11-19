@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import type { GroupGrants } from "../api/access";
 import { extractErrorMessage } from "../api/client";
 import * as groupsApi from "../api/groups";
@@ -10,6 +10,7 @@ import AccessEditor from "./AccessEditor";
 import AccessHero from "./AccessHero";
 import AddGroupMemberModal from "./AddGroupMemberModal";
 import ConfirmDialog from "./ConfirmDialog";
+import CreateGroupModal from "./CreateGroupModal";
 import KebabMenu from "./KebabMenu";
 import MenuIcon from "./MenuIcon";
 import Modal from "./Modal";
@@ -27,6 +28,9 @@ interface Props {
   /** Chamada depois de qualquer mudança (grupo criado, renomeado, excluído, gente entrando ou saindo, permissões),
    * para a tabela recarregar */
   onChanged: () => void;
+  /** A janela de criar grupo está aberta? Quem abre é o botão "Adicionar grupo" do topo da página */
+  creating: boolean;
+  onCloseCreate: () => void;
 }
 
 const MAX_TAGS = 12;
@@ -34,11 +38,10 @@ const MAX_TAGS = 12;
 /** A visão "por grupo" de Gerenciar usuários: cada grupo com quantas pessoas tem e o resumo do que ele dá, mais tudo o que
  * se faz com grupos: criar, renomear, excluir, colocar e tirar gente, cancelar convites e editar as permissões. Cada ação
  * só aparece para quem tem a permissão dela. O menu dos três pontinhos abre a janela do grupo. */
-export default function GroupsPermissionsView({ groups, users, invites, grants, filter, onChanged }: Props) {
+export default function GroupsPermissionsView({ groups, users, invites, grants, filter, onChanged, creating, onCloseCreate }: Props) {
   const access = useAccess();
   const { showToast } = useToast();
   // Cada acao tem a sua permissao; quem so ve (sem poder dar permissoes) abre a janela do grupo em modo leitura
-  const canCreate = access.can("grupos.criar");
   const canRename = access.can("grupos.editar");
   const canDelete = access.can("grupos.excluir");
   const canGivePermissions = access.can("permissoes.editar");
@@ -54,9 +57,6 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
   const [addingTo, setAddingTo] = useState<Group | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<Group | null>(null);
   const [confirmingRemove, setConfirmingRemove] = useState<{ group: Group; user: UserDirectoryEntry } | null>(null);
-  const [name, setName] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const visible = groups.filter((group) => !filter || group.name.toLowerCase().includes(filter.toLowerCase()));
   const membersOf = (group: Group) => users.filter((user) => user.groups.some((g) => g.id === group.id));
@@ -93,23 +93,6 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
     };
   }
 
-  async function handleCreate(event: FormEvent) {
-    event.preventDefault();
-    if (creating) return;
-    setError(null);
-    setCreating(true);
-    try {
-      await groupsApi.createGroup(name);
-      setName("");
-      onChanged();
-      showToast("Grupo criado.");
-    } catch (err: any) {
-      setError(extractErrorMessage(err) || "Nao foi possivel criar o grupo.");
-    } finally {
-      setCreating(false);
-    }
-  }
-
   async function handleDelete(group: Group) {
     try {
       await groupsApi.deleteGroup(group.id);
@@ -143,23 +126,6 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
 
   return (
     <>
-      {canCreate && (
-        <form onSubmit={handleCreate} style={{ display: "flex", gap: 8, margin: "0 0 12px" }}>
-          <input
-            className="input"
-            placeholder="Nome do novo grupo"
-            aria-label="Nome do novo grupo"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <button type="submit" className="btn btn-primary btn-sm" style={{ whiteSpace: "nowrap" }} disabled={creating}>
-            {creating ? "Criando..." : "Criar grupo"}
-          </button>
-        </form>
-      )}
-      {error && <p className="auth-error">{error}</p>}
-
       <div className="card data-table-card" style={{ overflow: "visible" }}>
         <table className="table">
           <thead>
@@ -331,6 +297,8 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
           />
         </Modal>
       )}
+
+      {creating && <CreateGroupModal onCreated={onChanged} onClose={onCloseCreate} />}
 
       {renaming && <RenameGroupModal group={renaming} onSaved={onChanged} onClose={() => setRenaming(null)} />}
 

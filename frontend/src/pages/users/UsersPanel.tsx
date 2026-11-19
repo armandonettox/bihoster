@@ -239,6 +239,9 @@ export default function UsersPanel() {
   const canRemoveMember = access.can("membros.remover");
   const canManageInvites = access.can("membros.convites");
   const canSeeGroups = access.can("grupos.ver");
+  const canCreateGroup = access.can("grupos.criar");
+  // A janela de criar grupo abre pelo botao do topo, que so aparece na visao por grupo
+  const [creatingGroup, setCreatingGroup] = useState(false);
   const [users, setUsers] = useState<UserDirectoryEntry[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
   const [invites, setInvites] = useState<PendingInvite[]>([]);
@@ -530,9 +533,15 @@ export default function UsersPanel() {
             grupos; na visão <strong>Por grupo</strong> você cria e cuida dos grupos e das permissões deles.
           </p>
         </div>
-        {canAddMember && (
+        {/* Um botao so, conforme a visao: adicionar membro na visao por membro, adicionar grupo na visao por grupo */}
+        {view === "members" && canAddMember && (
           <button type="button" className="btn btn-primary btn-sm" onClick={() => setAddingMember(true)} style={{ whiteSpace: "nowrap" }}>
             + Adicionar membro
+          </button>
+        )}
+        {view === "groups" && canCreateGroup && (
+          <button type="button" className="btn btn-primary btn-sm" onClick={() => setCreatingGroup(true)} style={{ whiteSpace: "nowrap" }}>
+            + Adicionar grupo
           </button>
         )}
       </div>
@@ -580,6 +589,8 @@ export default function UsersPanel() {
             grants={groupGrants}
             filter={filter}
             onChanged={() => load().catch(() => undefined)}
+            creating={creatingGroup}
+            onCloseCreate={() => setCreatingGroup(false)}
           />
         </>
       ) : (
