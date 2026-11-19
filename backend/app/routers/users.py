@@ -14,6 +14,7 @@ from app.core.access_guard import check_can_touch_account
 from app.core.rate_limit import limiter
 from app.core.workspace_deps import is_platform_admin
 from app.models.access_grant import AccessGrant
+from app.models.access_extension import AccessExtensionRequest
 from app.models.access_schedule import AccessScheduleRange
 from app.models.audit_log import AuditLog
 from app.models.favorite import Favorite
@@ -271,6 +272,10 @@ def delete_user(
     db.query(AuditLog).filter(AuditLog.user_id == user_id).update({"user_id": None}, synchronize_session=False)
     db.query(AccessGrant).filter(AccessGrant.user_id == user_id).delete(synchronize_session=False)
     db.query(AccessScheduleRange).filter(AccessScheduleRange.user_id == user_id).delete(synchronize_session=False)
+    db.query(AccessExtensionRequest).filter(AccessExtensionRequest.user_id == user_id).delete(synchronize_session=False)
+    db.query(AccessExtensionRequest).filter(AccessExtensionRequest.decided_by_id == user_id).update(
+        {"decided_by_id": None}, synchronize_session=False
+    )
     db.delete(user)
 
     log_action(db, action="delete_user", entity="user", user_id=current_user.id, entity_id=user_id, details=email)

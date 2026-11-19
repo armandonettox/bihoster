@@ -192,11 +192,10 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
         log_action(db, action="login_blocked", entity="user", user_id=user.id, entity_id=user.id, details="bloqueado por administrador")
         raise HTTPException(status_code=403, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
 
-    # Fora do horario de acesso da pessoa: nao entra, e a tela explica o horario e quando volta
-    decision = evaluate_schedule(db, user)
-    if not decision.allowed:
+    # Fora do horario de acesso a senha certa ainda entra: a sessao so serve para a tela de "fora do horario" e para pedir
+    # mais tempo (todas as outras rotas respondem 403, ver get_current_user), e volta a valer sozinha quando o horario abrir
+    if not evaluate_schedule(db, user).allowed:
         log_action(db, action="login_outside_hours", entity="user", user_id=user.id, entity_id=user.id)
-        raise outside_hours_error(decision)
 
     user.failed_login_attempts = 0
     user.locked_until = None
@@ -247,11 +246,8 @@ def login_with_google(request: Request, data: GoogleLogin, db: Session = Depends
     if user and user.is_blocked:
         log_action(db, action="login_blocked", entity="user", user_id=user.id, entity_id=user.id, details="bloqueado por administrador")
         raise HTTPException(status_code=403, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
-    if user:
-        decision = evaluate_schedule(db, user)
-        if not decision.allowed:
-            log_action(db, action="login_outside_hours", entity="user", user_id=user.id, entity_id=user.id)
-            raise outside_hours_error(decision)
+    if user and not evaluate_schedule(db, user).allowed:
+        log_action(db, action="login_outside_hours", entity="user", user_id=user.id, entity_id=user.id)
     if not user:
         # `allow_registration` desligado bloqueia autocadastro por email/senha, mas nao deve
         # bloquear a primeira entrada de um dominio que o admin explicitamente liberou pra
@@ -333,7 +329,9 @@ def reset_password(request: Request, data: ResetPassword, db: Session = Depends(
     log_action(db, action="reset_password", entity="user", user_id=user.id, entity_id=user.id)
 
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+def get_current_user_any_hours(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
+    """A pessoa da sessao, sem conferir o horario de acesso. So as rotas de "fora do horario" (pedir mais tempo) usam esta;
+    todas as outras usam get_current_user."""
     try:
         payload = decode_access_token(token)
         user_id = int(payload["sub"])
@@ -356,6 +354,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     # as rotas -- nao so na renovacao. Token de antes do campo pv existir nao tem a claim e passa.
     if "pv" in payload and payload["pv"] != password_fingerprint(user.hashed_password):
         raise HTTPException(status_code=401, detail="Sessao invalida, entre novamente")
+    return user
+
+
+def get_current_user(user: User = Depends(get_current_user_any_hours), db: Session = Depends(get_db)) -> User:
     # Fora do horario de acesso: a sessao aberta deixa de valer na hora, em todas as rotas (volta sozinha quando o horario abrir)
     decision = evaluate_schedule(db, user)
     if not decision.allowed:

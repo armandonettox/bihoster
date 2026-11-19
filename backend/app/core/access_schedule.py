@@ -12,6 +12,7 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.audit_filters import system_tz
+from app.models.access_extension import STATUS_APPROVED, AccessExtensionRequest
 from app.models.access_schedule import AccessScheduleRange
 from app.models.user import User
 from app.models.workspace import GroupMember
@@ -24,6 +25,11 @@ OUTSIDE_HOURS_CODE = "outside_hours"
 def _now() -> datetime:
     """O instante de agora (em UTC). Fica numa funcao para os testes fixarem o relogio."""
     return datetime.now(timezone.utc)
+
+
+def now_utc() -> datetime:
+    """O instante de agora, por onde passa todo o codigo que depende do relogio (os testes trocam `_now`)."""
+    return _now()
 
 
 def parse_days(text: str) -> set[int]:
@@ -140,8 +146,21 @@ def evaluate_schedule(db: Session, user: User, now: datetime | None = None) -> D
         return Decision(allowed=True)
 
     tz, tz_name = system_tz(db)
-    local_now = (now or _now()).astimezone(tz)
+    instant = now or _now()
+    local_now = instant.astimezone(tz)
     if ranges_allow(rows, local_now):
+        return Decision(allowed=True)
+    # Fora das faixas, mas com uma liberacao temporaria aprovada que ainda nao venceu: pode usar ate o prazo
+    release = (
+        db.query(AccessExtensionRequest.id)
+        .filter(
+            AccessExtensionRequest.user_id == user.id,
+            AccessExtensionRequest.status == STATUS_APPROVED,
+            AccessExtensionRequest.grant_until > instant,
+        )
+        .first()
+    )
+    if release:
         return Decision(allowed=True)
     return Decision(allowed=False, next_open=next_open(rows, local_now), windows=describe(rows), timezone_name=tz_name)
 

@@ -68,6 +68,21 @@ def send_added_email(settings_row, to_email: str, to_name: str | None, has_accou
     _send(config, to_email, subject, body)
 
 
+def send_extension_request_email(settings_row, to_email: str, to_name: str | None, requester_name: str, reason: str) -> None:
+    """Avisa quem pode liberar que alguém pediu mais tempo de acesso. O link leva para Gerenciar usuários."""
+    config, base = ensure_ready(settings_row)
+    company = _company(settings_row)
+    greeting = f"Olá, {to_name}." if to_name else "Olá."
+    subject = f"Pedido de mais tempo de acesso - {company}"
+    body = (
+        f"{greeting}\n\n"
+        f"{requester_name} está fora do horário de acesso ao {company} e pediu mais tempo.\n\n"
+        f"Motivo: {reason}\n\n"
+        f"Para aprovar ou recusar, acesse:\n{base}/users\n"
+    )
+    _send(config, to_email, subject, body)
+
+
 def send_reset_email(settings_row, to_email: str, to_name: str | None, token: str, expires_in_minutes: int) -> None:
     """Manda o link para a pessoa criar uma senha nova. O link vale por pouco tempo."""
     config, base = ensure_ready(settings_row)

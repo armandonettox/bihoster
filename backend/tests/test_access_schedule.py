@@ -140,13 +140,19 @@ class TestQuedaDaSessao:
         relogio(SEGUNDA_10H)
         assert _acessa(client, pessoa).status_code == 200
 
-    def test_entrar_fora_do_horario_nao_da_sessao(self, client, admin, pessoa, relogio):
+    def test_entrar_fora_do_horario_da_uma_sessao_que_so_serve_para_a_tela_de_aviso(self, client, admin, pessoa, relogio):
         _grupo(client, admin)
         relogio(SABADO_10H)
         resposta = client.post("/auth/login", json={"email": "pessoa@example.com", "password": PASSWORD})
-        assert resposta.status_code == 403
-        assert resposta.json()["detail"]["code"] == "outside_hours"
-        assert "access_token" not in resposta.text
+        assert resposta.status_code == 200
+        sessao = {"Authorization": f"Bearer {resposta.json()['access_token']}"}
+
+        # Qualquer rota do sistema continua recusando, com o aviso de fora do horario...
+        negada = client.get("/auth/me", headers=sessao)
+        assert negada.status_code == 403 and negada.json()["detail"]["code"] == "outside_hours"
+        assert client.get("/users/", headers=sessao).status_code == 403
+        # ...e so as rotas de pedir mais tempo respondem
+        assert client.get("/access-extensions/mine", headers=sessao).status_code == 200
 
     def test_administrador_nunca_e_limitado(self, client, admin, relogio):
         _grupo(client, admin, com=("admin@example.com",))

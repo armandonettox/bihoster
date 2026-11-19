@@ -20,7 +20,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - relatorio.exportar: /reports/{id}/export-email;  colecao.criar: POST /workspaces;  colecao.todas: GET /workspaces/all
 - assinatura.*-outras e alerta.*-outras: as mesmas rotas, quando o item foi criado por outra pessoa;
 - assinatura.todas: GET /subscriptions (visão do portal todo);  sistema.versao: GET /system/version, /history e /logs
-- membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.adicionar: /users/welcome-email)
+- membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.liberar-horario: /access-extensions; membros.adicionar: /users/welcome-email)
 - grupos.*: rotas de /groups (grupos.participantes: /groups/{id}/members);  permissoes.editar: PUT de /access/*
 - conexao.*: /powerbi-connections;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
 - sistema.*: /settings (geral, marca, cache), autenticação e /email-settings
@@ -133,6 +133,7 @@ CATALOG: tuple[Permission, ...] = (
     _global("membros.convites", "Gerenciar convites", "Reenviar e cancelar convites que ainda não foram usados.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     _global("membros.bloquear", "Bloquear e desbloquear", "Impedir uma pessoa de entrar (e desfazer o bloqueio).", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     _global("membros.horario", "Definir horários de acesso", "Escolher em que dias e horas grupos e pessoas podem usar o sistema.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
+    _global("membros.liberar-horario", "Liberar acesso fora do horário", "Aprovar ou recusar pedidos de mais tempo de acesso e encerrar liberações.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     _global("membros.senha", "Gerar ou enviar link de nova senha", "Copiar o link para uma pessoa criar uma senha nova, ou mandá-lo por e-mail para ela.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     # Ver os grupos mostra nome e e-mail de quem está em cada um, então exige ver os membros (a área "Gerenciar usuários" junta as duas)
     _global("grupos.ver", "Ver os grupos", "Ver os grupos e quem faz parte de cada um.", "Gerenciar usuários", feature=_GROUPS, requires=("membros.ver",)),
