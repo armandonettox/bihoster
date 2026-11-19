@@ -185,6 +185,12 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
             _register_failed_attempt(db, user)
         raise HTTPException(status_code=401, detail="Email ou senha invalidos")
 
+    # Senha certa de uma conta bloqueada por um administrador: so agora diz que esta bloqueada (antes, a resposta e a de
+    # sempre, para nao revelar quais e-mails existem)
+    if user.is_blocked:
+        log_action(db, action="login_blocked", entity="user", user_id=user.id, entity_id=user.id, details="bloqueado por administrador")
+        raise HTTPException(status_code=403, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
+
     user.failed_login_attempts = 0
     user.locked_until = None
     db.commit()
@@ -231,6 +237,9 @@ def login_with_google(request: Request, data: GoogleLogin, db: Session = Depends
         )
 
     user = db.query(User).filter(User.email == email).first()
+    if user and user.is_blocked:
+        log_action(db, action="login_blocked", entity="user", user_id=user.id, entity_id=user.id, details="bloqueado por administrador")
+        raise HTTPException(status_code=403, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
     if not user:
         # `allow_registration` desligado bloqueia autocadastro por email/senha, mas nao deve
         # bloquear a primeira entrada de um dominio que o admin explicitamente liberou pra
@@ -322,6 +331,9 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(User).get(user_id)
     if not user:
         raise HTTPException(status_code=401, detail="Usuario nao encontrado")
+    # Sessao ja aberta de uma conta bloqueada deixa de valer na hora, em todas as rotas
+    if user.is_blocked:
+        raise HTTPException(status_code=401, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
     if user.locked_until:
         locked_until = user.locked_until
         if locked_until.tzinfo is None:

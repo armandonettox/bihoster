@@ -1,6 +1,6 @@
 import enum
 
-from sqlalchemy import Column, Integer, String, Enum, DateTime, func
+from sqlalchemy import Boolean, Column, Integer, String, Enum, DateTime, func
 
 from app.core.database import Base
 
@@ -34,5 +34,7 @@ class User(Base):
     google_hd = Column(String, nullable=True)
     failed_login_attempts = Column(Integer, default=0, nullable=False)
     locked_until = Column(DateTime(timezone=True), nullable=True)
+    # Bloqueio manual por quem tem a permissao de bloquear: a pessoa nao entra nem usa uma sessao aberta ate ser
+    # desbloqueada. E diferente do bloqueio temporario por tentativas erradas (locked_until). Nulo vale como nao bloqueada.
+    is_blocked = Column(Boolean, nullable=True, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    # Nivel de permissao funcional (nao e papel de colecao; e o nivel global de funcionalidades)

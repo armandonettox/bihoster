@@ -19,7 +19,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - assinatura.*: rotas de /subscriptions;  alerta.*: rotas de /alerts
 - relatorio.exportar: /reports/{id}/export-email;  colecao.criar: POST /workspaces;  colecao.todas: GET /workspaces/all
 - assinatura.todas: GET /subscriptions (visão do portal todo);  sistema.versao: GET /system/version, /history e /logs
-- membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link)
+- membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.adicionar: /users/welcome-email)
 - grupos.*: rotas de /groups (grupos.participantes: /groups/{id}/members);  permissoes.editar: PUT de /access/*
 - conexao.*: /powerbi-connections;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
 - sistema.*: /settings (geral, marca, cache), autenticação e /email-settings
@@ -117,11 +117,12 @@ CATALOG: tuple[Permission, ...] = (
     _global(ANALYTICS_DELETE, "Excluir visuais", "Remover visuais do painel.", "Analíticos", feature=_ANALYTICS, requires=(ANALYTICS_VIEW,)),
     # Administração: cada aba tem os seus itens, para dar só o que a pessoa precisa
     _global("membros.ver", "Ver os membros", "Abrir Gerenciar usuários e ver as pessoas, os grupos e as permissões de cada uma.", "Gerenciar usuários", feature=_MEMBERS),
-    _global("membros.adicionar", "Adicionar membros", "Convidar e cadastrar pessoas novas.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
+    _global("membros.adicionar", "Adicionar membros", "Convidar e cadastrar pessoas novas, e mandar por e-mail o aviso de que foram adicionadas.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     _global("membros.editar", "Editar membros", "Mudar os dados e os grupos de uma pessoa.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     _global("membros.remover", "Remover membros", "Apagar uma pessoa do portal.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     _global("membros.convites", "Gerenciar convites", "Reenviar e cancelar convites que ainda não foram usados.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
-    _global("membros.senha", "Gerar link de nova senha", "Gerar o link para uma pessoa criar uma senha nova.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
+    _global("membros.bloquear", "Bloquear e desbloquear", "Impedir uma pessoa de entrar (e desfazer o bloqueio).", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
+    _global("membros.senha", "Gerar ou enviar link de nova senha", "Copiar o link para uma pessoa criar uma senha nova, ou mandá-lo por e-mail para ela.", "Gerenciar usuários", feature=_MEMBERS, requires=("membros.ver",)),
     # Ver os grupos mostra nome e e-mail de quem está em cada um, então exige ver os membros (a área "Gerenciar usuários" junta as duas)
     _global("grupos.ver", "Ver os grupos", "Ver os grupos e quem faz parte de cada um.", "Gerenciar usuários", feature=_GROUPS, requires=("membros.ver",)),
     _global("grupos.criar", "Criar grupos", "Cadastrar um grupo novo.", "Gerenciar usuários", feature=_GROUPS, requires=("grupos.ver",)),

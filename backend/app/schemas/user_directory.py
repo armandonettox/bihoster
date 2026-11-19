@@ -1,6 +1,6 @@
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.schemas.types import UtcDatetime
 
@@ -18,6 +18,13 @@ class UserDirectoryOut(BaseModel):
     email: str
     groups: list[UserGroupOut]
     last_login: Optional[UtcDatetime]
+    is_blocked: bool = False
+
+    @field_validator("is_blocked", mode="before")
+    @classmethod
+    def blocked_none_is_false(cls, value):
+        """Coluna nova e nula nas pessoas antigas: nulo vale como nao bloqueada."""
+        return bool(value)
 
 
 class PendingInviteOut(BaseModel):
