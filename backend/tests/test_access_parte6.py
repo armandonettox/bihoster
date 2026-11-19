@@ -58,6 +58,13 @@ ROTAS = [
 CHAVES = sorted({chave for _, _, chaves in ROTAS for chave in chaves})
 
 
+@pytest.fixture(autouse=True)
+def _pasta_de_dados_isolada(monkeypatch, tmp_path):
+    """A rota dos registros de atualizacao cria a pasta de dados do container (/app/data); fora do Docker, como na CI,
+    ela nao pode ser criada. Os testes apontam para uma pasta temporaria, como os testes de atualizacao do sistema."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+
+
 def _entrar(client, email):
     client.post("/auth/register", json={"name": email.split("@")[0], "email": email, "password": PASSWORD})
     token = client.post("/auth/login", json={"email": email, "password": PASSWORD}).json()["access_token"]
