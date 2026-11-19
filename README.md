@@ -90,6 +90,13 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   consegue dar e tirar o que ele mesmo tem. Colocar alguém num grupo é dar as permissões do grupo, então vale a mesma
   regra, e o grupo Administradores é só de quem já é administrador da plataforma.
 - **Administrador da plataforma** (grupo Administradores) tem tudo. Nenhuma permissão dá esse papel.
+- **Assinaturas e alertas: o que é seu e o que é de outras pessoas.** Cada permissão de assinatura e de alerta (ver,
+  editar, excluir, enviar agora) vale só para o que a própria pessoa criou. Para ver ou mexer no que outras pessoas
+  criaram existem permissões à parte ("... de outras pessoas"), uma para cada ação, que também exigem a permissão
+  simples correspondente. Quem não pode ver as de outras pessoas só enxerga as próprias nas listas. Assinatura ou alerta
+  cuja pessoa criadora foi removida conta como de outra pessoa. Exportar por e-mail continua uma permissão só. Quem
+  atualiza de uma versão anterior não perde nada: no primeiro boot, quem já tinha cada permissão ganha a equivalente
+  "de outras pessoas".
 - **E-mails de conta.** Com o servidor de e-mail e o endereço do site configurados (Configurações), ao adicionar um
   membro dá para ligar o aviso por e-mail com o link para entrar (desligado por padrão). O mesmo envio, e o do link de
   nova senha, estão no menu dos 3 pontinhos de cada pessoa. O link de nova senha vai só para o e-mail da pessoa.
