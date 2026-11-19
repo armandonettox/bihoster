@@ -90,6 +90,12 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   consegue dar e tirar o que ele mesmo tem. Colocar alguém num grupo é dar as permissões do grupo, então vale a mesma
   regra, e o grupo Administradores é só de quem já é administrador da plataforma.
 - **Administrador da plataforma** (grupo Administradores) tem tudo. Nenhuma permissão dá esse papel.
+- **Pedir mais tempo fora do horário.** Quem cai na tela de "fora do horário" pode escrever o motivo e pedir mais tempo.
+  Quem tem a permissão "Liberar acesso fora do horário" vê o pedido no topo de Gerenciar usuários (e recebe um e-mail, se
+  o servidor de e-mail estiver configurado), aprova escolhendo por quanto tempo (de 15 minutos a 24 horas, ou até um
+  horário do dia) ou recusa, com um motivo se quiser. A liberação acaba sozinha no prazo, pode ser encerrada antes, e a
+  tela de quem pediu entra sozinha quando aprovam. Ninguém libera o próprio acesso. Fora do horário, entrar com a
+  senha certa dá uma sessão que só serve para essa tela; todo o resto do sistema continua fechado.
 - **Assinaturas e alertas: o que é seu e o que é de outras pessoas.** Cada permissão de assinatura e de alerta (ver,
   editar, excluir, enviar agora) vale só para o que a própria pessoa criou. Para ver ou mexer no que outras pessoas
   criaram existem permissões à parte ("... de outras pessoas"), uma para cada ação, que também exigem a permissão
