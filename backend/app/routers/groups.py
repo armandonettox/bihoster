@@ -14,6 +14,7 @@ from app.core.workspace_deps import (
 )
 from app.core.access_pending import drop_if_no_invite
 from app.models.access_grant import AccessGrant
+from app.models.access_schedule import AccessScheduleRange
 from app.models.group_permission import GroupPermission
 from app.models.invite import GroupInvite
 from app.models.user import User
@@ -83,6 +84,7 @@ def delete_group(
     db.query(GroupWorkspaceAccess).filter(GroupWorkspaceAccess.group_id == group_id).delete()
     db.query(GroupPermission).filter(GroupPermission.group_id == group_id).delete()
     db.query(AccessGrant).filter(AccessGrant.group_id == group_id).delete()
+    db.query(AccessScheduleRange).filter(AccessScheduleRange.group_id == group_id).delete()
     db.query(GroupMember).filter(GroupMember.group_id == group_id).delete()
     invited_emails = {row.email for row in db.query(GroupInvite.email).filter(GroupInvite.group_id == group_id).all()}
     db.query(GroupInvite).filter(GroupInvite.group_id == group_id).delete()

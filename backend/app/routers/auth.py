@@ -7,6 +7,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.access_schedule import evaluate_schedule, outside_hours_error
 from app.core.audit import log_action
 from app.core.avatar import download_avatar
 from app.core.config import settings
@@ -191,6 +192,12 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
         log_action(db, action="login_blocked", entity="user", user_id=user.id, entity_id=user.id, details="bloqueado por administrador")
         raise HTTPException(status_code=403, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
 
+    # Fora do horario de acesso da pessoa: nao entra, e a tela explica o horario e quando volta
+    decision = evaluate_schedule(db, user)
+    if not decision.allowed:
+        log_action(db, action="login_outside_hours", entity="user", user_id=user.id, entity_id=user.id)
+        raise outside_hours_error(decision)
+
     user.failed_login_attempts = 0
     user.locked_until = None
     db.commit()
@@ -240,6 +247,11 @@ def login_with_google(request: Request, data: GoogleLogin, db: Session = Depends
     if user and user.is_blocked:
         log_action(db, action="login_blocked", entity="user", user_id=user.id, entity_id=user.id, details="bloqueado por administrador")
         raise HTTPException(status_code=403, detail="Sua conta esta bloqueada. Fale com quem administra o sistema.")
+    if user:
+        decision = evaluate_schedule(db, user)
+        if not decision.allowed:
+            log_action(db, action="login_outside_hours", entity="user", user_id=user.id, entity_id=user.id)
+            raise outside_hours_error(decision)
     if not user:
         # `allow_registration` desligado bloqueia autocadastro por email/senha, mas nao deve
         # bloquear a primeira entrada de um dominio que o admin explicitamente liberou pra
@@ -344,6 +356,10 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     # as rotas -- nao so na renovacao. Token de antes do campo pv existir nao tem a claim e passa.
     if "pv" in payload and payload["pv"] != password_fingerprint(user.hashed_password):
         raise HTTPException(status_code=401, detail="Sessao invalida, entre novamente")
+    # Fora do horario de acesso: a sessao aberta deixa de valer na hora, em todas as rotas (volta sozinha quando o horario abrir)
+    decision = evaluate_schedule(db, user)
+    if not decision.allowed:
+        raise outside_hours_error(decision)
     return user
 
 
