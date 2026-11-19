@@ -90,6 +90,11 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   consegue dar e tirar o que ele mesmo tem. Colocar alguém num grupo é dar as permissões do grupo, então vale a mesma
   regra, e o grupo Administradores é só de quem já é administrador da plataforma.
 - **Administrador da plataforma** (grupo Administradores) tem tudo. Nenhuma permissão dá esse papel.
+- **E-mails de conta.** Com o servidor de e-mail e o endereço do site configurados (Configurações), ao adicionar um
+  membro dá para ligar o aviso por e-mail com o link para entrar (desligado por padrão). O mesmo envio, e o do link de
+  nova senha, estão no menu dos 3 pontinhos de cada pessoa. O link de nova senha vai só para o e-mail da pessoa.
+- **Bloquear e desbloquear.** No mesmo menu, quem tem a permissão "Bloquear e desbloquear" impede uma pessoa de entrar:
+  a sessão aberta cai na hora e nada é apagado. Não dá para bloquear a própria conta nem o último administrador ativo.
 
 Quem atualiza de uma versão anterior não perde nada: no primeiro boot, os papéis antigos (Leitor, Editor,
 Administrador de cada coleção) e as permissões de IA e de analíticos dos grupos são copiados, uma vez, para as
