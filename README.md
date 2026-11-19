@@ -93,6 +93,12 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
 - **E-mails de conta.** Com o servidor de e-mail e o endereço do site configurados (Configurações), ao adicionar um
   membro dá para ligar o aviso por e-mail com o link para entrar (desligado por padrão). O mesmo envio, e o do link de
   nova senha, estão no menu dos 3 pontinhos de cada pessoa. O link de nova senha vai só para o e-mail da pessoa.
+- **Horário de acesso.** Cada grupo pode ter faixas de dias e horas (por exemplo "Seg a Sex, 08:00 às 12:00" e "13:00 às 18:00")
+  em que as pessoas dele podem usar o sistema, no fuso definido em Configurações. A pessoa também pode ter uma exceção
+  individual (faixas próprias ou sem limite), que substitui o horário dos grupos. Quem está em mais de um grupo com
+  faixas entra quando qualquer um permitir; sem faixa em lugar nenhum, não há limite. Fora do horário a sessão cai na
+  hora, uma tela mostra o horário permitido e quando o acesso volta, e ela volta sozinha quando o horário abre.
+  Administradores nunca são limitados, e quem tem a permissão "Definir horários de acesso" não muda o próprio horário.
 - **Bloquear e desbloquear.** No mesmo menu, quem tem a permissão "Bloquear e desbloquear" impede uma pessoa de entrar:
   a sessão aberta cai na hora e nada é apagado. Não dá para bloquear a própria conta nem o último administrador ativo.
 
