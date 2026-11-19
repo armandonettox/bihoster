@@ -6,6 +6,7 @@ import * as groupsApi from "../../api/groups";
 import * as usersApi from "../../api/users";
 import * as workspacesApi from "../../api/workspaces";
 import * as emailApi from "../../api/emailSettings";
+import * as schedulesApi from "../../api/schedules";
 import type { PendingInvite, UserDirectoryEntry, UserGroup } from "../../api/users";
 import { ADMIN_ACCESS, AccessContext, buildAccess } from "../../context/AccessContext";
 import UsersPanel from "./UsersPanel";
@@ -26,6 +27,7 @@ vi.mock("../../api/users", () => ({
   unblockUser: vi.fn(),
 }));
 vi.mock("../../api/emailSettings", () => ({ getEmailStatus: vi.fn() }));
+vi.mock("../../api/schedules", () => ({ getSchedule: vi.fn(), setSchedule: vi.fn() }));
 vi.mock("../../api/groups", () => ({
   listGroups: vi.fn(),
   createGroup: vi.fn(),
@@ -71,6 +73,7 @@ const sendWelcomeEmail = vi.mocked(usersApi.sendWelcomeEmail);
 const blockUser = vi.mocked(usersApi.blockUser);
 const unblockUser = vi.mocked(usersApi.unblockUser);
 const getEmailStatus = vi.mocked(emailApi.getEmailStatus);
+const getSchedule = vi.mocked(schedulesApi.getSchedule);
 const listGroups = vi.mocked(groupsApi.listGroups);
 const addGroupMember = vi.mocked(groupsApi.addGroupMember);
 const inviteGroupMember = vi.mocked(groupsApi.inviteGroupMember);
@@ -128,6 +131,8 @@ beforeEach(() => {
   mocks.showToast.mockClear();
   for (const fn of [sendResetEmail, sendWelcomeEmail, blockUser, unblockUser, getEmailStatus]) fn.mockReset();
   getEmailStatus.mockResolvedValue({ configured: true, allowed_domains: [] });
+  getSchedule.mockReset();
+  getSchedule.mockResolvedValue({ ranges: [], timezone: "America/Sao_Paulo" });
   sendResetEmail.mockResolvedValue(undefined);
   sendWelcomeEmail.mockResolvedValue({ status: "sent", email: "x", kind: "added" });
   blockUser.mockResolvedValue(undefined);
@@ -1625,5 +1630,75 @@ describe("UsersPanel - nome formatado e foto", () => {
     const semFoto = linha("pessoa1@exemplo.com");
     expect(semFoto.querySelector("img")).toBeNull();
     expect(semFoto.querySelector(".user-avatar")?.textContent).toBe("PE");
+  });
+});
+
+describe("UsersPanel - horario de acesso na janela da pessoa", () => {
+  const abrirEdicao = async (nome: string) => {
+    fireEvent.click(within(linha(nome)).getByLabelText("Mais opcoes"));
+    fireEvent.click(screen.getByRole("button", { name: /^(Editar|Ver permissões)$/ }));
+    await screen.findByText("Editar membro");
+  };
+
+  beforeEach(() => {
+    vi.mocked(accessApi.getGrants).mockResolvedValue({ blocks: [], editable: true });
+  });
+
+  it("mostra o horario de acesso da pessoa, com a excecao individual", async () => {
+    await abrir([pessoa(1), pessoa(2)]);
+    await abrirEdicao("Pessoa 02");
+
+    expect(await screen.findByRole("region", { name: "Horário de acesso" })).toBeTruthy();
+    expect(getSchedule).toHaveBeenCalledWith("user", 2);
+    expect(screen.getByRole("radio", { name: /Exceção: faixas próprias/ })).toBeTruthy();
+  });
+
+  it("administrador nunca e limitado: em vez do editor, so o aviso", async () => {
+    getReport.mockResolvedValue([{ ...LINHA_DA_MARIA, user_id: 2, is_admin: true }]);
+    await abrir([pessoa(1), pessoa(2)]);
+    await abrirEdicao("Pessoa 02");
+
+    expect(screen.getByText(/nunca são limitados por horário/)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Horário de acesso" })).toBeNull();
+    expect(getSchedule).not.toHaveBeenCalled();
+  });
+
+  it("sem a permissao de definir horario, o editor so mostra: sem Salvar horario", async () => {
+    mocks.me = { is_admin: false, global_permissions: ["membros.ver", "permissoes.editar"], workspace_permissions: {} };
+    await abrir([pessoa(1), pessoa(2)]);
+    await abrirEdicao("Pessoa 02");
+
+    expect(await screen.findByRole("region", { name: "Horário de acesso" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Salvar horário" })).toBeNull();
+  });
+
+  it("com membros.horario o botao de salvar existe", async () => {
+    mocks.me = { is_admin: false, global_permissions: ["membros.ver", "membros.horario"], workspace_permissions: {} };
+    await abrir([pessoa(1), pessoa(2)]);
+    await abrirEdicao("Pessoa 02");
+
+    expect(await screen.findByRole("button", { name: "Salvar horário" })).toBeTruthy();
+  });
+});
+
+describe("UsersPanel - horario de acesso na janela do grupo", () => {
+  it("o grupo comum mostra o horario de acesso", async () => {
+    vi.mocked(accessApi.getGrants).mockResolvedValue({ blocks: [], editable: true });
+    listGroups.mockResolvedValue([PADRAO, DADOS, { id: 5, name: "Administradores", is_default: false, is_admin_group: true }] as never);
+    listUsers.mockResolvedValue([pessoa(1)]);
+    listInvites.mockResolvedValue([]);
+    render(
+      <AccessContext.Provider value={buildAccess(mocks.me)}>
+        <MemoryRouter initialEntries={["/users?view=groups"]}>
+          <UsersPanel />
+        </MemoryRouter>
+      </AccessContext.Provider>,
+    );
+    await screen.findByText("Dados", { selector: "strong" });
+
+    fireEvent.click(within(screen.getByText("Dados", { selector: "strong" }).closest("tr") as HTMLElement).getByLabelText("Mais opcoes"));
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
+    expect(await screen.findByRole("region", { name: "Horário de acesso" })).toBeTruthy();
+    expect(getSchedule).toHaveBeenCalledWith("group", 20);
   });
 });

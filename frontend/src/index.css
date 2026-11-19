@@ -4988,3 +4988,91 @@ table.table tr:last-child td {
   font-size: 15px;
   font-weight: 600;
 }
+
+/* --- Horário de acesso: faixas de dias e horas de um grupo ou de uma pessoa --- */
+
+.schedule-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border);
+}
+
+.schedule-modes,
+.schedule-ranges {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+}
+
+.schedule-mode {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.schedule-range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px 16px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  background: var(--color-surface);
+}
+
+.schedule-days {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.schedule-day {
+  min-width: 40px;
+  padding: 6px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.schedule-day-on {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: var(--color-primary-text);
+}
+
+.schedule-times {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.schedule-times label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.schedule-times .input {
+  width: 110px;
+}
+
+.outside-hours-windows {
+  margin: 0;
+  padding-left: 18px;
+  font-size: 14px;
+  line-height: 1.6;
+}

@@ -2,6 +2,9 @@ import { createContext, useContext, useEffect, useRef, useState, type ReactNode 
 import * as authApi from "../api/auth";
 import type { User } from "../api/auth";
 import { safeStorage } from "../utils/safeStorage";
+import { OUTSIDE_HOURS_EVENT, outsideHoursFrom } from "../utils/outsideHours";
+import type { OutsideHoursInfo } from "../utils/outsideHours";
+import OutsideHoursScreen from "../components/OutsideHoursScreen";
 
 interface AuthContextValue {
   user: User | null;
@@ -24,6 +27,34 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const lastRefreshRef = useRef(Date.now());
+  // Fora do horario de acesso: o app inteiro e trocado pelo aviso, sem apagar a sessao
+  const [outsideHours, setOutsideHours] = useState<OutsideHoursInfo | null>(null);
+  const [retrying, setRetrying] = useState(false);
+
+  useEffect(() => {
+    function handle(event: Event) {
+      setOutsideHours((event as CustomEvent<OutsideHoursInfo>).detail);
+    }
+    window.addEventListener(OUTSIDE_HOURS_EVENT, handle);
+    return () => window.removeEventListener(OUTSIDE_HOURS_EVENT, handle);
+  }, []);
+
+  async function retryAccess() {
+    setRetrying(true);
+    try {
+      setUser(await authApi.me());
+      setOutsideHours(null);
+    } catch {
+      // Ainda fora do horario (o interceptor atualiza o aviso) ou sem rede: a tela continua
+    } finally {
+      setRetrying(false);
+    }
+  }
+
+  function leave() {
+    safeStorage.removeItem("token");
+    window.location.href = "/login";
+  }
 
   // Sessao deslizante: enquanto ha usuario logado, troca o token periodicamente.
   useEffect(() => {
@@ -65,7 +96,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     authApi
       .me()
       .then(setUser)
-      .catch(() => safeStorage.removeItem("token"))
+      .catch((err) => {
+        // Fora do horario nao e sessao invalida: o token fica, e a tela de aviso aparece
+        if (!outsideHoursFrom(err)) safeStorage.removeItem("token");
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -99,7 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider value={{ user, loading, login, loginWithGoogle, logout, updateName, changePassword }}>
-      {children}
+      {outsideHours ? (
+        <OutsideHoursScreen info={outsideHours} retrying={retrying} onRetry={retryAccess} onLeave={leave} />
+      ) : (
+        children
+      )}
     </AuthContext.Provider>
   );
 }

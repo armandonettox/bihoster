@@ -30,6 +30,7 @@ import ConfirmDialog from "../../components/ConfirmDialog";
 import KebabMenu from "../../components/KebabMenu";
 import MenuIcon from "../../components/MenuIcon";
 import UserAvatar from "../../components/UserAvatar";
+import ScheduleEditor from "../../components/ScheduleEditor";
 import { formatPersonName } from "../../utils/personName";
 import TablePagination from "../../components/TablePagination";
 import { extractErrorMessage } from "../../api/client";
@@ -1085,6 +1086,12 @@ export default function UsersPanel() {
             readOnly={!canGivePermissions}
             allowed={access.holds}
           />
+
+          {accessSummary.get(editingAccessUser.id)?.isAdmin ? (
+            <p className="access-intro">Administradores da plataforma nunca são limitados por horário de acesso.</p>
+          ) : (
+            <ScheduleEditor kind="user" id={editingAccessUser.id} readOnly={!access.can("membros.horario")} />
+          )}
         </Modal>
       )}
 

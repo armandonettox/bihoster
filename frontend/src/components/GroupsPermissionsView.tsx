@@ -9,6 +9,7 @@ import { useAccess } from "../context/AccessContext";
 import { useToast } from "../context/ToastContext";
 import AccessEditor from "./AccessEditor";
 import AccessHero from "./AccessHero";
+import ScheduleEditor from "./ScheduleEditor";
 import AddGroupMemberModal from "./AddGroupMemberModal";
 import ConfirmDialog from "./ConfirmDialog";
 import CreateGroupModal from "./CreateGroupModal";
@@ -296,6 +297,8 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
             readOnly={!canGivePermissions}
             allowed={access.holds}
           />
+
+          {!editing.is_admin_group && <ScheduleEditor kind="group" id={editing.id} readOnly={!access.can("membros.horario")} />}
         </Modal>
       )}
 

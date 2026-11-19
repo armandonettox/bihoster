@@ -1,6 +1,7 @@
 import axios from "axios";
 import { safeStorage } from "../utils/safeStorage";
 import { loginUrlFor } from "../utils/redirect";
+import { OUTSIDE_HOURS_EVENT, outsideHoursFrom } from "../utils/outsideHours";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
@@ -33,6 +34,9 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    // Fora do horario de acesso: avisa o app, que troca a tela inteira pelo aviso (a sessao volta sozinha quando abrir)
+    const outsideHours = outsideHoursFrom(error);
+    if (outsideHours) window.dispatchEvent(new CustomEvent(OUTSIDE_HOURS_EVENT, { detail: outsideHours }));
     const hadToken = !!safeStorage.getItem("token");
     if (error.response?.status === 401 && hadToken) {
       safeStorage.removeItem("token");
