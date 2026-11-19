@@ -8,7 +8,9 @@ from sqlalchemy.orm import Session
 from app.core import chat_history
 from app.core.audit import log_action
 from app.core.database import get_db
-from app.core.workspace_deps import require_platform_admin
+from app.core.access_deps import require_global_permission
+from app.core.access_guard import check_can_touch_account
+from app.models.access_grant import AccessGrant
 from app.models.audit_log import AuditLog
 from app.models.favorite import Favorite
 from app.models.invite import GroupInvite
@@ -23,7 +25,7 @@ RESET_TOKEN_EXPIRE_MINUTES = 30
 
 
 @router.get("/", response_model=list[UserDirectoryOut])
-def list_users(db: Session = Depends(get_db), _=Depends(require_platform_admin)):
+def list_users(db: Session = Depends(get_db), _=Depends(require_global_permission("membros.ver"))):
     users = db.query(User).order_by(User.name).all()
     memberships = (
         db.query(GroupMember, Group)
@@ -51,14 +53,13 @@ def list_users(db: Session = Depends(get_db), _=Depends(require_platform_admin))
             email=u.email,
             groups=groups_by_user.get(u.id, []),
             last_login=last_login_by_user.get(u.id),
-            permission_level_id=u.permission_level_id,
         )
         for u in users
     ]
 
 
 @router.get("/pending-invites", response_model=list[PendingInviteOut])
-def list_pending_invites(db: Session = Depends(get_db), _=Depends(require_platform_admin)):
+def list_pending_invites(db: Session = Depends(get_db), _=Depends(require_global_permission("membros.ver"))):
     """Convites de qualquer grupo, para exibir no diretorio global de membros."""
     rows = (
         db.query(GroupInvite, Group.name)
@@ -76,12 +77,13 @@ def list_pending_invites(db: Session = Depends(get_db), _=Depends(require_platfo
 def generate_reset_link(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("membros.senha")),
 ):
     """Gera um token de redefinicao de senha para o admin copiar e enviar manualmente ao usuario."""
     user = db.query(User).get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    check_can_touch_account(db, current_user, user_id)
 
     now = datetime.now(timezone.utc)
     db.query(PasswordResetToken).filter(
@@ -107,7 +109,7 @@ def generate_reset_link(
 def delete_user(
     user_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("membros.remover")),
 ):
     """Remove a conta por completo -- grupos, favoritos e tokens de reset do usuario;
     entradas de auditoria e convites que ele criou ficam sem autor (user_id nulo)."""
@@ -117,6 +119,7 @@ def delete_user(
     user = db.query(User).get(user_id)
     if not user:
         raise HTTPException(status_code=404, detail="Usuario nao encontrado")
+    check_can_touch_account(db, current_user, user_id)
 
     email = user.email
     db.query(GroupMember).filter(GroupMember.user_id == user_id).delete(synchronize_session=False)
@@ -132,6 +135,7 @@ def delete_user(
         {"user_email": email}, synchronize_session=False
     )
     db.query(AuditLog).filter(AuditLog.user_id == user_id).update({"user_id": None}, synchronize_session=False)
+    db.query(AccessGrant).filter(AccessGrant.user_id == user_id).delete(synchronize_session=False)
     db.delete(user)
 
     log_action(db, action="delete_user", entity="user", user_id=current_user.id, entity_id=user_id, details=email)

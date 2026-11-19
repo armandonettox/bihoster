@@ -3,6 +3,7 @@
 import pytest
 
 from app.core.audit_dashboard import default_widgets, required_permissions
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 
@@ -26,9 +27,9 @@ def pessoa(client, admin):
 def _dar(client, admin, chaves: list[str]):
     grupo = client.post("/groups/", json={"name": "Analise"}, headers=admin).json()["id"]
     client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
-    resp = client.put(f"/groups/{grupo}/permissions", json={"permissions": chaves}, headers=admin)
+    resp = dar_permissoes_do_grupo(client, admin, grupo, chaves)
     assert resp.status_code == 200
-    return resp.json()["permissions"]
+    return [chave for bloco in resp.json()["blocks"] if bloco["workspace_id"] is None for chave in bloco["permissions"]]
 
 
 def _acesso(client, headers) -> dict:
@@ -56,11 +57,6 @@ class TestAcesso:
         assert "analiticos.ver" in _dar(client, admin, ["analiticos.criar"])
         acesso = _acesso(client, pessoa)
         assert acesso["can_view"] and acesso["can_create"] and not acesso["can_edit"]
-
-    def test_chave_desconhecida_e_recusada(self, client, admin):
-        grupo = client.post("/groups/", json={"name": "X"}, headers=admin).json()["id"]
-        resp = client.put(f"/groups/{grupo}/permissions", json={"permissions": ["analiticos.tudo"]}, headers=admin)
-        assert resp.status_code == 422
 
 
 class TestVer:

@@ -17,6 +17,7 @@ from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User
 from app.models.workspace import Workspace
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 ESQUEMA = DatasetSchema(tables=(SchemaTable("Vendas", (SchemaColumn("Valor", "decimal"),), (("Total", None),)),))
@@ -92,7 +93,7 @@ def ia(client, admin, monkeypatch):
 def _liberar_usar(client, admin, email):
     grupo = client.post("/groups/", json={"name": f"Analistas {email}"}, headers=admin).json()["id"]
     client.post(f"/groups/{grupo}/members", json={"email": email}, headers=admin)
-    client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
+    dar_permissoes_do_grupo(client, admin, grupo, ["ia.usar"])
 
 
 @pytest.fixture
@@ -353,7 +354,7 @@ class TestApagar:
         conversa_id = _chat(client, ana).json()["conversation_id"]
         grupos = client.get("/groups/", headers=admin).json()
         for grupo in grupos:
-            client.put(f"/groups/{grupo['id']}/permissions", json={"permissions": []}, headers=admin) if not grupo["is_admin_group"] else None
+            dar_permissoes_do_grupo(client, admin, grupo['id'], []) if not grupo["is_admin_group"] else None
         assert client.get("/ai/conversations/", headers=ana).status_code == 403
 
         assert client.delete(f"/ai/conversations/{conversa_id}", headers=ana).status_code == 204
@@ -507,7 +508,7 @@ class TestOpcoes:
     def test_quem_so_gerencia_a_ia_tambem_muda(self, client, admin, ana):
         grupo = client.post("/groups/", json={"name": "Gestores"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": "ana@example.com"}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.gerenciar"])
 
         assert client.put("/ai/options/", json={"retention_days": 14}, headers=ana).status_code == 200
 

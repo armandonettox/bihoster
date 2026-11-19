@@ -6,17 +6,15 @@ from sqlalchemy.orm import Session
 from app.core import powerbi
 from app.core.audit import log_action
 from app.core.database import get_db
-from app.core.workspace_deps import require_workspace_role
+from app.core.access_deps import require_workspace_permission
 from app.models.alert import ALERT_CONDITIONS, ReportAlert
 from app.models.report import Report
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.models.workspace import Workspace
 from app.routers import powerbi as embed_router
 from app.schemas.alert import AlertCreate, AlertOut, AlertUpdate, MeasureOut
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["alerts"])
-
-can_manage = require_workspace_role(UserRole.admin, UserRole.editor)
 
 MAX_PER_REPORT = 20
 
@@ -69,7 +67,7 @@ def _get_alert(db: Session, workspace_id: int, alert_id: int) -> ReportAlert:
 
 @router.get("/reports/{report_id}/alerts", response_model=list[AlertOut])
 def list_report_alerts(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(can_manage)
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("alerta.ver"))
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     alerts = db.query(ReportAlert).filter(ReportAlert.report_id == report.id).order_by(ReportAlert.id).all()
@@ -78,7 +76,7 @@ def list_report_alerts(
 
 @router.get("/reports/{report_id}/measures", response_model=list[MeasureOut])
 def list_report_measures(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(can_manage)
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("alerta.ver"))
 ):
     """Lista as medidas disponiveis no dataset do relatorio (via INFO.MEASURES() do Power BI)."""
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
@@ -104,7 +102,7 @@ def create_alert(
     report_id: int,
     data: AlertCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(can_manage),
+    current_user: User = Depends(require_workspace_permission("alerta.criar")),
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     if db.query(ReportAlert).filter(ReportAlert.report_id == report.id).count() >= MAX_PER_REPORT:
@@ -140,7 +138,7 @@ def update_alert(
     alert_id: int,
     data: AlertUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(can_manage),
+    current_user: User = Depends(require_workspace_permission("alerta.editar")),
 ):
     alert = _get_alert(db, workspace_id, alert_id)
     changes = data.model_dump(exclude_unset=True)
@@ -158,7 +156,7 @@ def update_alert(
 
 @router.delete("/alerts/{alert_id}", status_code=204)
 def delete_alert(
-    workspace_id: int, alert_id: int, db: Session = Depends(get_db), current_user: User = Depends(can_manage)
+    workspace_id: int, alert_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("alerta.excluir"))
 ):
     alert = _get_alert(db, workspace_id, alert_id)
     db.delete(alert)

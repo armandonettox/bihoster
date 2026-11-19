@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from app.core import cache_warmup
 from app.core import powerbi as powerbi_core
 from app.routers import powerbi as embed_router
+from tests.access_helpers import grupo_padrao_id, tirar_acesso
 
 PASSWORD = "SenhaForte123"
 
@@ -96,9 +97,7 @@ class TestTokenCompartilhado:
         assert _embed(client, outro, workspace, report, generate=generate).status_code == 200
 
         # Tira o acesso do grupo padrao ("Todos os usuarios"): a pessoa deixa de ser membro
-        acessos = client.get(f"/workspaces/{workspace['id']}/access", headers=admin).json()
-        padrao = next(a for a in acessos if a["is_default"])
-        client.delete(f"/workspaces/{workspace['id']}/access/{padrao['group_id']}", headers=admin)
+        tirar_acesso(client, admin, workspace["id"], grupo_padrao_id(client, admin))
 
         resp = _embed(client, outro, workspace, report, generate=generate)
 
@@ -167,9 +166,7 @@ class TestInfoDeAtualizacaoEmLote:
     def test_exige_acesso_a_colecao(self, client):
         admin, workspace, _ = _setup(client, ["ds-1"])
         outro = _headers_de(client, "pessoa@example.com")
-        acessos = client.get(f"/workspaces/{workspace['id']}/access", headers=admin).json()
-        padrao = next(a for a in acessos if a["is_default"])
-        client.delete(f"/workspaces/{workspace['id']}/access/{padrao['group_id']}", headers=admin)
+        tirar_acesso(client, admin, workspace["id"], grupo_padrao_id(client, admin))
 
         resp = self._chama(client, outro, workspace, MagicMock())
 
@@ -387,9 +384,7 @@ class TestAuditoriaDeAbertura:
         admin, workspace, (report,) = _setup(client, ["ds-1"])
         intruso = _headers_de(client, "intruso@example.com")
         # Tira o acesso do grupo padrao ("Todos os usuarios"): a pessoa deixa de ser membro
-        acessos = client.get(f"/workspaces/{workspace['id']}/access", headers=admin).json()
-        padrao = next(a for a in acessos if a["is_default"])
-        client.delete(f"/workspaces/{workspace['id']}/access/{padrao['group_id']}", headers=admin)
+        tirar_acesso(client, admin, workspace["id"], grupo_padrao_id(client, admin))
 
         resp = _embed(client, intruso, workspace, report, generate=MagicMock(return_value=_token()))
 

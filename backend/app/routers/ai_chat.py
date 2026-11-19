@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import ai_pricing, ai_usage, chat_engine, chat_history, chat_log
-from app.core.ai_access import require_ai_use
+from app.core.access_deps import require_global_permission
 from app.core.ai_providers import AIError
 from app.core.audit import log_action
 from app.core.database import get_db
@@ -21,7 +21,7 @@ def chat(
     request: Request,
     data: ChatIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_use),
+    current_user: User = Depends(require_global_permission("ia.usar")),
 ):
     """Responde uma pergunta sobre os dados dos relatorios que a pessoa pode ver e guarda a conversa
     no historico dela. Exige a permissao "Usar chat de IA". Falha do Power BI sobe pelo tratador global (502)."""

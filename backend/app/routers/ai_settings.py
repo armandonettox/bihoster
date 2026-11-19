@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import ai_providers
-from app.core.ai_access import require_ai_manage
+from app.core.access_deps import require_global_permission
 from app.core.ai_providers import PROVIDERS, AIError
 from app.core.audit import log_action
 from app.core.database import get_db
@@ -39,7 +39,7 @@ def _to_out(provider: str, row: AIProvider | None) -> AIProviderOut:
 
 
 @router.get("/", response_model=list[AIProviderOut])
-def list_ai_providers(db: Session = Depends(get_db), _: User = Depends(require_ai_manage)):
+def list_ai_providers(db: Session = Depends(get_db), _: User = Depends(require_global_permission("ia.chaves"))):
     rows = {row.provider: row for row in db.query(AIProvider).all()}
     return [_to_out(key, rows.get(key)) for key in PROVIDERS]
 
@@ -49,7 +49,7 @@ def update_ai_provider(
     provider: str,
     data: AIProviderUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.chaves")),
 ):
     _get_provider_or_404(provider)
     row = db.query(AIProvider).filter(AIProvider.provider == provider).first()
@@ -104,7 +104,7 @@ def list_ai_provider_models(
     request: Request,
     provider: str,
     db: Session = Depends(get_db),
-    _: User = Depends(require_ai_manage),
+    _: User = Depends(require_global_permission("ia.modelos")),
 ):
     """Modelos que a chave salva consegue usar, direto do provedor. A chave vem sempre do banco, nunca
     do navegador: assim ela nao trafega de novo e a rota nao serve para testar chave de outra pessoa."""
@@ -126,7 +126,7 @@ def test_ai_provider(
     request: Request,
     provider: str,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.chaves")),
 ):
     _get_provider_or_404(provider)
     row = db.query(AIProvider).filter(AIProvider.provider == provider).first()

@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import log_action
 from app.core.database import get_db
-from app.core.workspace_deps import require_platform_admin
+from app.core.access_deps import require_any_global_permission, require_global_permission
+from app.core.access_engine import effective_access
 from app.models.settings import AppSettings
 from app.models.user import User
 from app.models.workspace import Group, GroupMember, Workspace
@@ -73,6 +74,48 @@ def _to_out(settings_row: AppSettings) -> SettingsOut:
     )
 
 
+# Cada campo de configuracao pertence a uma aba da Administracao; quem muda o campo precisa ter o item dela.
+# Campo que nao esta aqui so o administrador da plataforma muda.
+FIELD_PERMISSIONS: dict[str, tuple[str, ...]] = {
+    "company_name": ("sistema.geral", "sistema.marca"),
+    "timezone": ("sistema.geral",),
+    "site_url": ("sistema.geral",),
+    "support_email": ("sistema.geral",),
+    "force_https": ("sistema.geral",),
+    "single_collection_redirect": ("sistema.geral",),
+    "default_workspace_id": ("sistema.geral",),
+    "primary_color": ("sistema.marca",),
+    "secondary_color": ("sistema.marca",),
+    "login_layout": ("sistema.marca",),
+    "not_found_title": ("sistema.marca",),
+    "not_found_message": ("sistema.marca",),
+    "not_found_button": ("sistema.marca",),
+    "error_title": ("sistema.marca",),
+    "error_message": ("sistema.marca",),
+    "error_button": ("sistema.marca",),
+    "allow_registration": ("sistema.autenticacao",),
+    "google_oauth_enabled": ("sistema.autenticacao",),
+    "google_client_id": ("sistema.autenticacao",),
+    "google_client_secret": ("sistema.autenticacao",),
+    "google_allowed_domains": ("sistema.autenticacao",),
+    "cache_warmup_enabled": ("sistema.cache",),
+    "cache_warmup_interval_seconds": ("sistema.cache",),
+}
+
+
+def _check_fields_allowed(db: Session, user: User, fields) -> None:
+    access = effective_access(db, user.id)
+    if access.is_admin:
+        return
+    denied = [
+        field
+        for field in fields
+        if not any(access.has_global(key) for key in FIELD_PERMISSIONS.get(field, ()))
+    ]
+    if denied:
+        raise HTTPException(status_code=403, detail="Voce nao tem permissao para mudar: " + ", ".join(sorted(denied)))
+
+
 @router.get("/", response_model=SettingsOut)
 def get_settings(db: Session = Depends(get_db)):
     """Publico -- a marca (logo/nome) precisa aparecer ate na tela de login, antes de qualquer auth."""
@@ -83,10 +126,11 @@ def get_settings(db: Session = Depends(get_db)):
 def update_settings(
     data: SettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_any_global_permission("sistema.geral", "sistema.marca", "sistema.autenticacao", "sistema.cache")),
 ):
     settings_row = _get_or_create_settings(db)
     changed_fields = data.model_dump(exclude_unset=True)
+    _check_fields_allowed(db, current_user, changed_fields.keys())
 
     # Evita o admin se trancar pra sempre: se ele se cadastrou via Google (senha inutilizavel)
     # e e o unico administrador da plataforma, nao deixa desativar o login com Google --
@@ -137,14 +181,14 @@ def update_settings(
 
 
 @router.get("/cache/stats")
-def get_cache_stats(_: User = Depends(require_platform_admin)):
+def get_cache_stats(_: User = Depends(require_global_permission("sistema.cache"))):
     """Tamanho atual dos caches de embed e resultado do ultimo ciclo de aquecimento."""
     from app.core import cache_warmup
     return cache_warmup.get_stats()
 
 
 @router.delete("/cache")
-def reset_cache(_: User = Depends(require_platform_admin)):
+def reset_cache(_: User = Depends(require_global_permission("sistema.cache"))):
     """Limpa todos os caches de embed. O proximo acesso a cada relatorio gera um token novo."""
     from app.core import cache_warmup
     cache_warmup.clear_all()
@@ -188,7 +232,7 @@ def _delete_upload_if_exists(url: str | None) -> None:
 def upload_logo(
     file: UploadFile,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("sistema.marca")),
 ):
     settings_row = _get_or_create_settings(db)
     old_url = settings_row.logo_url
@@ -202,7 +246,7 @@ def upload_logo(
 @router.delete("/logo", response_model=SettingsOut)
 def remove_logo(
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("sistema.marca")),
 ):
     settings_row = _get_or_create_settings(db)
     old_url = settings_row.logo_url
@@ -217,7 +261,7 @@ def remove_logo(
 def upload_favicon(
     file: UploadFile,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("sistema.marca")),
 ):
     settings_row = _get_or_create_settings(db)
     old_url = settings_row.favicon_url
@@ -231,7 +275,7 @@ def upload_favicon(
 @router.delete("/favicon", response_model=SettingsOut)
 def remove_favicon(
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("sistema.marca")),
 ):
     settings_row = _get_or_create_settings(db)
     old_url = settings_row.favicon_url
@@ -246,7 +290,7 @@ def remove_favicon(
 def upload_login_image(
     file: UploadFile,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("sistema.marca")),
 ):
     settings_row = _get_or_create_settings(db)
     old_url = settings_row.login_image_url
@@ -260,7 +304,7 @@ def upload_login_image(
 @router.delete("/login-image", response_model=SettingsOut)
 def remove_login_image(
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("sistema.marca")),
 ):
     settings_row = _get_or_create_settings(db)
     old_url = settings_row.login_image_url

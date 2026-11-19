@@ -1,5 +1,7 @@
 """Testes da rota GET /search/: ranking, colecoes nos resultados, acento e controle de acesso."""
 
+from tests.access_helpers import tirar_acesso
+
 
 def _register_and_login(client, email: str) -> dict:
     client.post("/auth/register", json={"name": email.split("@")[0], "email": email, "password": "SenhaForte123"})
@@ -146,7 +148,7 @@ def test_usuario_sem_acesso_nao_ve_colecao_nem_relatorio(client):
     # Toda colecao nova da acesso de leitor ao grupo padrao; tira, pra ficar so com o admin
     groups = client.get("/groups/", headers=admin).json()
     default_group = next(g for g in groups if g["is_default"])
-    client.delete(f"/workspaces/{secreta['id']}/access/{default_group['id']}", headers=admin)
+    tirar_acesso(client, admin, secreta["id"], default_group["id"])
 
     outro = _register_and_login(client, "outro@example.com")
 

@@ -18,6 +18,7 @@ from app.models.audit_log import AuditLog
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.workspace import Workspace
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 ESQUEMA = DatasetSchema(tables=(SchemaTable("Vendas", (SchemaColumn("Valor", "decimal"),), (("Total", None),)),))
@@ -254,7 +255,7 @@ class TestPermissao:
         ensure_default_group_access(db_session, relatorio.collection_id)
         grupo = client.post("/groups/", json={"name": "Usuarios"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.usar"])
         _linha(db_session)
 
         assert _log(client, pessoa).status_code == 403
@@ -262,7 +263,7 @@ class TestPermissao:
     def test_quem_gerencia_a_ia_ve(self, client, admin, pessoa, db_session):
         grupo = client.post("/groups/", json={"name": "Dados"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.gerenciar"])
         _linha(db_session)
 
         resp = _log(client, pessoa)

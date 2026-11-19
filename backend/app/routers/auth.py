@@ -104,13 +104,17 @@ def _is_google_account(user: User) -> bool:
 
 def _consume_invites(db: Session, user: User) -> None:
     """Ao criar a conta, entra automaticamente nos grupos onde ja havia convite pendente pro email."""
+    from app.core.access_pending import consume_pending
+
     invites = db.query(GroupInvite).filter(GroupInvite.email == user.email).all()
     for invite in invites:
         exists = db.query(GroupMember).filter(GroupMember.group_id == invite.group_id, GroupMember.user_id == user.id).first()
         if not exists:
             db.add(GroupMember(group_id=invite.group_id, user_id=user.id))
         db.delete(invite)
-    if invites:
+    # As permissoes reservadas no convite so valem se o convite ainda existia neste momento
+    pending_changed = consume_pending(db, user, had_invites=bool(invites))
+    if invites or pending_changed:
         db.commit()
 
 

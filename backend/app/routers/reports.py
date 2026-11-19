@@ -10,7 +10,8 @@ from app.core.audit import log_action
 from app.core.audit_revert import PAGE_NAMES_FIELD, REPORT_UPDATE
 from app.core.audit_revert import changed_fields as audit_changed_fields
 from app.core.database import get_db
-from app.core.workspace_deps import require_workspace_member, require_workspace_role
+from app.core.access_deps import require_workspace_permission
+from app.core.workspace_deps import require_workspace_member
 from app.models.favorite import Favorite
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
@@ -69,7 +70,7 @@ def create_report(
     workspace_id: int,
     data: ReportCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_workspace_permission("relatorio.publicar")),
 ):
     _validate_connection_exists(db, data.powerbi_connection_id)
     report = Report(collection_id=workspace_id, **data.model_dump(exclude=_PAGE_FIELDS))
@@ -93,7 +94,7 @@ def update_report(
     report_id: int,
     data: ReportUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_workspace_permission("relatorio.editar")),
 ):
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
     if not report:
@@ -141,7 +142,7 @@ def move_report(
     report_id: int,
     data: ReportMove,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    _=Depends(require_workspace_permission("relatorio.reordenar")),
 ):
     """Sobe ou desce um relatorio dentro da propria secao (mesmo display_type). Devolve a lista
     inteira da colecao ja na nova ordem, pro cliente atualizar sem outra requisicao."""
@@ -221,7 +222,7 @@ def refresh_thumbnail(
     report_id: int,
     data: ThumbnailRefresh,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_workspace_permission("relatorio.miniatura")),
 ):
     """Inicia a geracao do thumbnail em background via ExportTo PNG do Power BI. Devolve o job_id."""
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
@@ -254,7 +255,7 @@ def get_thumbnail_job(
     workspace_id: int,
     report_id: int,
     job_id: str,
-    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_workspace_permission("relatorio.miniatura")),
 ):
     """Consulta o status de uma geracao de thumbnail em andamento."""
     job = report_delivery.get_job(job_id, current_user.id)
@@ -268,7 +269,7 @@ def clear_thumbnail(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    _: User = Depends(require_workspace_permission("relatorio.miniatura")),
 ):
     """Remove o thumbnail estatico do relatorio (volta a mostrar o embed ao vivo)."""
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
@@ -286,7 +287,7 @@ def delete_report(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    current_user: User = Depends(require_workspace_permission("relatorio.excluir")),
 ):
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
     if not report:

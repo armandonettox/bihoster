@@ -6,6 +6,7 @@ from app.core import system_update
 from app.core.audit import log_action
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.access_deps import require_global_permission
 from app.core.workspace_deps import require_platform_admin
 from app.models.user import User
 from app.routers.auth import get_current_user
@@ -21,7 +22,7 @@ def get_current_version(_=Depends(get_current_user)):
 
 
 @router.get("/version")
-def get_version_status(_=Depends(require_platform_admin)):
+def get_version_status(_=Depends(require_global_permission("sistema.versao"))):
     check_failed = False
     try:
         latest = system_update.fetch_latest_release()
@@ -43,7 +44,7 @@ def get_version_status(_=Depends(require_platform_admin)):
 
 
 @router.get("/version/history")
-def get_version_history(_=Depends(require_platform_admin)):
+def get_version_history(_=Depends(require_global_permission("sistema.versao"))):
     try:
         return system_update.fetch_release_history()
     except httpx.HTTPError:
@@ -97,5 +98,5 @@ def apply_update(
 
 
 @router.get("/version/logs")
-def get_update_logs(_=Depends(require_platform_admin)):
+def get_update_logs(_=Depends(require_global_permission("sistema.versao"))):
     return system_update.list_update_logs()

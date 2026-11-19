@@ -9,7 +9,7 @@ from app.core.audit import log_action
 from app.core.database import SessionLocal, get_db
 from app.core.email_sender import disallowed_recipients, load_smtp_config
 from app.core.rate_limit import limiter
-from app.core.workspace_deps import require_platform_admin
+from app.core.access_deps import require_workspace_permission
 from app.models.settings import AppSettings
 from app.models.user import User
 from app.routers import powerbi as embed_router
@@ -58,7 +58,7 @@ def export_and_email(
     report_id: int,
     data: ExportEmailRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_workspace_permission("relatorio.exportar")),
 ):
     """Exporta o relatorio e envia por e-mail, em segundo plano. Devolve o id do trabalho, que a tela
     consulta em /export-jobs/{id}. Por enquanto so administradores, e so relatorios sem RLS: o dado

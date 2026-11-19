@@ -2,22 +2,23 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core.permission_keys import MANAGED_PERMISSIONS
+from app.core.access_deps import require_any_global_permission, require_global_permission
+from app.core.access_guard import check_can_leave_admin_group_alone, check_can_put_in_group
 from app.core.audit import log_action
-from app.core.audit_revert import GROUP_MEMBER, GROUP_PERMISSIONS
+from app.core.audit_revert import GROUP_MEMBER
 from app.core.database import get_db
 from app.core.workspace_deps import (
     admin_group_lock,
     get_or_create_admin_group,
     get_or_create_default_group,
-    require_platform_admin,
 )
+from app.core.access_pending import drop_if_no_invite
+from app.models.access_grant import AccessGrant
 from app.models.group_permission import GroupPermission
 from app.models.invite import GroupInvite
 from app.models.user import User
 from app.models.workspace import Group, GroupMember, GroupWorkspaceAccess
 from app.routers.auth import get_current_user
-from app.schemas.group_permission import GroupPermissionsOut, GroupPermissionsUpdate
 from app.schemas.workspace import GroupCreate, GroupInviteOut, GroupMemberAdd, GroupMemberOut, GroupOut, GroupUpdate
 
 router = APIRouter(prefix="/groups", tags=["groups"])
@@ -34,7 +35,7 @@ def list_groups(db: Session = Depends(get_db), _=Depends(get_current_user)):
 def create_group(
     data: GroupCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("grupos.criar")),
 ):
     group = Group(name=data.name)
     db.add(group)
@@ -50,7 +51,7 @@ def update_group(
     group_id: int,
     data: GroupUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("grupos.editar")),
 ):
     group = db.query(Group).get(group_id)
     if not group:
@@ -71,7 +72,7 @@ def update_group(
 def delete_group(
     group_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("grupos.excluir")),
 ):
     group = db.query(Group).get(group_id)
     if not group:
@@ -81,86 +82,21 @@ def delete_group(
 
     db.query(GroupWorkspaceAccess).filter(GroupWorkspaceAccess.group_id == group_id).delete()
     db.query(GroupPermission).filter(GroupPermission.group_id == group_id).delete()
+    db.query(AccessGrant).filter(AccessGrant.group_id == group_id).delete()
     db.query(GroupMember).filter(GroupMember.group_id == group_id).delete()
+    invited_emails = {row.email for row in db.query(GroupInvite.email).filter(GroupInvite.group_id == group_id).all()}
     db.query(GroupInvite).filter(GroupInvite.group_id == group_id).delete()
+    for invited_email in invited_emails:
+        drop_if_no_invite(db, invited_email)
     db.delete(group)
     db.commit()
-
-
-@router.get("/{group_id}/permissions", response_model=GroupPermissionsOut)
-def get_group_permissions(
-    group_id: int,
-    db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
-):
-    group = db.query(Group).get(group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo nao encontrado")
-    if group.is_admin_group:
-        return GroupPermissionsOut(permissions=list(MANAGED_PERMISSIONS), editable=False)
-
-    rows = (
-        db.query(GroupPermission.permission_key)
-        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(MANAGED_PERMISSIONS))
-        .all()
-    )
-    return GroupPermissionsOut(permissions=sorted(row.permission_key for row in rows), editable=True)
-
-
-@router.put("/{group_id}/permissions", response_model=GroupPermissionsOut)
-def set_group_permissions(
-    group_id: int,
-    data: GroupPermissionsUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
-):
-    group = db.query(Group).get(group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo nao encontrado")
-    if group.is_admin_group:
-        raise HTTPException(status_code=400, detail="O grupo Administradores sempre tem todas as permissoes.")
-
-    permissions_before = sorted(
-        row.permission_key
-        for row in db.query(GroupPermission.permission_key)
-        .filter(GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(MANAGED_PERMISSIONS))
-        .all()
-    )
-    # Troca so as chaves de IA: qualquer outra permissao que o grupo venha a ter nao e tocada
-    db.query(GroupPermission).filter(
-        GroupPermission.group_id == group_id, GroupPermission.permission_key.in_(MANAGED_PERMISSIONS)
-    ).delete(synchronize_session=False)
-    for key in data.permissions:
-        db.add(GroupPermission(group_id=group_id, permission_key=key))
-    db.commit()
-
-    log_action(
-        db,
-        action="set_group_permissions",
-        entity="group",
-        user_id=current_user.id,
-        entity_id=group_id,
-        details=", ".join(data.permissions) or "nenhuma",
-        change=(
-            {
-                "kind": GROUP_PERMISSIONS,
-                "group_id": group_id,
-                "group_name": group.name,
-                "before": permissions_before,
-                "after": sorted(set(data.permissions)),
-            }
-            if permissions_before != sorted(set(data.permissions))
-            else None
-        ),
-    )
-    return GroupPermissionsOut(permissions=data.permissions, editable=True)
 
 
 @router.get("/{group_id}/members", response_model=list[GroupMemberOut])
 def list_group_members(
     group_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("grupos.ver")),
 ):
     group = db.query(Group).get(group_id)
     if not group:
@@ -188,11 +124,12 @@ def add_group_member(
     group_id: int,
     data: GroupMemberAdd,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_any_global_permission("grupos.participantes", "membros.editar")),
 ):
     group = db.query(Group).get(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Grupo nao encontrado")
+    check_can_put_in_group(db, current_user, group)
 
     user = db.query(User).filter(User.email == data.email).first()
     if not user:
@@ -228,13 +165,14 @@ def invite_group_member(
     group_id: int,
     data: GroupMemberAdd,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_any_global_permission("membros.adicionar", "grupos.participantes")),
 ):
     """Adiciona ao grupo se o email ja tem conta; senao cria um convite pendente --
     quando a pessoa se cadastrar com esse email, ela entra automaticamente no grupo."""
     group = db.query(Group).get(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Grupo nao encontrado")
+    check_can_put_in_group(db, current_user, group)
 
     user = db.query(User).filter(User.email == data.email).first()
     if user:
@@ -280,7 +218,7 @@ def invite_group_member(
 def list_group_invites(
     group_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_any_global_permission("membros.ver", "grupos.ver")),
 ):
     return db.query(GroupInvite).filter(GroupInvite.group_id == group_id).all()
 
@@ -290,11 +228,14 @@ def cancel_group_invite(
     group_id: int,
     invite_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("membros.convites")),
 ):
     invite = db.query(GroupInvite).filter(GroupInvite.id == invite_id, GroupInvite.group_id == group_id).first()
     if invite:
+        invited_email = invite.email
         db.delete(invite)
+        db.flush()
+        drop_if_no_invite(db, invited_email)
         db.commit()
 
 
@@ -303,11 +244,12 @@ def remove_group_member(
     group_id: int,
     user_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    current_user: User = Depends(require_any_global_permission("grupos.participantes", "membros.editar")),
 ):
     group = db.query(Group).get(group_id)
     if not group:
         raise HTTPException(status_code=404, detail="Grupo nao encontrado")
+    check_can_leave_admin_group_alone(db, current_user, group)
     if group.is_default:
         raise HTTPException(status_code=400, detail="Todo usuario cadastrado fica no grupo padrao")
 

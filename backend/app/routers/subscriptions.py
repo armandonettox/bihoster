@@ -10,11 +10,12 @@ from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.email_sender import allowed_domains, disallowed_recipients, load_smtp_config
 from app.core.rate_limit import limiter
-from app.core.workspace_deps import get_effective_role, require_platform_admin, require_workspace_role
+from app.core.access_deps import require_global_permission, require_workspace_permission
+from app.core.access_engine import can_in_workspace
 from app.models.report import Report
 from app.models.settings import AppSettings
 from app.models.subscription import ReportSubscription, SubscriptionRun
-from app.models.user import User, UserRole
+from app.models.user import User
 from app.models.workspace import Workspace
 from app.routers import powerbi as embed_router
 from app.schemas.subscription import (
@@ -25,12 +26,11 @@ from app.schemas.subscription import (
     SubscriptionUpdate,
 )
 
-# Quem cria e administra assinaturas de uma colecao: administradores e editores DELA (quem faz a curadoria).
-# Leitor nao tem acesso. Editor so vai alem de uma assinatura se a lista de dominios permitidos existir.
+# Cada acao tem o seu item de permissao na colecao (assinatura.ver, criar, editar, excluir, executar). Os atalhos Editor e
+# Administrador ligam todos; Leitor nao tem nenhum. Sem o item "qualquer dominio", so da para assinar se a lista de
+# dominios permitidos existir.
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["subscriptions"])
 admin_router = APIRouter(prefix="/subscriptions", tags=["subscriptions"])
-
-can_manage = require_workspace_role(UserRole.admin, UserRole.editor)
 
 MAX_PER_REPORT = 10
 RUNS_SHOWN = 30
@@ -87,12 +87,12 @@ def _get_subscription(db: Session, workspace_id: int, subscription_id: int) -> R
 
 
 def _check_recipients(db: Session, user: User, workspace_id: int, recipients: list[str], row: Optional[AppSettings]) -> None:
-    if get_effective_role(db, user.id, workspace_id) != UserRole.admin and not allowed_domains(row):
+    if not can_in_workspace(db, user.id, "assinatura.qualquer-dominio", workspace_id) and not allowed_domains(row):
         raise HTTPException(
             status_code=403,
             detail=(
                 "Enquanto a lista de dominios permitidos estiver vazia (Configuracoes > E-mail), "
-                "so administradores podem criar ou alterar assinaturas."
+                "so quem tem a permissao de enviar para qualquer dominio pode criar ou alterar assinaturas."
             ),
         )
     outside = disallowed_recipients(row, recipients)
@@ -123,7 +123,7 @@ def _apply_schedule(sub: ReportSubscription) -> None:
 
 
 @router.get("/subscriptions", response_model=list[SubscriptionOut])
-def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db), _: User = Depends(can_manage)):
+def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))):
     subs = (
         db.query(ReportSubscription)
         .join(Report, Report.id == ReportSubscription.report_id)
@@ -136,7 +136,7 @@ def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db
 
 @router.get("/reports/{report_id}/subscriptions", response_model=list[SubscriptionOut])
 def list_report_subscriptions(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(can_manage)
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     subs = db.query(ReportSubscription).filter(ReportSubscription.report_id == report.id).order_by(ReportSubscription.id).all()
@@ -149,7 +149,7 @@ def create_subscription(
     report_id: int,
     data: SubscriptionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(can_manage),
+    current_user: User = Depends(require_workspace_permission("assinatura.criar")),
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     row = _settings(db)
@@ -188,7 +188,7 @@ def create_subscription(
 
 
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionOut)
-def get_subscription(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), _: User = Depends(can_manage)):
+def get_subscription(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))):
     return _out(db, _get_subscription(db, workspace_id, subscription_id))
 
 
@@ -198,7 +198,7 @@ def update_subscription(
     subscription_id: int,
     data: SubscriptionUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(can_manage),
+    current_user: User = Depends(require_workspace_permission("assinatura.editar")),
 ):
     sub = _get_subscription(db, workspace_id, subscription_id)
     changes = data.model_dump(exclude_unset=True)
@@ -242,7 +242,7 @@ def update_subscription(
 
 @router.delete("/subscriptions/{subscription_id}", status_code=204)
 def delete_subscription(
-    workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(can_manage)
+    workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.excluir"))
 ):
     sub = _get_subscription(db, workspace_id, subscription_id)
     sub_id = sub.id
@@ -263,7 +263,7 @@ def run_subscription_now(
     workspace_id: int,
     subscription_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(can_manage),
+    current_user: User = Depends(require_workspace_permission("assinatura.executar")),
 ):
     """Envia agora, fora da agenda (o proximo horario agendado nao muda). O andamento sai em
     /powerbi/export-jobs/{job_id}, o mesmo acompanhamento do envio avulso."""
@@ -283,7 +283,7 @@ def run_subscription_now(
 
 
 @router.get("/subscriptions/{subscription_id}/runs", response_model=list[SubscriptionRunOut])
-def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), _: User = Depends(can_manage)):
+def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("assinatura.ver"))):
     sub = _get_subscription(db, workspace_id, subscription_id)
     return (
         db.query(SubscriptionRun)
@@ -295,7 +295,7 @@ def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get
 
 
 @admin_router.get("/", response_model=list[SubscriptionOut])
-def list_all_subscriptions(db: Session = Depends(get_db), _: User = Depends(require_platform_admin)):
+def list_all_subscriptions(db: Session = Depends(get_db), _: User = Depends(require_global_permission("assinatura.todas"))):
     """Visao do administrador: todas as assinaturas do sistema, de todas as colecoes."""
     return [
         _out(db, s)

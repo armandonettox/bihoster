@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core import chat_dataset
-from app.core.ai_access import require_ai_manage
+from app.core.access_deps import require_global_permission
 from app.core.database import get_db
 from app.core.workspace_deps import get_effective_role
 from app.models.powerbi_connection import PowerBIConnection
@@ -19,7 +19,7 @@ router = APIRouter(prefix="/ai", tags=["ai-check"])
 def check_report_for_chat(
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.bloqueios")),
 ):
     """Diz se o chat consegue consultar o relatorio e quantas tabelas, colunas e medidas ele tem.
     Serve para validar um relatorio de verdade antes de o chat existir. Quem pede precisa gerenciar

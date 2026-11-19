@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.core import chat_log
-from app.core.ai_access import require_ai_manage
+from app.core.access_deps import require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.models.user import User
@@ -45,7 +45,7 @@ def get_ai_log(
     before_id: Optional[int] = Query(None, ge=1),
     limit: int = Query(chat_log.PAGE_SIZE, ge=1, le=chat_log.MAX_PAGE_SIZE),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.registro")),
 ):
     """O que as pessoas perguntaram ao chat e o que a IA respondeu, com provedor, modelo, tempo e desfecho, para o
     admin achar respostas ruins. So quem gerencia a IA. Tem a pergunta e a resposta em texto (nunca as linhas das

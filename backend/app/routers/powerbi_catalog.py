@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core import powerbi
 from app.core.database import get_db
 from app.core.db_helpers import get_or_404
-from app.core.workspace_deps import require_any_editor
+from app.core.access_deps import require_any_workspace_permission
 from app.models.powerbi_connection import PowerBIConnection
 
 router = APIRouter(prefix="/powerbi", tags=["powerbi"])
@@ -35,7 +35,7 @@ def _get_connection_or_404(db: Session, connection_id: int) -> PowerBIConnection
 
 
 @router.get("/connections/{connection_id}/workspaces")
-def list_powerbi_workspaces(connection_id: int, db: Session = Depends(get_db), _=Depends(require_any_editor)):
+def list_powerbi_workspaces(connection_id: int, db: Session = Depends(get_db), _=Depends(require_any_workspace_permission("relatorio.publicar", "relatorio.editar"))):
     """Workspaces do Power BI que a service principal daquela conta enxerga -- usado para montar
     o seletor na hora de vincular um relatorio, em vez de digitar os IDs na mao.
     Restrito a quem e editor/admin em pelo menos uma colecao -- uma conta representa uma
@@ -54,7 +54,7 @@ def list_powerbi_workspaces(connection_id: int, db: Session = Depends(get_db), _
 
 @router.get("/connections/{connection_id}/workspaces/{pbi_workspace_id}/reports")
 def list_powerbi_reports(
-    connection_id: int, pbi_workspace_id: str, db: Session = Depends(get_db), _=Depends(require_any_editor)
+    connection_id: int, pbi_workspace_id: str, db: Session = Depends(get_db), _=Depends(require_any_workspace_permission("relatorio.publicar", "relatorio.editar"))
 ):
     """Relatorios publicados num workspace do Power BI, com o dataset ja preenchido."""
     powerbi.prune_expired(_reports_cache)
@@ -79,7 +79,7 @@ def list_powerbi_pages(
     pbi_workspace_id: str,
     pbi_report_id: str,
     db: Session = Depends(get_db),
-    _=Depends(require_any_editor),
+    _=Depends(require_any_workspace_permission("relatorio.publicar", "relatorio.editar")),
 ):
     """Paginas (abas) publicadas dentro de um relatorio -- usado no formulario pra deixar
     escolher so uma aba especifica em vez do relatorio inteiro."""

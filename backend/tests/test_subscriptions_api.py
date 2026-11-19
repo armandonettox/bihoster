@@ -10,6 +10,7 @@ import pytest
 from app.core import powerbi, report_delivery, subscription_runner
 from app.models.audit_log import AuditLog
 from app.models.subscription import ReportSubscription, SubscriptionRun
+from tests.access_helpers import dar_papel, grupo_padrao_id
 
 PASSWORD = "SenhaForte123"
 PAYLOAD = {
@@ -51,9 +52,7 @@ def cenario(client):
 
     def colecao(nome, papel):
         ws = client.post("/workspaces/", json={"name": nome}, headers=admin).json()
-        acessos = client.get(f"/workspaces/{ws['id']}/access", headers=admin).json()
-        padrao = next(a for a in acessos if a["is_default"])
-        client.put(f"/workspaces/{ws['id']}/access/{padrao['group_id']}", json={"role": papel}, headers=admin)
+        dar_papel(client, admin, ws["id"], grupo_padrao_id(client, admin), papel)
         rel = client.post(
             f"/workspaces/{ws['id']}/reports/",
             json={"name": f"Relatorio {nome}", "powerbi_connection_id": conn["id"], "pbi_workspace_id": "pbi-ws",
@@ -135,6 +134,21 @@ class TestPermissao:
 
         assert sem_lista.status_code == 403 and "dominios permitidos" in sem_lista.json()["detail"]
         assert admin_sem_lista.status_code == 201  # administrador nao depende da lista
+
+    def test_editor_com_o_item_qualquer_dominio_nao_depende_da_lista(self, client, cenario):
+        client.put("/settings/email/", json={"email_allowed_domains": ""}, headers=cenario.admin)
+        pessoa_id = next(u["id"] for u in client.get("/users/", headers=cenario.admin).json() if u["email"] == "pessoa@empresa.com")
+        assert _criar(client, cenario, headers=cenario.pessoa).status_code == 403
+
+        client.put(
+            f"/access/users/{pessoa_id}",
+            json={"blocks": [{"workspace_id": cenario.ws_a["id"], "permissions": ["assinatura.qualquer-dominio"]}]},
+            headers=cenario.admin,
+        )
+
+        assert _criar(client, cenario, headers=cenario.pessoa).status_code == 201
+        # O item vale só na coleção em que foi dado
+        assert _criar(client, cenario, headers=cenario.pessoa, ws=cenario.ws_b, rel=cenario.rel_b).status_code == 403
 
     def test_visao_geral_so_para_administrador(self, client, cenario):
         _criar(client, cenario)

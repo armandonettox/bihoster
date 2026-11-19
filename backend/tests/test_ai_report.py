@@ -14,6 +14,7 @@ from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User
 from app.models.workspace import Workspace
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 
@@ -68,7 +69,7 @@ def relatorio(db_session):
 def _dar_gerenciar_ia(client, admin, email="pessoa@example.com"):
     grupo = client.post("/groups/", json={"name": "Dados"}, headers=admin).json()["id"]
     client.post(f"/groups/{grupo}/members", json={"email": email}, headers=admin)
-    client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+    dar_permissoes_do_grupo(client, admin, grupo, ["ia.gerenciar"])
 
 
 def _elegivel():
@@ -92,7 +93,7 @@ class TestPermissao:
         ensure_default_group_access(db_session, relatorio.collection_id)
         grupo = client.post("/groups/", json={"name": "Usuarios"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.usar"])
 
         assert _schema(client, pessoa, relatorio.id).status_code == 403
         assert client.get(f"/ai/reports/{relatorio.id}/settings", headers=pessoa).status_code == 403
@@ -309,7 +310,7 @@ class TestAquecerImagem:
     def _liberar_usar(self, client, admin, email="pessoa@example.com"):
         grupo = client.post("/groups/", json={"name": "Analistas"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": email}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.usar"])
 
     def test_exige_estar_logado(self, client, relatorio):
         resp = client.post(f"/ai/reports/{relatorio.id}/page-image", json={"page_name": "P1"})

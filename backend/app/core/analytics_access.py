@@ -1,8 +1,7 @@
 """Quem pode ver, criar, editar e excluir visuais do painel de Analiticos.
 
-Mesma regra da IA (core/ai_access.py): a permissao vem dos grupos, a pessoa tem uma chave se
-qualquer grupo dela tiver, e o grupo Administradores tem todas sem precisar de linha na tabela.
-Criar, editar e excluir pressupoem ver."""
+A permissao vem das permissoes novas (tabela access_grants): a soma do que vem dos grupos da pessoa com o que foi dado
+a ela, e o grupo Administradores tem todas. Criar, editar e excluir pressupoem ver (o catalogo ja exige isso)."""
 
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -14,28 +13,17 @@ from app.core.permission_keys import (
     ANALYTICS_EDIT,
     ANALYTICS_PERMISSIONS,
     ANALYTICS_VIEW,
-    with_implied,
 )
-from app.core.workspace_deps import is_platform_admin
-from app.models.group_permission import GroupPermission
 from app.models.user import User
-from app.models.workspace import GroupMember
 from app.routers.auth import get_current_user
 
 
 def analytics_permissions(db: Session, user_id: int) -> set[str]:
-    """Chaves de analiticos da pessoa: todas se for administradora, senao a uniao dos grupos dela."""
-    if is_platform_admin(db, user_id):
-        return set(ANALYTICS_PERMISSIONS)
+    """Chaves de analiticos da pessoa, lidas das permissoes novas."""
+    from app.core.access_engine import effective_access  # import aqui para nao fechar um ciclo com o motor
 
-    rows = (
-        db.query(GroupPermission.permission_key)
-        .join(GroupMember, GroupMember.group_id == GroupPermission.group_id)
-        .filter(GroupMember.user_id == user_id, GroupPermission.permission_key.in_(ANALYTICS_PERMISSIONS))
-        .distinct()
-        .all()
-    )
-    return set(with_implied({row.permission_key for row in rows}))
+    access = effective_access(db, user_id)
+    return {key for key in ANALYTICS_PERMISSIONS if access.has_global(key)}
 
 
 def require_analytics_permission(key: str):

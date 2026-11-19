@@ -1,7 +1,7 @@
 """Chaves de permissao que os grupos podem receber (tabela group_permissions).
 
-Hoje sao as de IA (core/ai_access.py) e as dos analiticos da auditoria. O catalogo de niveis por
-pessoa de core/permissions.py nao entra aqui: o acesso do projeto e decidido pelos grupos."""
+Hoje sao as de IA (core/ai_access.py) e as dos analiticos da auditoria, no formato antigo: so a ponte
+core/access_group_legacy.py e o catalogo novo (core/access_catalog.py) as usam."""
 
 from app.core.ai_access import AI_PERMISSIONS
 

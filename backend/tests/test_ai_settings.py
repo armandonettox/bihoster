@@ -12,6 +12,7 @@ from app.core import ai_providers
 from app.core.ai_providers import AIError, AIResult
 from app.models.ai_provider import AIProvider
 from app.models.audit_log import AuditLog
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 CHAVE = "chave-ficticia-de-teste-abc123"
@@ -257,7 +258,7 @@ class TestProvedorDoChat:
     def test_quem_so_gerencia_a_ia_tambem_escolhe(self, client, admin, pessoa):
         grupo = client.post("/groups/", json={"name": "Gestores"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": "pessoa@example.com"}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.gerenciar"])
 
         resp = _salvar(client, pessoa, enabled=True, chat_default=True)
 

@@ -4,8 +4,8 @@ plataforma concede."""
 
 import pytest
 
-from app.models.audit_log import AuditLog
-from app.models.group_permission import GroupPermission
+from app.models.access_grant import AccessGrant
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 
@@ -36,11 +36,13 @@ def _colocar(client, admin, grupo_id: int, email: str = "pessoa@example.com"):
 
 
 def _permissoes(client, admin, grupo_id: int, chaves: list[str]):
-    return client.put(f"/groups/{grupo_id}/permissions", json={"permissions": chaves}, headers=admin)
+    return dar_permissoes_do_grupo(client, admin, grupo_id, chaves)
 
 
 def _acesso(client, headers) -> dict:
-    return client.get("/ai/access", headers=headers).json()
+    # Só os dois resumos de sempre; a lista de itens (permissions) tem os seus testes em test_access_parte4.py
+    dados = client.get("/ai/access", headers=headers).json()
+    return {"can_manage": dados["can_manage"], "can_use": dados["can_use"]}
 
 
 def _grupo_especial(client, admin, campo: str) -> int:
@@ -156,104 +158,6 @@ class TestRotaDeConfiguracaoDeIA:
         assert client.get("/settings/ai/", headers=pessoa).status_code == 403
 
 
-class TestConcederPermissao:
-    def test_exige_estar_logado(self, client, admin):
-        grupo = _novo_grupo(client, admin)
-
-        assert client.get(f"/groups/{grupo}/permissions").status_code == 401
-        assert client.put(f"/groups/{grupo}/permissions", json={"permissions": []}).status_code == 401
-
-    def test_so_o_admin_da_plataforma_le_e_concede(self, client, admin, pessoa):
-        grupo = _novo_grupo(client, admin)
-
-        assert client.get(f"/groups/{grupo}/permissions", headers=pessoa).status_code == 403
-        assert _permissoes(client, pessoa, grupo, ["ia.usar"]).status_code == 403
-
-    def test_quem_gerencia_a_ia_nao_consegue_conceder_permissao_a_si_mesmo(self, client, admin, pessoa):
-        grupo = _novo_grupo(client, admin)
-        _colocar(client, admin, grupo)
-        _permissoes(client, admin, grupo, ["ia.gerenciar"])
-
-        resp = _permissoes(client, pessoa, grupo, ["ia.gerenciar", "ia.usar"])
-
-        assert resp.status_code == 403
-        assert _acesso(client, pessoa) == {"can_manage": True, "can_use": False}
-
-    def test_comeca_sem_nenhuma_e_e_editavel(self, client, admin):
-        grupo = _novo_grupo(client, admin)
-
-        resp = client.get(f"/groups/{grupo}/permissions", headers=admin)
-
-        assert resp.json() == {"permissions": [], "editable": True}
-
-    def test_o_grupo_todos_os_usuarios_comeca_sem_nenhuma(self, client, admin):
-        todos = _grupo_especial(client, admin, "is_default")
-
-        assert client.get(f"/groups/{todos}/permissions", headers=admin).json() == {"permissions": [], "editable": True}
-
-    def test_grava_e_devolve_o_que_foi_gravado(self, client, admin):
-        grupo = _novo_grupo(client, admin)
-
-        resp = _permissoes(client, admin, grupo, ["ia.usar", "ia.gerenciar"])
-
-        assert resp.status_code == 200
-        assert resp.json() == {"permissions": ["ia.gerenciar", "ia.usar"], "editable": True}
-        assert client.get(f"/groups/{grupo}/permissions", headers=admin).json()["permissions"] == ["ia.gerenciar", "ia.usar"]
-
-    def test_chaves_repetidas_viram_uma_so(self, client, admin, db_session):
-        grupo = _novo_grupo(client, admin)
-
-        resp = _permissoes(client, admin, grupo, ["ia.usar", "ia.usar"])
-
-        assert resp.status_code == 200
-        assert db_session.query(GroupPermission).filter(GroupPermission.group_id == grupo).count() == 1
-
-    def test_lista_vazia_limpa_tudo(self, client, admin):
-        grupo = _novo_grupo(client, admin)
-        _permissoes(client, admin, grupo, ["ia.usar"])
-
-        _permissoes(client, admin, grupo, [])
-
-        assert client.get(f"/groups/{grupo}/permissions", headers=admin).json()["permissions"] == []
-
-    def test_chave_desconhecida_e_recusada_e_nada_muda(self, client, admin):
-        grupo = _novo_grupo(client, admin)
-        _permissoes(client, admin, grupo, ["ia.usar"])
-
-        resp = _permissoes(client, admin, grupo, ["ia.usar", "admin.marca"])
-
-        assert resp.status_code == 422
-        assert client.get(f"/groups/{grupo}/permissions", headers=admin).json()["permissions"] == ["ia.usar"]
-
-    def test_so_troca_as_chaves_de_ia(self, client, admin, db_session):
-        grupo = _novo_grupo(client, admin)
-        db_session.add(GroupPermission(group_id=grupo, permission_key="outra.funcionalidade"))
-        db_session.commit()
-        _permissoes(client, admin, grupo, ["ia.usar"])
-
-        _permissoes(client, admin, grupo, [])
-
-        restantes = [p.permission_key for p in db_session.query(GroupPermission).filter(GroupPermission.group_id == grupo)]
-        assert restantes == ["outra.funcionalidade"]
-
-    def test_grupo_inexistente(self, client, admin):
-        assert client.get("/groups/9999/permissions", headers=admin).status_code == 404
-        assert _permissoes(client, admin, 9999, ["ia.usar"]).status_code == 404
-
-    def test_o_grupo_administradores_tem_tudo_e_nao_se_altera(self, client, admin, db_session):
-        grupo_admin = _grupo_especial(client, admin, "is_admin_group")
-
-        lido = client.get(f"/groups/{grupo_admin}/permissions", headers=admin).json()
-        assert set(lido["permissions"]) >= {"ia.gerenciar", "ia.usar"}
-        assert lido["editable"] is False
-
-        resp = _permissoes(client, admin, grupo_admin, [])
-        assert resp.status_code == 400
-        assert "Administradores" in resp.json()["detail"]
-        assert db_session.query(GroupPermission).filter(GroupPermission.group_id == grupo_admin).count() == 0
-        assert _acesso(client, admin) == {"can_manage": True, "can_use": True}
-
-
 class TestExcluirGrupo:
     def test_apagar_o_grupo_apaga_as_permissoes_e_o_acesso(self, client, admin, pessoa, db_session):
         grupo = _novo_grupo(client, admin)
@@ -262,24 +166,5 @@ class TestExcluirGrupo:
 
         assert client.delete(f"/groups/{grupo}", headers=admin).status_code == 204
 
-        assert db_session.query(GroupPermission).filter(GroupPermission.group_id == grupo).count() == 0
+        assert db_session.query(AccessGrant).filter(AccessGrant.group_id == grupo).count() == 0
         assert _acesso(client, pessoa) == {"can_manage": False, "can_use": False}
-
-
-class TestAuditoria:
-    def test_registra_quem_mudou_em_qual_grupo_e_quais_chaves(self, client, admin, db_session):
-        grupo = _novo_grupo(client, admin)
-
-        _permissoes(client, admin, grupo, ["ia.usar"])
-
-        log = db_session.query(AuditLog).filter(AuditLog.action == "set_group_permissions").one()
-        assert log.entity_id == str(grupo)
-        assert log.user_email == "admin@example.com"
-        assert log.details == "ia.usar"
-
-    def test_registra_quando_limpa(self, client, admin, db_session):
-        grupo = _novo_grupo(client, admin)
-
-        _permissoes(client, admin, grupo, [])
-
-        assert db_session.query(AuditLog).filter(AuditLog.action == "set_group_permissions").one().details == "nenhuma"

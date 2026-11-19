@@ -5,7 +5,7 @@ from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.email_sender import EmailError, allowed_domains, disallowed_recipients, load_smtp_config, send_email
 from app.core.rate_limit import limiter
-from app.core.workspace_deps import require_platform_admin
+from app.core.access_deps import require_global_permission
 from app.models.settings import AppSettings
 from app.models.user import User
 from app.routers.auth import get_current_user
@@ -43,7 +43,7 @@ def _to_out(row: AppSettings) -> EmailSettingsOut:
 
 
 @router.get("/", response_model=EmailSettingsOut)
-def get_email_settings(db: Session = Depends(get_db), _: User = Depends(require_platform_admin)):
+def get_email_settings(db: Session = Depends(get_db), _: User = Depends(require_global_permission("sistema.email"))):
     return _to_out(_get_or_create_settings(db))
 
 
@@ -59,7 +59,7 @@ def get_email_status(db: Session = Depends(get_db), _: User = Depends(get_curren
 def update_email_settings(
     data: EmailSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("sistema.email")),
 ):
     row = _get_or_create_settings(db)
     changed = data.model_dump(exclude_unset=True)
@@ -100,7 +100,7 @@ def send_test_email(
     request: Request,
     data: EmailTestRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("sistema.email")),
 ):
     row = _get_or_create_settings(db)
     config = load_smtp_config(row)

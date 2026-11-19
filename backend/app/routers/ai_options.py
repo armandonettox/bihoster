@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.core import ai_options
-from app.core.ai_access import require_ai_manage
+from app.core.access_deps import require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.models.user import User
@@ -20,7 +20,7 @@ def _to_out(db: Session) -> AIOptionsOut:
 
 
 @router.get("/", response_model=AIOptionsOut)
-def get_ai_options(db: Session = Depends(get_db), _: User = Depends(require_ai_manage)):
+def get_ai_options(db: Session = Depends(get_db), _: User = Depends(require_global_permission("ia.modelos"))):
     return _to_out(db)
 
 
@@ -28,7 +28,7 @@ def get_ai_options(db: Session = Depends(get_db), _: User = Depends(require_ai_m
 def update_ai_options(
     data: AIOptionsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.modelos")),
 ):
     row = ai_options.get_settings_row(db)
     changed = {name: value for name, value in data.model_dump(exclude_unset=True).items() if value is not None}

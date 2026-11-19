@@ -17,10 +17,10 @@ from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
-from app.models import ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
-from app.models import permission as permission_model  # noqa: F401
+from app.models import access_grant as access_grant_model, ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
+    access,
     ai_access,
     analytics_access,
     ai_chat,
@@ -40,7 +40,6 @@ from app.routers import (  # noqa: F401
     favorites,
     groups,
     home,
-    permissions,
     powerbi,
     powerbi_catalog,
     powerbi_connections,
@@ -57,12 +56,12 @@ from app.routers import workspaces
 Base.metadata.create_all(bind=engine)
 ensure_schema_up_to_date(engine, Base)
 
-# Seed dos niveis do sistema (idempotente -- nao recria o que ja existe)
-from app.core.permissions import seed_permission_levels
+# Copia, uma vez, os papeis e permissoes antigos para o modelo novo de permissoes (idempotente; ver core/access_migration.py)
+from app.core.access_migration import migrate_legacy_access
 from app.core.database import SessionLocal as _SessionLocal
 _seed_db = _SessionLocal()
 try:
-    seed_permission_levels(_seed_db)
+    migrate_legacy_access(_seed_db)
 finally:
     _seed_db.close()
 
@@ -195,9 +194,9 @@ _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 app.include_router(auth.router)
-app.include_router(permissions.router)
 app.include_router(workspaces.router)
 app.include_router(groups.router)
+app.include_router(access.router)
 app.include_router(reports.router)
 app.include_router(powerbi.router)
 app.include_router(powerbi_catalog.router)

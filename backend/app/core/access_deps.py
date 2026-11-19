@@ -1,0 +1,97 @@
+"""Verificações de permissão para as rotas: "esta pessoa pode fazer isto?", pelo item do catálogo.
+
+Duas formas, conforme o escopo do item:
+- `require_workspace_permission("relatorio.publicar")` para rotas de uma coleção (pega o `workspace_id` do caminho);
+- `require_global_permission("membros.adicionar")` para rotas do sistema todo.
+
+Quem é do grupo Administradores passa em todas. Nenhuma permissão dá o papel de administrador da plataforma (L-314),
+então a rota que exige ser administrador de verdade continua usando `require_platform_admin`.
+
+O nome do item é conferido quando a rota é declarada: um erro de digitação ou um item do escopo errado quebra na
+hora de subir o servidor, não em silêncio na hora de alguém usar."""
+
+from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
+
+from app.core import access_catalog
+from app.core.access_engine import can_global, can_in_workspace, effective_access
+from app.core.database import get_db
+from app.models.user import User
+from app.routers.auth import get_current_user
+
+DENIED_WORKSPACE = "Voce nao tem permissao para essa acao nesta colecao"
+DENIED_GLOBAL = "Voce nao tem permissao para essa acao"
+
+
+def _checked(key: str, scope: str) -> str:
+    permission = access_catalog.get(key)
+    if permission is None:
+        raise ValueError(f"Permissao desconhecida: {key}")
+    if permission.scope != scope:
+        raise ValueError(f"A permissao {key} e de escopo {permission.scope}, nao {scope}")
+    return key
+
+
+def require_workspace_permission(key: str):
+    _checked(key, access_catalog.WORKSPACE)
+
+    def dependency(
+        workspace_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if not can_in_workspace(db, current_user.id, key, workspace_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_WORKSPACE)
+        return current_user
+
+    return dependency
+
+
+def require_global_permission(key: str):
+    _checked(key, access_catalog.GLOBAL)
+
+    def dependency(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if not can_global(db, current_user.id, key):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_GLOBAL)
+        return current_user
+
+    return dependency
+
+
+def require_any_workspace_permission(*keys: str):
+    """Para rotas que não são de uma coleção em particular (como a lista do Power BI na hora de cadastrar um relatório):
+    passa quem tem ao menos um destes itens em alguma coleção."""
+    for key in keys:
+        _checked(key, access_catalog.WORKSPACE)
+
+    def dependency(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        access = effective_access(db, current_user.id)
+        if not access.is_admin and not any(access.workspace_ids_with(key) for key in keys):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_GLOBAL)
+        return current_user
+
+    return dependency
+
+
+def require_any_global_permission(*keys: str):
+    """Para rotas que servem a mais de uma área (a lista de permissões serve a Membros e a Grupos): passa quem tem ao
+    menos um destes itens."""
+    for key in keys:
+        _checked(key, access_catalog.GLOBAL)
+
+    def dependency(
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        access = effective_access(db, current_user.id)
+        if not any(access.has_global(key) for key in keys):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_GLOBAL)
+        return current_user
+
+    return dependency

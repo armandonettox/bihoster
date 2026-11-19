@@ -20,12 +20,12 @@ from typing import Any, Optional
 
 from sqlalchemy.orm import Session
 
-from app.core.permission_keys import MANAGED_PERMISSIONS
+from app.core.access_group_legacy import legacy_keys_of_group, set_legacy_keys_of_group
+from app.core.access_roles import get_group_role, remove_group_role, set_group_role
 from app.core.workspace_deps import admin_group_lock
 from app.models.audit_log import AuditLog
-from app.models.group_permission import GroupPermission
 from app.models.report import Report
-from app.models.workspace import Group, GroupMember, GroupWorkspaceAccess, Workspace
+from app.models.workspace import Group, GroupMember, Workspace
 from app.models.user import UserRole
 
 WORKSPACE_UPDATE = "workspace_update"
@@ -173,23 +173,12 @@ def current_state(db: Session, log: AuditLog, change: dict) -> Any:
         _workspace_for(db, log)
         if not db.query(Group).get(change["group_id"]):
             raise RevertGone("O grupo nao existe mais")
-        access = (
-            db.query(GroupWorkspaceAccess)
-            .filter(GroupWorkspaceAccess.group_id == change["group_id"], GroupWorkspaceAccess.workspace_id == log.workspace_id)
-            .first()
-        )
-        if not access:
-            return None
-        return access.role.value if hasattr(access.role, "value") else access.role
+        role = get_group_role(db, change["group_id"], log.workspace_id)
+        return role.value if role is not None else None
     if kind == GROUP_PERMISSIONS:
         if not db.query(Group).get(change["group_id"]):
             raise RevertGone("O grupo nao existe mais")
-        rows = (
-            db.query(GroupPermission.permission_key)
-            .filter(GroupPermission.group_id == change["group_id"], GroupPermission.permission_key.in_(MANAGED_PERMISSIONS))
-            .all()
-        )
-        return sorted(row.permission_key for row in rows)
+        return legacy_keys_of_group(db, change["group_id"])
     if not db.query(Group).get(change["group_id"]):
         raise RevertGone("O grupo nao existe mais")
     return (
@@ -216,27 +205,15 @@ def apply_revert(db: Session, log: AuditLog, change: dict) -> None:
                 setattr(report, name, v["before"])
     elif kind == ACCESS:
         group_id, workspace_id, before = change["group_id"], log.workspace_id, change["before"]
-        access = (
-            db.query(GroupWorkspaceAccess)
-            .filter(GroupWorkspaceAccess.group_id == group_id, GroupWorkspaceAccess.workspace_id == workspace_id)
-            .first()
-        )
         if before is None:
-            if access:
-                db.delete(access)
-        elif access:
-            access.role = UserRole(before)
+            remove_group_role(db, group_id, workspace_id)
         else:
-            db.add(GroupWorkspaceAccess(group_id=group_id, workspace_id=workspace_id, role=UserRole(before)))
+            set_group_role(db, group_id, workspace_id, UserRole(before))
     elif kind == GROUP_PERMISSIONS:
         group = db.query(Group).get(change["group_id"])
         if group is not None and group.is_admin_group:
             raise RevertBlocked("O grupo Administradores sempre tem todas as permissoes")
-        db.query(GroupPermission).filter(
-            GroupPermission.group_id == change["group_id"], GroupPermission.permission_key.in_(MANAGED_PERMISSIONS)
-        ).delete(synchronize_session=False)
-        for key in change["before"]:
-            db.add(GroupPermission(group_id=change["group_id"], permission_key=key))
+        set_legacy_keys_of_group(db, change["group_id"], change["before"])
     else:
         _remove_member(db, change)
 

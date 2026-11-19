@@ -13,7 +13,12 @@ from app.core.audit_labels import action_label, entity_label
 from app.core.audit_revert import parse_change, summarize
 from app.core.database import get_db
 from app.core.analytics_access import require_analytics_view
-from app.core.workspace_deps import is_platform_admin, require_platform_admin, require_workspace_role
+from app.core.access_deps import require_global_permission, require_workspace_permission
+from app.core.access_engine import can_global, can_in_workspace
+from app.core.access_group_legacy import CONTROLLED_KEYS, expand_legacy_keys
+from app.core.access_guard import check_can_change_grants, check_can_leave_admin_group_alone, current_keys_by_scope
+from app.core.access_roles import group_workspace_keys, keys_of_role
+from app.core.workspace_deps import is_platform_admin
 from app.models.audit_log import AuditLog
 from app.models.report import Report
 from app.models.user import User, UserRole
@@ -75,7 +80,7 @@ def _to_out(
 def list_all_audit_logs(
     limit: int = Query(200, ge=1, le=1000),
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("auditoria.ver")),
 ):
     """Visao global da auditoria -- inclui acoes sem colecao (login, registro, mudanca de
     configuracoes) que o endpoint por colecao nunca conseguiria mostrar."""
@@ -114,7 +119,7 @@ def search_audit_logs(
     page: int = Query(1, ge=1),
     page_size: int = Query(25, ge=1, le=100),
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("auditoria.ver")),
 ):
     """Tabela da pagina de Auditoria: busca, filtros e paginacao feitos no servidor."""
     tz, _name = _system_tz(db)
@@ -365,7 +370,7 @@ def revert_audit_action(
     log_id: int,
     data: AuditRevertIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("auditoria.reverter")),
 ):
     """Volta uma acao ao estado de antes. Se o item mudou de novo depois da acao, responde 409
     com o que esta valendo agora; a pessoa confirma e a chamada vem repetida com force=true."""
@@ -377,6 +382,7 @@ def revert_audit_action(
         raise HTTPException(status_code=400, detail="Esta acao nao pode ser revertida")
     if entry.reverted_at is not None:
         raise HTTPException(status_code=400, detail="Esta acao ja foi revertida")
+    _check_can_undo(db, current_user, entry, change)
 
     try:
         current = audit_revert.current_state(db, entry, change)
@@ -429,6 +435,40 @@ def revert_audit_action(
     return AuditRevertOut(summary=summary)
 
 
+def _check_can_undo(db: Session, user: User, entry: AuditLog, change: dict) -> None:
+    """Desfazer uma acao muda de verdade o item (permissoes, grupo, colecao, relatorio). Alem de poder reverter, a pessoa
+    precisa ter a permissao do que esta sendo desfeito: senao reverter serviria para dar a si mesma o que nao tem."""
+    kind = change["kind"]
+    if kind in (audit_revert.WORKSPACE_UPDATE, audit_revert.REPORT_UPDATE):
+        key = "colecao.editar" if kind == audit_revert.WORKSPACE_UPDATE else "relatorio.editar"
+        # Coleção apagada: o registro perde o vínculo e não há o que desfazer; segue para a resposta "não há o que reverter"
+        allowed = entry.workspace_id is None or can_in_workspace(db, user.id, key, entry.workspace_id)
+    elif kind == audit_revert.GROUP_MEMBER:
+        allowed = can_global(db, user.id, "grupos.participantes")
+    else:  # acesso de grupo numa colecao e permissoes de grupo
+        allowed = can_global(db, user.id, "permissoes.editar")
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Voce nao tem permissao para desfazer essa acao")
+
+    # So se da e se tira o que se tem: desfazer uma mudanca de permissoes tambem muda permissoes
+    if kind == audit_revert.ACCESS and entry.workspace_id is not None:
+        ws = entry.workspace_id
+        target = set(keys_of_role(UserRole(change["before"]))) if change["before"] else set()
+        check_can_change_grants(db, user, {ws: group_workspace_keys(db, change["group_id"], ws)}, {ws: target})
+    elif kind == audit_revert.GROUP_PERMISSIONS:
+        held = current_keys_by_scope(db, {"group_id": change["group_id"]}).get(None, set())
+        check_can_change_grants(
+            db,
+            user,
+            {None: held & set(CONTROLLED_KEYS)},
+            {None: expand_legacy_keys(change["before"])},
+        )
+    elif kind == audit_revert.GROUP_MEMBER:
+        group = db.get(Group, change["group_id"])
+        if group is not None:
+            check_can_leave_admin_group_alone(db, user, group)
+
+
 def _before_state(change: dict):
     """O "antes" no mesmo formato do estado atual (para mostrar no aviso de conflito)."""
     if change["kind"] in (audit_revert.WORKSPACE_UPDATE, audit_revert.REPORT_UPDATE):
@@ -441,7 +481,7 @@ def list_audit_logs(
     workspace_id: int,
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_role(UserRole.admin)),
+    _=Depends(require_workspace_permission("colecao.auditoria")),
 ):
     entries = (
         db.query(AuditLog)

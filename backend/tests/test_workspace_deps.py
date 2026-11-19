@@ -12,7 +12,7 @@ from app.core.workspace_deps import (
     is_platform_admin,
 )
 from app.models.user import UserRole
-from app.models.workspace import GroupWorkspaceAccess
+from app.core.access_roles import set_group_role
 
 
 def test_usuario_sem_grupo_nenhum_nao_tem_acesso(db_session, make_user, make_workspace):
@@ -29,7 +29,7 @@ def test_grupo_padrao_da_acesso_minimo_garantido(db_session, make_user, make_wor
 
     ensure_user_in_default_group(db_session, user.id)
     default_group = get_or_create_default_group(db_session)
-    db_session.add(GroupWorkspaceAccess(group_id=default_group.id, workspace_id=workspace.id, role=UserRole.viewer))
+    set_group_role(db_session, default_group.id, workspace.id, UserRole.viewer)
     db_session.commit()
 
     assert get_effective_role(db_session, user.id, workspace.id) == UserRole.viewer
@@ -37,7 +37,7 @@ def test_grupo_padrao_da_acesso_minimo_garantido(db_session, make_user, make_wor
 
 def test_admin_da_plataforma_tem_bypass_total_mesmo_sem_matriz(db_session, make_user, make_workspace):
     """Membro do grupo Administradores e admin em QUALQUER colecao, mesmo sem nenhuma
-    linha na GroupWorkspaceAccess -- e o bypass documentado, nao um bug."""
+    permissao dada -- e o bypass documentado, nao um bug."""
     admin = make_user("admin@teste.com")
     workspace = make_workspace("RH")
 
@@ -64,9 +64,9 @@ def test_maior_papel_entre_multiplos_grupos_prevalece(db_session, make_user, mak
     db_session.add_all([
         GroupMember(group_id=grupo_viewer.id, user_id=user.id),
         GroupMember(group_id=grupo_editor.id, user_id=user.id),
-        GroupWorkspaceAccess(group_id=grupo_viewer.id, workspace_id=workspace.id, role=UserRole.viewer),
-        GroupWorkspaceAccess(group_id=grupo_editor.id, workspace_id=workspace.id, role=UserRole.editor),
     ])
+    set_group_role(db_session, grupo_viewer.id, workspace.id, UserRole.viewer)
+    set_group_role(db_session, grupo_editor.id, workspace.id, UserRole.editor)
     db_session.commit()
 
     assert get_effective_role(db_session, user.id, workspace.id) == UserRole.editor
@@ -87,8 +87,8 @@ def test_acesso_nao_vaza_entre_colecoes_diferentes(db_session, make_user, make_w
 
     db_session.add_all([
         GroupMember(group_id=grupo.id, user_id=user.id),
-        GroupWorkspaceAccess(group_id=grupo.id, workspace_id=workspace_permitido.id, role=UserRole.editor),
     ])
+    set_group_role(db_session, grupo.id, workspace_permitido.id, UserRole.editor)
     db_session.commit()
 
     assert get_effective_role(db_session, user.id, workspace_permitido.id) == UserRole.editor

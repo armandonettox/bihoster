@@ -11,7 +11,8 @@ from app.core import powerbi
 from app.core.audit import log_view_once
 from app.core.database import get_db
 from app.core.db_helpers import get_or_404
-from app.core.workspace_deps import require_workspace_member, require_workspace_role
+from app.core.access_deps import require_workspace_permission
+from app.core.workspace_deps import require_workspace_member
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User, UserRole
@@ -225,7 +226,7 @@ def trigger_refresh(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_role(UserRole.admin, UserRole.editor)),
+    _=Depends(require_workspace_permission("powerbi.atualizar")),
 ):
     report = _get_report_or_404(db, workspace_id, report_id)
     if not report.pbi_dataset_id:

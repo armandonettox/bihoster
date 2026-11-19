@@ -17,6 +17,7 @@ from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User
 from app.models.workspace import Workspace
+from tests.access_helpers import dar_permissoes_do_grupo
 
 PASSWORD = "SenhaForte123"
 ESQUEMA = DatasetSchema(tables=(SchemaTable("Vendas", (SchemaColumn("Valor", "decimal"),), (("Total", None),)),))
@@ -408,7 +409,7 @@ def _chat(client, headers, texto="Qual o total?"):
 def _liberar(client, admin, email):
     grupo = client.post("/groups/", json={"name": f"G {email}"}, headers=admin).json()["id"]
     client.post(f"/groups/{grupo}/members", json={"email": email}, headers=admin)
-    client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
+    dar_permissoes_do_grupo(client, admin, grupo, ["ia.usar"])
 
 
 @pytest.fixture
@@ -543,7 +544,7 @@ class TestRelatorioDoAdmin:
     def test_quem_gerencia_a_ia_ve(self, client, admin, ana):
         grupo = client.post("/groups/", json={"name": "Gestores"}, headers=admin).json()["id"]
         client.post(f"/groups/{grupo}/members", json={"email": "ana@example.com"}, headers=admin)
-        client.put(f"/groups/{grupo}/permissions", json={"permissions": ["ia.gerenciar"]}, headers=admin)
+        dar_permissoes_do_grupo(client, admin, grupo, ["ia.gerenciar"])
 
         assert client.get("/ai/usage/", headers=ana).status_code == 200
 

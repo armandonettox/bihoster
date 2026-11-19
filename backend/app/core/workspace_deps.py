@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user import User, UserRole
-from app.models.workspace import Group, GroupMember, GroupWorkspaceAccess
+from app.models.workspace import Group, GroupMember
 from app.routers.auth import get_current_user
 
 ROLE_ORDER = {UserRole.viewer: 0, UserRole.editor: 1, UserRole.admin: 2}
@@ -69,15 +69,13 @@ def add_user_to_admin_group(db: Session, user_id: int) -> None:
 
 
 def ensure_default_group_access(db: Session, workspace_id: int, role: UserRole = UserRole.viewer) -> None:
-    """Da ao grupo padrao um nivel de acesso base numa colecao recem criada (admin pode mudar depois)."""
+    """Da ao grupo padrao um nivel de acesso base numa colecao recem criada (admin pode mudar depois).
+    O acesso e gravado como permissoes (as do atalho do papel); se o grupo ja tem algo na colecao, nao mexe."""
+    from app.core.access_roles import get_group_role, set_group_role  # import aqui para nao fechar um ciclo
+
     default_group = get_or_create_default_group(db)
-    exists = (
-        db.query(GroupWorkspaceAccess)
-        .filter(GroupWorkspaceAccess.group_id == default_group.id, GroupWorkspaceAccess.workspace_id == workspace_id)
-        .first()
-    )
-    if not exists:
-        db.add(GroupWorkspaceAccess(group_id=default_group.id, workspace_id=workspace_id, role=role))
+    if get_group_role(db, default_group.id, workspace_id) is None:
+        set_group_role(db, default_group.id, workspace_id, role)
         db.commit()
 
 
@@ -94,45 +92,35 @@ def is_platform_admin(db: Session, user_id: int) -> bool:
 
 
 def get_effective_role(db: Session, user_id: int, workspace_id: int) -> Optional[UserRole]:
-    """Papel do usuario numa colecao -- vem exclusivamente dos grupos a que ele pertence
-    (bypass total se for do grupo Administradores). Nao existe mais papel atribuido direto a pessoa."""
+    """Papel do usuario numa colecao, calculado a partir das permissoes dele (as que vem dos grupos somadas as que
+    foram dadas a ele; bypass total se for do grupo Administradores). Ver core/access_roles.py."""
     if is_platform_admin(db, user_id):
         return UserRole.admin
 
-    group_roles = (
-        db.query(GroupWorkspaceAccess.role)
-        .join(GroupMember, GroupMember.group_id == GroupWorkspaceAccess.group_id)
-        .filter(GroupWorkspaceAccess.workspace_id == workspace_id, GroupMember.user_id == user_id)
-        .all()
-    )
+    from app.core.access_engine import effective_access  # imports aqui para nao fechar um ciclo com o motor
+    from app.core.access_roles import role_from_keys
 
-    if not group_roles:
-        return None
-
-    return max((role for (role,) in group_roles), key=lambda r: ROLE_ORDER[r])
+    keys = effective_access(db, user_id).by_workspace.get(workspace_id)
+    return role_from_keys(keys)
 
 
 def get_effective_roles_map(db: Session, user_id: int) -> dict[int, UserRole]:
     """Versao em lote de get_effective_role -- calcula o papel efetivo do usuario em TODAS as
-    colecoes com uma unica query, em vez de N queries (uma por colecao) num loop no chamador."""
+    colecoes com uma unica busca, em vez de N (uma por colecao) num loop no chamador."""
     if is_platform_admin(db, user_id):
         from app.models.workspace import Workspace
 
         return {w.id: UserRole.admin for w in db.query(Workspace.id).all()}
 
-    rows = (
-        db.query(GroupWorkspaceAccess.workspace_id, GroupWorkspaceAccess.role)
-        .join(GroupMember, GroupMember.group_id == GroupWorkspaceAccess.group_id)
-        .filter(GroupMember.user_id == user_id)
-        .all()
-    )
+    from app.core.access_engine import effective_access
+    from app.core.access_roles import role_from_keys
 
-    roles_by_workspace: dict[int, UserRole] = {}
-    for workspace_id, role in rows:
-        current = roles_by_workspace.get(workspace_id)
-        if current is None or ROLE_ORDER[role] > ROLE_ORDER[current]:
-            roles_by_workspace[workspace_id] = role
-    return roles_by_workspace
+    roles: dict[int, UserRole] = {}
+    for workspace_id, keys in effective_access(db, user_id).by_workspace.items():
+        role = role_from_keys(keys)
+        if role is not None:
+            roles[workspace_id] = role
+    return roles
 
 
 def require_workspace_member(workspace_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)) -> User:

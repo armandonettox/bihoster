@@ -2,6 +2,8 @@
 via rota HTTP real (TestClient) -- cobre o que test_workspace_deps.py testa isolado, mas
 agora passando pelas dependencies reais do FastAPI (require_workspace_role, etc)."""
 
+from tests.access_helpers import tirar_acesso
+
 
 def _register_and_login(client, email: str, name: str = "Usuario") -> str:
     client.post("/auth/register", json={"name": name, "email": email, "password": "SenhaForte123"})
@@ -79,7 +81,7 @@ def test_usuario_sem_grupo_com_acesso_nao_ve_colecao(client):
     # Remove o acesso do grupo padrao que get_effective_role da de fabrica.
     groups = client.get("/groups/", headers=admin_headers).json()
     default_group = next(g for g in groups if g["is_default"])
-    client.delete(f"/workspaces/{workspace['id']}/access/{default_group['id']}", headers=admin_headers)
+    tirar_acesso(client, admin_headers, workspace["id"], default_group["id"])
 
     outsider_token = _register_and_login(client, "outsider@example.com")
     outsider_headers = _auth_headers(outsider_token)

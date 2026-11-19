@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import chat_history
-from app.core.ai_access import require_ai_use
+from app.core.access_deps import require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.models.user import User
@@ -21,13 +21,13 @@ def _get_own_or_404(db: Session, user: User, conversation_id: int):
 
 
 @router.get("/", response_model=list[ConversationOut])
-def list_my_conversations(db: Session = Depends(get_db), current_user: User = Depends(require_ai_use)):
+def list_my_conversations(db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("ia.usar"))):
     return chat_history.list_conversations(db, current_user.id)
 
 
 @router.get("/{conversation_id}", response_model=ConversationDetailOut)
 def get_my_conversation(
-    conversation_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_ai_use)
+    conversation_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("ia.usar"))
 ):
     conversation = _get_own_or_404(db, current_user, conversation_id)
     messages = [

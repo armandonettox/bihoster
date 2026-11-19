@@ -14,6 +14,8 @@ class WorkspaceCreate(BaseModel):
     description: Optional[str] = Field(default=None, max_length=2000)
     icon: Optional[str] = None
     color: Optional[str] = None
+    # Toda colecao nova da leitura ao grupo "Todos os usuarios"; desligado, so quem tem acesso por outro caminho a enxerga
+    everyone_can_view: bool = True
 
     @field_validator("name")
     @classmethod
@@ -126,22 +128,3 @@ class GroupInviteOut(BaseModel):
 
     class Config:
         from_attributes = True
-
-
-class AccessUpdate(BaseModel):
-    role: UserRole
-
-    @field_validator("role")
-    @classmethod
-    def no_admin_via_matrix(cls, value: UserRole) -> UserRole:
-        if value == UserRole.admin:
-            raise ValueError("Admin de colecao so existe via o grupo Administradores, nao pela matriz de acesso")
-        return value
-
-
-class WorkspaceAccessOut(BaseModel):
-    group_id: int
-    group_name: str
-    is_default: bool
-    is_admin_group: bool
-    role: Optional[UserRole]

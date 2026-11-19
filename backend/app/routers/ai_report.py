@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
 from app.core import ai_column_hints, ai_report_settings, chat_dataset, chat_images
-from app.core.ai_access import require_ai_manage, require_ai_use
+from app.core.access_deps import require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
@@ -48,7 +48,7 @@ def _settings_out(report: Report, settings: ai_report_settings.ReportAISettings)
 @router.get("/review", response_model=list[AIReportReviewItem])
 def list_review_states(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.bloqueios")),
 ):
     """Estado de revisao das colunas de cada relatorio das colecoes que o admin acessa."""
     roles = get_effective_roles_map(db, current_user.id)
@@ -64,7 +64,7 @@ def get_report_schema(
     report_id: int,
     refresh: bool = False,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.bloqueios")),
 ):
     """Mostra o que a IA enxerga do relatorio: tabelas, colunas (com tipo e quantidade de valores diferentes),
     medidas, o que ficou de fora por tamanho e quantas colunas ocultas ela ignora. So nomes e contagens, nunca
@@ -145,7 +145,7 @@ def warm_page_image(
     report_id: int,
     data: PageImageIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_use),
+    current_user: User = Depends(require_global_permission("ia.usar")),
 ):
     """Pede a imagem da pagina aberta do relatorio, para a IA ver os graficos. Nao espera: a exportacao roda em
     segundo plano e as proximas perguntas usam a imagem quando ela estiver pronta. So acontece se o admin
@@ -164,7 +164,7 @@ def warm_page_image(
 def get_report_settings(
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.bloqueios")),
 ):
     report = _get_report(db, current_user, report_id)
     return _settings_out(report, ai_report_settings.get_settings(db, report.id))
@@ -175,7 +175,7 @@ def update_report_settings(
     report_id: int,
     data: AIReportSettingsUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.bloqueios")),
 ):
     """Grava as orientacoes, as colunas bloqueadas e a permissao de imagem do relatorio."""
     report = _get_report(db, current_user, report_id)
@@ -202,7 +202,7 @@ def update_report_settings(
 def review_report(
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_ai_manage),
+    current_user: User = Depends(require_global_permission("ia.bloqueios")),
 ):
     """Marca as colunas do relatorio como revisadas (com ou sem bloqueio) e libera o relatorio novo para o chat."""
     report = _get_report(db, current_user, report_id)

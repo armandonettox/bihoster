@@ -1,6 +1,7 @@
 """Reverter acoes pela auditoria: gravar o antes, voltar ao antes, avisar quando mudou de novo."""
 
 from app.models.audit_log import AuditLog
+from tests.access_helpers import dar_papel, dar_permissoes_do_grupo, papel_do_grupo
 
 PASSWORD = "SenhaForte123"
 
@@ -167,78 +168,97 @@ def test_editar_relatorio_reverte_nome_painel_e_abas(client):
     assert back["pbi_page_names"] == ["A", "B"]
 
 
-# --- acesso de grupo ---
+# --- acesso de grupo e permissoes de grupo: registros antigos ---
+# Nenhuma tela gera mais esses registros (a matriz de acesso por colecao e as permissoes de grupo no formato antigo foram
+# substituidas por Gerenciar usuarios), mas instalacoes que ja os tem continuam podendo reverte-los. Os testes criam o
+# registro direto no banco, no formato de antes, e conferem que a reversao aplica o "antes" nas permissoes novas.
 
 
-def test_mudar_acesso_do_grupo_e_reverter(client):
+def _registro_antigo(client, db_session, admin, *, action: str, workspace_id=None, entity="workspace", entity_id, details, change):
+    from app.core.audit import log_action
+
+    me = client.get("/auth/me", headers=admin).json()
+    log_action(
+        db_session,
+        action=action,
+        entity=entity,
+        user_id=me["id"],
+        workspace_id=workspace_id,
+        entity_id=entity_id,
+        details=details,
+        change=change,
+    )
+    return _last(client, admin, action)
+
+
+def _mudanca_de_acesso(group, ws, before, after):
+    return {"kind": "access", "group_id": group["id"], "group_name": group["name"], "workspace_name": ws["name"], "before": before, "after": after}
+
+
+def test_mudar_acesso_do_grupo_e_reverter(client, db_session):
     admin = _admin(client)
     ws = _workspace(client, admin)
     group = _group(client, admin)
-    client.put(f"/workspaces/{ws['id']}/access/{group['id']}", json={"role": "viewer"}, headers=admin)
-    client.put(f"/workspaces/{ws['id']}/access/{group['id']}", json={"role": "editor"}, headers=admin)
-    editor_change = next(e for e in _entries(client, admin, action=["set_access"]))
-    assert "de editor para leitor" in editor_change["revert_summary"]
+    dar_papel(client, admin, ws["id"], group["id"], "editor")
+    entry = _registro_antigo(
+        client, db_session, admin, action="set_access", workspace_id=ws["id"], entity_id=group["id"],
+        details=f"{group['name']} -> editor", change=_mudanca_de_acesso(group, ws, "viewer", "editor"),
+    )
+    assert "de editor para leitor" in entry["revert_summary"]
 
-    assert _revert(client, admin, editor_change).status_code == 200
+    assert _revert(client, admin, entry).status_code == 200
 
-    roles = {a["group_id"]: a["role"] for a in client.get(f"/workspaces/{ws['id']}/access", headers=admin).json()}
-    assert roles[group["id"]] == "viewer"
+    assert papel_do_grupo(client, admin, ws["id"], group["id"]) == "viewer"
 
 
-def test_primeiro_acesso_do_grupo_reverte_para_sem_acesso(client):
+def test_primeiro_acesso_do_grupo_reverte_para_sem_acesso(client, db_session):
     admin = _admin(client)
     ws = _workspace(client, admin)
     group = _group(client, admin)
-    client.put(f"/workspaces/{ws['id']}/access/{group['id']}", json={"role": "editor"}, headers=admin)
-    entry = _last(client, admin, "set_access")
+    dar_papel(client, admin, ws["id"], group["id"], "editor")
+    entry = _registro_antigo(
+        client, db_session, admin, action="set_access", workspace_id=ws["id"], entity_id=group["id"],
+        details=f"{group['name']} -> editor", change=_mudanca_de_acesso(group, ws, None, "editor"),
+    )
     assert "de editor para sem acesso" in entry["revert_summary"]
 
     _revert(client, admin, entry)
 
-    roles = {a["group_id"]: a["role"] for a in client.get(f"/workspaces/{ws['id']}/access", headers=admin).json()}
-    assert roles[group["id"]] is None
+    assert papel_do_grupo(client, admin, ws["id"], group["id"]) is None
 
 
-def test_remover_acesso_passa_a_ser_auditado_e_pode_ser_revertido(client):
+def test_acesso_removido_pode_ser_revertido(client, db_session):
     admin = _admin(client)
     ws = _workspace(client, admin)
     group = _group(client, admin)
-    client.put(f"/workspaces/{ws['id']}/access/{group['id']}", json={"role": "editor"}, headers=admin)
-    client.delete(f"/workspaces/{ws['id']}/access/{group['id']}", headers=admin)
-    removal = _last(client, admin, "remove_access")
+    removal = _registro_antigo(
+        client, db_session, admin, action="remove_access", workspace_id=ws["id"], entity_id=group["id"],
+        details=f"{group['name']} -> sem acesso", change=_mudanca_de_acesso(group, ws, "editor", None),
+    )
     assert removal["action_label"] == "Acesso de grupo removido"
+    assert papel_do_grupo(client, admin, ws["id"], group["id"]) is None
 
     assert _revert(client, admin, removal).status_code == 200
 
-    roles = {a["group_id"]: a["role"] for a in client.get(f"/workspaces/{ws['id']}/access", headers=admin).json()}
-    assert roles[group["id"]] == "editor"
+    assert papel_do_grupo(client, admin, ws["id"], group["id"]) == "editor"
 
 
-def test_acesso_igual_ao_que_ja_estava_nao_cria_reversao(client):
-    admin = _admin(client)
-    ws = _workspace(client, admin)
-    group = _group(client, admin)
-    client.put(f"/workspaces/{ws['id']}/access/{group['id']}", json={"role": "editor"}, headers=admin)
-
-    client.put(f"/workspaces/{ws['id']}/access/{group['id']}", json={"role": "editor"}, headers=admin)
-
-    latest = next(e for e in _entries(client, admin, action=["set_access"]))
-    assert latest["revertible"] is False
-
-
-# --- permissoes de grupo ---
-
-
-def test_mudar_permissoes_do_grupo_e_reverter(client):
+def test_mudar_permissoes_do_grupo_e_reverter(client, db_session):
     admin = _admin(client)
     group = _group(client, admin)
-    client.put(f"/groups/{group['id']}/permissions", json={"permissions": ["ia.usar"]}, headers=admin)
-    client.put(f"/groups/{group['id']}/permissions", json={"permissions": ["ia.usar", "ia.gerenciar"]}, headers=admin)
-    entry = next(e for e in _entries(client, admin, action=["set_group_permissions"]))
+    dar_permissoes_do_grupo(client, admin, group["id"], ["ia.usar", "ia.gerenciar"])
+    entry = _registro_antigo(
+        client, db_session, admin, action="set_group_permissions", entity="group", entity_id=group["id"],
+        details="ia.gerenciar, ia.usar",
+        change={"kind": "group_permissions", "group_id": group["id"], "group_name": group["name"],
+                "before": ["ia.usar"], "after": ["ia.gerenciar", "ia.usar"]},
+    )
 
     assert _revert(client, admin, entry).status_code == 200
 
-    assert client.get(f"/groups/{group['id']}/permissions", headers=admin).json()["permissions"] == ["ia.usar"]
+    blocos = client.get(f"/access/groups/{group['id']}", headers=admin).json()["blocks"]
+    globais = [chave for bloco in blocos if bloco["workspace_id"] is None for chave in bloco["permissions"]]
+    assert globais == ["ia.usar"]
 
 
 # --- membros ---

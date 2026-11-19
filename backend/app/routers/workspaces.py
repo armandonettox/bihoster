@@ -2,18 +2,20 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.access_deps import require_global_permission, require_workspace_permission
+from app.core.access_roles import give_user_role
 from app.core.audit import log_action
-from app.core.audit_revert import ACCESS, WORKSPACE_UPDATE, changed_fields
+from app.core.audit_revert import WORKSPACE_UPDATE, changed_fields
 from app.core.database import get_db
 from app.core.slug import slugify
 from app.core.workspace_deps import (
     ensure_default_group_access,
     get_effective_role,
     get_effective_roles_map,
-    require_platform_admin,
+    is_platform_admin,
     require_workspace_member,
-    require_workspace_role,
 )
+from app.models.access_grant import AccessGrant, AccessInviteGrant
 from app.models.audit_log import AuditLog
 from app.models.favorite import Favorite
 from app.models.report import Report
@@ -21,15 +23,9 @@ from app.models.settings import AppSettings
 from app.core.ai_report_settings import delete_settings_of_reports
 from app.models.subscription import delete_subscriptions_of_reports
 from app.models.user import User, UserRole
-from app.models.workspace import Group, GroupWorkspaceAccess, Workspace
+from app.models.workspace import Workspace
 from app.routers.auth import get_current_user
-from app.schemas.workspace import (
-    AccessUpdate,
-    WorkspaceAccessOut,
-    WorkspaceCreate,
-    WorkspaceOut,
-    WorkspaceUpdate,
-)
+from app.schemas.workspace import WorkspaceCreate, WorkspaceOut, WorkspaceUpdate
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
@@ -70,9 +66,9 @@ def list_my_workspaces(db: Session = Depends(get_db), current_user: User = Depen
 
 
 @router.get("/all", response_model=list[WorkspaceOut])
-def list_all_workspaces(db: Session = Depends(get_db), current_user: User = Depends(require_platform_admin)):
-    """Todas as colecoes do sistema -- usado no painel de gestao (admin da plataforma).
-    Quem chega aqui ja passou por require_platform_admin, entao o papel e sempre admin."""
+def list_all_workspaces(db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("colecao.todas"))):
+    """Todas as colecoes do sistema -- usado no painel de gestao (quem tem 'ver todas as coleções').
+    O papel devolvido e sempre admin: a tela de gestao so usa a lista, o papel de verdade vem de /workspaces/."""
     workspaces = db.query(Workspace).order_by(Workspace.name).all()
     return [_to_out(w, UserRole.admin) for w in workspaces]
 
@@ -81,7 +77,7 @@ def list_all_workspaces(db: Session = Depends(get_db), current_user: User = Depe
 def create_workspace(
     data: WorkspaceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
+    current_user: User = Depends(require_global_permission("colecao.criar")),
 ):
     # Retry em cima de IntegrityError (nao so a checagem previa) -- duas criacoes concorrentes
     # com o mesmo nome podem passar pelo _unique_slug antes de qualquer commit e colidir no
@@ -104,7 +100,12 @@ def create_workspace(
                 raise HTTPException(status_code=409, detail="Nao foi possivel gerar um identificador unico para essa colecao -- tente novamente")
     db.refresh(workspace)
 
-    ensure_default_group_access(db, workspace.id, UserRole.viewer)
+    if data.everyone_can_view:
+        ensure_default_group_access(db, workspace.id, UserRole.viewer)
+    if not is_platform_admin(db, current_user.id):
+        # Quem cria uma colecao sem ser administrador da plataforma passa a ser administrador dela; sem isso nao poderia nem edita-la
+        give_user_role(db, current_user.id, workspace.id, UserRole.admin)
+        db.commit()
 
     log_action(db, action="create", entity="workspace", user_id=current_user.id, workspace_id=workspace.id, details=workspace.name)
     return _to_out(workspace, UserRole.admin)
@@ -128,7 +129,7 @@ def update_workspace(
     workspace_id: int,
     data: WorkspaceUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_role(UserRole.admin)),
+    current_user: User = Depends(require_workspace_permission("colecao.editar")),
 ):
     workspace = db.query(Workspace).get(workspace_id)
     if not workspace:
@@ -158,7 +159,7 @@ def update_workspace(
 def delete_workspace(
     workspace_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_role(UserRole.admin)),
+    _=Depends(require_workspace_permission("colecao.excluir")),
 ):
     workspace = db.query(Workspace).get(workspace_id)
     if not workspace:
@@ -174,6 +175,8 @@ def delete_workspace(
         {"workspace_id": None}, synchronize_session=False
     )
 
+    db.query(AccessGrant).filter(AccessGrant.workspace_id == workspace_id).delete(synchronize_session=False)
+    db.query(AccessInviteGrant).filter(AccessInviteGrant.workspace_id == workspace_id).delete(synchronize_session=False)
     db.delete(workspace)
 
     settings_row = db.query(AppSettings).filter(AppSettings.id == 1, AppSettings.default_workspace_id == workspace_id).first()
@@ -182,125 +185,3 @@ def delete_workspace(
 
     db.commit()
 
-
-@router.get("/{workspace_id}/access", response_model=list[WorkspaceAccessOut])
-def get_workspace_access(
-    workspace_id: int,
-    db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
-):
-    """Matriz de acesso -- nivel de cada grupo global nesta colecao (None = sem acesso)."""
-    groups = db.query(Group).order_by(Group.is_admin_group.desc(), Group.is_default.desc(), Group.name).all()
-    access_by_group = {
-        a.group_id: a.role
-        for a in db.query(GroupWorkspaceAccess).filter(GroupWorkspaceAccess.workspace_id == workspace_id).all()
-    }
-    return [
-        WorkspaceAccessOut(
-            group_id=g.id,
-            group_name=g.name,
-            is_default=g.is_default,
-            is_admin_group=g.is_admin_group,
-            role=access_by_group.get(g.id),
-        )
-        for g in groups
-    ]
-
-
-@router.put("/{workspace_id}/access/{group_id}", response_model=WorkspaceAccessOut)
-def set_workspace_access(
-    workspace_id: int,
-    group_id: int,
-    data: AccessUpdate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
-):
-    group = db.query(Group).get(group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo nao encontrado")
-    workspace = db.query(Workspace).get(workspace_id)
-    if not workspace:
-        raise HTTPException(status_code=404, detail="Colecao nao encontrada")
-
-    access = (
-        db.query(GroupWorkspaceAccess)
-        .filter(GroupWorkspaceAccess.group_id == group_id, GroupWorkspaceAccess.workspace_id == workspace_id)
-        .first()
-    )
-    role_before = access.role.value if access else None
-    if access:
-        access.role = data.role
-    else:
-        access = GroupWorkspaceAccess(group_id=group_id, workspace_id=workspace_id, role=data.role)
-        db.add(access)
-    db.commit()
-
-    log_action(
-        db,
-        action="set_access",
-        entity="workspace",
-        user_id=current_user.id,
-        workspace_id=workspace_id,
-        entity_id=group_id,
-        details=f"{group.name} -> {data.role.value}",
-        change=(
-            {
-                "kind": ACCESS,
-                "group_id": group_id,
-                "group_name": group.name,
-                "workspace_name": workspace.name,
-                "before": role_before,
-                "after": data.role.value,
-            }
-            if role_before != data.role.value
-            else None
-        ),
-    )
-    return WorkspaceAccessOut(
-        group_id=group.id, group_name=group.name, is_default=group.is_default, is_admin_group=group.is_admin_group, role=data.role
-    )
-
-
-@router.delete("/{workspace_id}/access/{group_id}", response_model=WorkspaceAccessOut)
-def remove_workspace_access(
-    workspace_id: int,
-    group_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(require_platform_admin),
-):
-    group = db.query(Group).get(group_id)
-    if not group:
-        raise HTTPException(status_code=404, detail="Grupo nao encontrado")
-
-    access = (
-        db.query(GroupWorkspaceAccess)
-        .filter(GroupWorkspaceAccess.group_id == group_id, GroupWorkspaceAccess.workspace_id == workspace_id)
-        .first()
-    )
-    if access:
-        role_before = access.role.value
-        db.delete(access)
-        db.commit()
-        workspace = db.query(Workspace).get(workspace_id)
-        # Antes a remocao nao deixava rastro; agora aparece na auditoria e pode ser revertida
-        log_action(
-            db,
-            action="remove_access",
-            entity="workspace",
-            user_id=current_user.id,
-            workspace_id=workspace_id,
-            entity_id=group_id,
-            details=f"{group.name} -> sem acesso",
-            change={
-                "kind": ACCESS,
-                "group_id": group_id,
-                "group_name": group.name,
-                "workspace_name": workspace.name if workspace else "",
-                "before": role_before,
-                "after": None,
-            },
-        )
-
-    return WorkspaceAccessOut(
-        group_id=group.id, group_name=group.name, is_default=group.is_default, is_admin_group=group.is_admin_group, role=None
-    )

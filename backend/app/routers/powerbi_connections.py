@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.core import powerbi
 from app.core.database import get_db
-from app.core.workspace_deps import require_platform_admin
+from app.core.access_deps import require_global_permission
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.routers import powerbi as embed_router
@@ -39,14 +39,14 @@ def _to_out(connection: PowerBIConnection) -> PowerBIConnectionOut:
 
 
 @router.get("/", response_model=list[PowerBIConnectionOut])
-def list_connections(db: Session = Depends(get_db), _=Depends(require_platform_admin)):
+def list_connections(db: Session = Depends(get_db), _=Depends(require_global_permission("conexao.ver"))):
     connections = db.query(PowerBIConnection).order_by(PowerBIConnection.name).all()
     return [_to_out(c) for c in connections]
 
 
 @router.post("/", response_model=PowerBIConnectionOut, status_code=status.HTTP_201_CREATED)
 def create_connection(
-    data: PowerBIConnectionCreate, db: Session = Depends(get_db), _=Depends(require_platform_admin)
+    data: PowerBIConnectionCreate, db: Session = Depends(get_db), _=Depends(require_global_permission("conexao.criar"))
 ):
     connection = PowerBIConnection(**data.model_dump())
     db.add(connection)
@@ -60,7 +60,7 @@ def update_connection(
     connection_id: int,
     data: PowerBIConnectionUpdate,
     db: Session = Depends(get_db),
-    _=Depends(require_platform_admin),
+    _=Depends(require_global_permission("conexao.editar")),
 ):
     connection = db.query(PowerBIConnection).get(connection_id)
     if not connection:
@@ -77,7 +77,7 @@ def update_connection(
 
 
 @router.delete("/{connection_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_connection(connection_id: int, db: Session = Depends(get_db), _=Depends(require_platform_admin)):
+def delete_connection(connection_id: int, db: Session = Depends(get_db), _=Depends(require_global_permission("conexao.excluir"))):
     connection = db.query(PowerBIConnection).get(connection_id)
     if not connection:
         raise HTTPException(status_code=404, detail="Conta do Power BI nao encontrada")
