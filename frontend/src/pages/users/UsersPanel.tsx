@@ -1028,7 +1028,7 @@ export default function UsersPanel() {
               <span>Avisar a pessoa por e-mail, com o link para entrar</span>
             </label>
             {!emailConfigured && (
-              <span className="field-hint">Para ligar, configure o servidor de e-mail em Configurações &gt; E-mail.</span>
+              <span className="field-hint">Para ligar, configure o servidor de e-mail em Administração &gt; E-mail.</span>
             )}
 
             {addError && <p className="auth-error">{addError}</p>}

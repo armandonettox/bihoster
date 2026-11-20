@@ -188,7 +188,7 @@ export default function ScheduleEditor({ kind, id, readOnly = false }: Props) {
         </fieldset>
       )}
 
-      {timezone && <span className="field-hint">Os horários valem no fuso {timezone}, definido em Configurações.</span>}
+      {timezone && <span className="field-hint">Os horários valem no fuso {timezone}, definido em Administração.</span>}
 
       {!readOnly && (
         <div>

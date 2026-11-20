@@ -111,7 +111,7 @@ describe("Settings - uma aba para cada item", () => {
 
       expect(content()).toBe("tab:ai");
       expect(screen.queryByRole("tablist")).toBeNull();
-      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Configuracoes");
+      expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Administração");
       expect(screen.getByText("Gerencie a IA do sistema.")).toBeTruthy();
     },
   );
@@ -153,7 +153,7 @@ describe("Settings - administrador da plataforma", () => {
     renderAt("/settings", admin());
 
     expect(content()).toBe("tab:general");
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Configuracoes");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Administração");
     const labels = rotulos();
     expect(labels).not.toContain("Minha conta");
     expect(labels).not.toContain("Membros"); // ficam em Gerenciar usuarios
@@ -163,7 +163,7 @@ describe("Settings - administrador da plataforma", () => {
     expect(labels).not.toContain("Auditoria"); // tem pagina propria
     expect(labels).not.toContain("Permissoes"); // o catalogo de niveis foi removido
     expect(labels).toHaveLength(9);
-    expect(screen.getByText("Gerencie a marca do sistema, colecoes, membros e grupos de acesso.")).toBeTruthy();
+    expect(screen.getByText("Gerencie a marca, as coleções e as configurações do sistema.")).toBeTruthy();
   });
 
   it("link antigo ?tab=members vai para Gerenciar usuarios", () => {

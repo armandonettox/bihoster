@@ -56,7 +56,7 @@ export default function NewReportForm({
       .catch((err) => {
         setCatalogError(
           extractErrorMessage(err) ||
-            "Nao foi possivel listar as contas do Power BI. Peca a um administrador para configurar em Configuracoes > Geral."
+            "Nao foi possivel listar as contas do Power BI. Peca a um administrador para configurar em Administração > Geral."
         );
       })
       .finally(() => setLoadingConnections(false));
@@ -183,7 +183,7 @@ export default function NewReportForm({
         ) : connections.length === 0 ? (
           <p className="auth-error">
             Nenhuma conta do Power BI configurada. Peca a um administrador para adicionar uma em
-            Configuracoes {`>`} Geral.
+            Administração {`>`} Geral.
           </p>
         ) : (
           <>

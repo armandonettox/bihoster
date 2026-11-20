@@ -65,8 +65,8 @@ export default function Settings() {
   return (
     <div className="settings-page">
       <div className="settings-header">
-        <h1>Configuracoes</h1>
-        <p>{onlyAi ? "Gerencie a IA do sistema." : "Gerencie a marca do sistema, colecoes, membros e grupos de acesso."}</p>
+        <h1>Administração</h1>
+        <p>{onlyAi ? "Gerencie a IA do sistema." : "Gerencie a marca, as coleções e as configurações do sistema."}</p>
       </div>
 
       {tabs.length > 1 && (

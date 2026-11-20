@@ -366,7 +366,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         <p className="embed-error-title">Nao foi possivel exibir o relatorio</p>
         <p className="embed-error-message">{error}</p>
         <p className="embed-error-hint">
-          Verifique a conexao com o Power BI em Configuracoes {`>`} Power BI, e as configuracoes do
+          Verifique a conexao com o Power BI em Administração {`>`} Geral, e as configuracoes do
           locatario do Power BI (embedding, entidades de servico).
         </p>
       </div>

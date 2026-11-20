@@ -251,7 +251,7 @@ export default function SubscriptionForm({
       <label className="field" style={{ marginTop: 12 }}>
         Fuso horario
         <select className="input" value={timezone} onChange={(e) => setTimezone(e.target.value)}>
-          <option value="">Usar fuso das Configuracoes</option>
+          <option value="">Usar fuso da Administração</option>
           {listTimezones(timezone).map((o) => (
             <option key={o.tz} value={o.tz}>
               {getUtcOffsetLabel(o.tz)} -- {o.label}
