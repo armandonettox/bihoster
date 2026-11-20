@@ -25,6 +25,8 @@ const Home = lazy(() => import("./pages/Home"));
 const CollectionHome = lazy(() => import("./pages/CollectionHome"));
 const Settings = lazy(() => import("./pages/Settings"));
 const ManageUsers = lazy(() => import("./pages/ManageUsers"));
+const Collections = lazy(() => import("./pages/Collections"));
+const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const Account = lazy(() => import("./pages/Account"));
 const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
@@ -110,6 +112,8 @@ function RoutedContent() {
             <Route index element={<Home />} />
             <Route path="collection" element={<CollectionHome />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="collections" element={<Collections />} />
+            <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="users" element={<ManageUsers />} />
             <Route path="account" element={<Account />} />
             <Route path="audit" element={<Audit />} />

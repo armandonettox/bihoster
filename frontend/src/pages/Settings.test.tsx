@@ -9,12 +9,10 @@ import Settings from "./Settings";
 // As abas fazem chamadas de rede; aqui so importa qual delas a pagina escolhe mostrar.
 // O import fica dentro da fabrica porque o vi.mock sobe pro topo do arquivo.
 vi.mock("./settings/GeneralTab", async () => (await import("../test-stubs")).tabStub("tab:general"));
-vi.mock("./settings/CollectionsTab", async () => (await import("../test-stubs")).tabStub("tab:collections"));
 vi.mock("./settings/BrandTab", async () => (await import("../test-stubs")).tabStub("tab:brand"));
 vi.mock("./settings/AuthTab", async () => (await import("../test-stubs")).tabStub("tab:auth"));
 vi.mock("./settings/EmailTab", async () => (await import("../test-stubs")).tabStub("tab:email"));
 vi.mock("./settings/AiTab", async () => (await import("../test-stubs")).tabStub("tab:ai"));
-vi.mock("./settings/SubscriptionsTab", async () => (await import("../test-stubs")).tabStub("tab:subscriptions"));
 vi.mock("./settings/UpdatesTab", async () => (await import("../test-stubs")).tabStub("tab:updates"));
 vi.mock("./settings/CacheTab", async () => (await import("../test-stubs")).tabStub("tab:cache"));
 
@@ -38,6 +36,8 @@ function renderAt(url: string, access = acesso()) {
           <Route path="/account" element={<div data-testid="account-page">pagina da conta</div>} />
           <Route path="/users" element={<PaginaDeUsuarios />} />
           <Route path="/audit" element={<div data-testid="audit-page">pagina da auditoria</div>} />
+          <Route path="/collections" element={<div data-testid="collections-page">pagina das colecoes</div>} />
+          <Route path="/subscriptions" element={<div data-testid="subscriptions-page">pagina das assinaturas</div>} />
         </Routes>
       </MemoryRouter>
     </AccessContext.Provider>,
@@ -60,7 +60,7 @@ describe("Settings - quem nao tem nenhuma permissao de administracao", () => {
     expect(screen.queryByRole("tablist")).toBeNull();
   });
 
-  it.each(["general", "audit", "updates", "auth", "email", "ai", "brand", "collections"])(
+  it.each(["general", "audit", "updates", "auth", "email", "ai", "brand"])(
     "?tab=%s na URL tambem vai para a conta, nunca mostra a aba de administracao",
     (tab) => {
       renderAt(`/settings?tab=${tab}`);
@@ -89,11 +89,9 @@ describe("Settings - quem nao tem nenhuma permissao de administracao", () => {
 describe("Settings - uma aba para cada item", () => {
   it.each([
     ["sistema.geral", "Geral", "tab:general"],
-    ["colecao.todas", "Coleções", "tab:collections"],
     ["sistema.marca", "Marca", "tab:brand"],
     ["sistema.autenticacao", "Autenticacao", "tab:auth"],
     ["sistema.email", "E-mail", "tab:email"],
-    ["assinatura.todas", "Assinaturas", "tab:subscriptions"],
     ["sistema.versao", "Atualizacoes", "tab:updates"],
     ["sistema.cache", "Cache", "tab:cache"],
   ])("%s mostra so a aba %s", (chave, rotulo, conteudo) => {
@@ -162,8 +160,10 @@ describe("Settings - administrador da plataforma", () => {
     expect(labels).toContain("IA");
     expect(labels).not.toContain("Auditoria"); // tem pagina propria
     expect(labels).not.toContain("Permissoes"); // o catalogo de niveis foi removido
-    expect(labels).toHaveLength(9);
-    expect(screen.getByText("Gerencie a marca, as coleções e as configurações do sistema.")).toBeTruthy();
+    expect(labels).not.toContain("Coleções"); // tem pagina propria
+    expect(labels).not.toContain("Assinaturas"); // tem pagina propria
+    expect(labels).toHaveLength(7);
+    expect(screen.getByText("Gerencie a marca, o e-mail, o login e as demais configurações do sistema.")).toBeTruthy();
   });
 
   it("link antigo ?tab=members vai para Gerenciar usuarios", () => {
@@ -180,6 +180,18 @@ describe("Settings - administrador da plataforma", () => {
   it("link antigo ?tab=audit vai para a pagina de auditoria", () => {
     renderAt("/settings?tab=audit", admin());
     expect(screen.queryByTestId("audit-page")).not.toBeNull();
+    expect(screen.queryByTestId("tab-content")).toBeNull();
+  });
+
+  it("link antigo ?tab=collections vai para a pagina de Colecoes", () => {
+    renderAt("/settings?tab=collections", admin());
+    expect(screen.queryByTestId("collections-page")).not.toBeNull();
+    expect(screen.queryByTestId("tab-content")).toBeNull();
+  });
+
+  it("link antigo ?tab=subscriptions vai para a pagina de Assinaturas", () => {
+    renderAt("/settings?tab=subscriptions", admin());
+    expect(screen.queryByTestId("subscriptions-page")).not.toBeNull();
     expect(screen.queryByTestId("tab-content")).toBeNull();
   });
 

@@ -5,12 +5,10 @@ import { useUrlTab } from "../hooks/useUrlTab";
 import { ADMIN_TABS, type AdminTab } from "../utils/adminTabs";
 import PageLoading from "../components/PageLoading";
 import GeneralTab from "./settings/GeneralTab";
-import CollectionsTab from "./settings/CollectionsTab";
 import BrandTab from "./settings/BrandTab";
 import AuthTab from "./settings/AuthTab";
 import EmailTab from "./settings/EmailTab";
 import UpdatesTab from "./settings/UpdatesTab";
-import SubscriptionsTab from "./settings/SubscriptionsTab";
 import CacheTab from "./settings/CacheTab";
 import AiTab from "./settings/AiTab";
 
@@ -35,6 +33,10 @@ export default function Settings() {
 
   // Sem saber o que a pessoa pode, nao da pra decidir quais abas mostrar
   if (access.loading) return <PageLoading />;
+
+  // Links antigos das abas Colecoes e Assinaturas: agora cada uma tem pagina propria (a pagina decide se a pessoa entra)
+  if (searchParams.get("tab") === "collections") return <Navigate to="/collections" replace />;
+  if (searchParams.get("tab") === "subscriptions") return <Navigate to="/subscriptions" replace />;
 
   // Sem nada para administrar, ou link antigo da aba da conta (/settings?tab=account): vai para a pagina da conta
   if (tabs.length === 0 || searchParams.get("tab") === "account") return <Navigate to="/account" replace />;
@@ -66,7 +68,7 @@ export default function Settings() {
     <div className="settings-page">
       <div className="settings-header">
         <h1>Administração</h1>
-        <p>{onlyAi ? "Gerencie a IA do sistema." : "Gerencie a marca, as coleções e as configurações do sistema."}</p>
+        <p>{onlyAi ? "Gerencie a IA do sistema." : "Gerencie a marca, o e-mail, o login e as demais configurações do sistema."}</p>
       </div>
 
       {tabs.length > 1 && (
@@ -93,12 +95,10 @@ export default function Settings() {
 
       <div role="tabpanel" id={`settings-tabpanel-${tab}`} aria-labelledby={`settings-tab-${tab}`}>
         {tab === "general" && <GeneralTab />}
-        {tab === "collections" && <CollectionsTab />}
         {tab === "brand" && <BrandTab />}
         {tab === "auth" && <AuthTab />}
         {tab === "email" && <EmailTab />}
         {tab === "ai" && <AiTab />}
-        {tab === "subscriptions" && <SubscriptionsTab />}
         {tab === "updates" && <UpdatesTab />}
         {tab === "cache" && <CacheTab />}
       </div>

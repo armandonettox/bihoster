@@ -58,7 +58,7 @@ describe("AppsMenu", () => {
     expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull(); // menu fechou
   });
 
-  it.each(["sistema.geral", "colecao.todas", "sistema.email", "ia.registro", "assinatura.todas", "sistema.versao", "sistema.cache"])(
+  it.each(["sistema.geral", "sistema.email", "ia.registro", "sistema.versao", "sistema.cache"])(
     "o item %s ja basta para mostrar a Administracao",
     (chave) => {
       renderMenu([chave]);
@@ -66,6 +66,28 @@ describe("AppsMenu", () => {
       expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
     },
   );
+
+  it("quem pode ver todas as colecoes ve Coleções, que abre a pagina propria e nao a Administracao", () => {
+    renderMenu(["colecao.todas"]);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Assinaturas" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Coleções" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/collections");
+  });
+
+  it("quem pode ver todas as assinaturas ve Assinaturas, que abre a pagina propria e nao a Administracao", () => {
+    renderMenu(["assinatura.todas"]);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Coleções" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Assinaturas" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/subscriptions");
+  });
 
   it("quem pode ver os membros ve Gerenciar usuarios, que abre a pagina propria e nao as Configuracoes", () => {
     renderMenu(["membros.ver"]);
@@ -165,6 +187,8 @@ describe("AppsMenu", () => {
 
     expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Coleções" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Assinaturas" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Auditoria" })).toBeTruthy();
   });
 });
