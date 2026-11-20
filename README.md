@@ -35,14 +35,14 @@ copie `.env.example` para `.env` e preencha antes do `docker compose up -d`.
 ### Configurar o Power BI
 
 Toda a configuração do Power BI (Service Principal do Azure AD: tenant, client ID, client
-secret) é feita dentro do próprio app, em **Configurações → Power BI**, depois de logado como
+secret) é feita dentro do próprio app, em **Administração → Geral**, depois de logado como
 administrador — não precisa editar nenhum arquivo.
 
 ### Forçar HTTPS atrás de proxy
 
 Se você coloca o BIHoster atrás do seu próprio reverse proxy (nginx, Caddy, Traefik) que
 termina o TLS e repassa a requisição em texto claro pro backend, defina
-`TRUST_PROXY_HEADERS=true` no `.env` antes de ativar **"Forçar HTTPS"** em Configurações → Geral.
+`TRUST_PROXY_HEADERS=true` no `.env` antes de ativar **"Forçar HTTPS"** em Administração → Geral.
 Sem isso, o backend nunca enxerga a conexão como HTTPS de verdade e entra num loop de redirect
 301. **Nunca ative essa variável se o backend estiver exposto direto na internet sem proxy na
 frente** — qualquer cliente poderia forjar o header e escapar dessa checagem.
@@ -58,7 +58,7 @@ expira enquanto alguém a mantiver aberta.
 
 ### Atualizações
 
-**Configurações → Atualizações** mostra a versão instalada, se há uma versão mais nova
+**Administração → Atualizações** mostra a versão instalada, se há uma versão mais nova
 publicada (com o changelog da release) e o histórico de versões — consultando as releases
 públicas do GitHub, sem precisar configurar nada.
 
@@ -103,11 +103,11 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   cuja pessoa criadora foi removida conta como de outra pessoa. Exportar por e-mail continua uma permissão só. Quem
   atualiza de uma versão anterior não perde nada: no primeiro boot, quem já tinha cada permissão ganha a equivalente
   "de outras pessoas".
-- **E-mails de conta.** Com o servidor de e-mail e o endereço do site configurados (Configurações), ao adicionar um
+- **E-mails de conta.** Com o servidor de e-mail e o endereço do site configurados (Administração), ao adicionar um
   membro dá para ligar o aviso por e-mail com o link para entrar (desligado por padrão). O mesmo envio, e o do link de
   nova senha, estão no menu dos 3 pontinhos de cada pessoa. O link de nova senha vai só para o e-mail da pessoa.
 - **Horário de acesso.** Cada grupo pode ter faixas de dias e horas (por exemplo "Seg a Sex, 08:00 às 12:00" e "13:00 às 18:00")
-  em que as pessoas dele podem usar o sistema, no fuso definido em Configurações. A pessoa também pode ter uma exceção
+  em que as pessoas dele podem usar o sistema, no fuso definido em Administração. A pessoa também pode ter uma exceção
   individual (faixas próprias ou sem limite), que substitui o horário dos grupos. Quem está em mais de um grupo com
   faixas entra quando qualquer um permitir; sem faixa em lugar nenhum, não há limite. Fora do horário a sessão cai na
   hora, uma tela mostra o horário permitido e quando o acesso volta, e ela volta sozinha quando o horário abre.
