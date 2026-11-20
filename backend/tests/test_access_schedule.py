@@ -239,7 +239,8 @@ class TestEditar:
         admin_group = next(g["id"] for g in client.get("/groups/", headers=admin).json() if g["is_admin_group"])
         assert client.put(f"/access-schedules/groups/{admin_group}", json={"ranges": [SEG_A_SEX]}, headers=admin).status_code == 400
 
-    def test_quem_so_edita_horario_nao_afrouxa_o_proprio_limite(self, client, admin, pessoa, pessoa_id):
+    def test_quem_so_edita_horario_nao_afrouxa_o_proprio_limite(self, client, admin, pessoa, pessoa_id, relogio):
+        relogio(SEGUNDA_10H)  # dentro da faixa do grupo, senao o 403 de fora do horario esconderia a regra testada
         grupo = _grupo(client, admin)  # a pessoa esta no grupo
         client.put(
             f"/access/users/{pessoa_id}",
@@ -252,7 +253,8 @@ class TestEditar:
         outro = _grupo(client, admin, nome="Outro", com=(), faixas=())
         assert client.put(f"/access-schedules/groups/{outro}", json={"ranges": [SEG_A_SEX]}, headers=pessoa).status_code == 200
 
-    def test_conta_de_administrador_so_outro_administrador_mexe(self, client, admin, pessoa, pessoa_id):
+    def test_conta_de_administrador_so_outro_administrador_mexe(self, client, admin, pessoa, pessoa_id, relogio):
+        relogio(SEGUNDA_10H)
         client.put(
             f"/access/users/{pessoa_id}",
             json={"blocks": [{"workspace_id": None, "permissions": ["membros.horario"]}]},
