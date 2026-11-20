@@ -94,7 +94,7 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   Quem tem a permissão "Liberar acesso fora do horário" vê o pedido no topo de Gerenciar usuários (e recebe um e-mail, se
   o servidor de e-mail estiver configurado), aprova escolhendo por quanto tempo (de 15 minutos a 24 horas, ou até um
   horário do dia) ou recusa, com um motivo se quiser. A liberação acaba sozinha no prazo, pode ser encerrada antes, e a
-  tela de quem pediu entra sozinha quando aprovam. Ninguém libera o próprio acesso. Fora do horário, entrar com a
+  tela de quem pediu entra sozinha quando aprovam, e a pessoa também recebe um e-mail com a resposta (e o prazo, se aprovado). Ninguém libera o próprio acesso. Fora do horário, entrar com a
   senha certa dá uma sessão que só serve para essa tela; todo o resto do sistema continua fechado.
 - **Assinaturas e alertas: o que é seu e o que é de outras pessoas.** Cada permissão de assinatura e de alerta (ver,
   editar, excluir, enviar agora) vale só para o que a própria pessoa criou. Para ver ou mexer no que outras pessoas
