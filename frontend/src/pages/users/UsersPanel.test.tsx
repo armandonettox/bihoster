@@ -1702,4 +1702,26 @@ describe("UsersPanel - horario de acesso na janela do grupo", () => {
     expect(await screen.findByRole("region", { name: "Horário de acesso" })).toBeTruthy();
     expect(getSchedule).toHaveBeenCalledWith("group", 20);
   });
+
+  it("o grupo Administradores nao tem editor de horario: so o aviso de que nunca e limitado", async () => {
+    vi.mocked(accessApi.getGrants).mockResolvedValue({ blocks: [], editable: true });
+    listGroups.mockResolvedValue([PADRAO, { id: 5, name: "Administradores", is_default: false, is_admin_group: true }] as never);
+    listUsers.mockResolvedValue([pessoa(1)]);
+    listInvites.mockResolvedValue([]);
+    render(
+      <AccessContext.Provider value={buildAccess(mocks.me)}>
+        <MemoryRouter initialEntries={["/users?view=groups"]}>
+          <UsersPanel />
+        </MemoryRouter>
+      </AccessContext.Provider>,
+    );
+    await screen.findByText("Administradores", { selector: "strong" });
+
+    fireEvent.click(within(screen.getByText("Administradores", { selector: "strong" }).closest("tr") as HTMLElement).getByLabelText("Mais opcoes"));
+    fireEvent.click(screen.getByRole("button", { name: /^(Editar|Ver permissões)$/ }));
+
+    expect(await screen.findByText(/nunca são limitados por horário de acesso/)).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Horário de acesso" })).toBeNull();
+    expect(getSchedule).not.toHaveBeenCalled();
+  });
 });

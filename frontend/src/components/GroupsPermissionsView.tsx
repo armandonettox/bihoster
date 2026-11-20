@@ -298,7 +298,11 @@ export default function GroupsPermissionsView({ groups, users, invites, grants, 
             allowed={access.holds}
           />
 
-          {!editing.is_admin_group && <ScheduleEditor kind="group" id={editing.id} readOnly={!access.can("membros.horario")} />}
+          {editing.is_admin_group ? (
+            <p className="access-intro">Administradores da plataforma nunca são limitados por horário de acesso.</p>
+          ) : (
+            <ScheduleEditor kind="group" id={editing.id} readOnly={!access.can("membros.horario")} />
+          )}
         </Modal>
       )}
 
