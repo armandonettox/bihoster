@@ -33,8 +33,8 @@ export default function AppsMenu() {
         ref={triggerRef}
         className="btn btn-ghost apps-menu-trigger"
         onClick={() => setOpen((prev) => !prev)}
-        title="Modulos"
-        aria-label="Modulos"
+        title="Módulos"
+        aria-label="Módulos"
         aria-haspopup="true"
         aria-expanded={open}
       >
@@ -57,7 +57,7 @@ export default function AppsMenu() {
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">group</span>
-              Gerenciar usuarios
+              Gerenciar usuários
             </button>
           )}
           {canSeeCollections && (
@@ -93,7 +93,7 @@ export default function AppsMenu() {
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">admin_panel_settings</span>
-              Administracao
+              Administração
             </button>
           )}
           {canSeeAudit && (
@@ -117,7 +117,7 @@ export default function AppsMenu() {
               }}
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">monitoring</span>
-              Analiticos
+              Analíticos
             </button>
           )}
           {canUseChat && (

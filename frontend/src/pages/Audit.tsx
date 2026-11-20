@@ -15,7 +15,7 @@ type Tab = "records" | "analytics";
 
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "records", label: "Registros", icon: "table_rows" },
-  { key: "analytics", label: "Analiticos", icon: "monitoring" },
+  { key: "analytics", label: "Analíticos", icon: "monitoring" },
 ];
 
 /** Pagina propria da auditoria: tabela de registros com busca (quem pode ver o log geral) e analiticos (quem pode ver os
@@ -69,7 +69,7 @@ export default function Audit() {
   return (
     <div className="settings-page audit-page">
       <div className="settings-header">
-        <h1>{canRecords ? "Auditoria" : "Analiticos"}</h1>
+        <h1>{canRecords ? "Auditoria" : "Analíticos"}</h1>
         <p>
           Historico de acoes no sistema: acessos, mudancas de configuracao e de permissao. Horarios no fuso{" "}
           {timezone || "America/Sao_Paulo"} (configuravel em Geral).

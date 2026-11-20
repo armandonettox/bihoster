@@ -38,7 +38,7 @@ describe("AccountMenu", () => {
 
     expect(screen.getByRole("button", { name: "Minha conta" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Sair" })).toBeTruthy();
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Chat de IA" })).toBeNull();
   });
 

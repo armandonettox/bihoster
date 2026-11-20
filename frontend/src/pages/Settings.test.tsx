@@ -90,9 +90,9 @@ describe("Settings - uma aba para cada item", () => {
   it.each([
     ["sistema.geral", "Geral", "tab:general"],
     ["sistema.marca", "Marca", "tab:brand"],
-    ["sistema.autenticacao", "Autenticacao", "tab:auth"],
+    ["sistema.autenticacao", "Autenticação", "tab:auth"],
     ["sistema.email", "E-mail", "tab:email"],
-    ["sistema.versao", "Atualizacoes", "tab:updates"],
+    ["sistema.versao", "Atualizações", "tab:updates"],
     ["sistema.cache", "Cache", "tab:cache"],
   ])("%s mostra so a aba %s", (chave, rotulo, conteudo) => {
     renderAt("/settings", acesso([chave]));

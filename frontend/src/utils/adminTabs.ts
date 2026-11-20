@@ -5,10 +5,10 @@ export type AdminTab = "general" | "brand" | "auth" | "email" | "ai" | "updates"
 export const ADMIN_TABS: { key: AdminTab; label: string; keys: string[] }[] = [
   { key: "general", label: "Geral", keys: ["sistema.geral"] },
   { key: "brand", label: "Marca", keys: ["sistema.marca"] },
-  { key: "auth", label: "Autenticacao", keys: ["sistema.autenticacao"] },
+  { key: "auth", label: "Autenticação", keys: ["sistema.autenticacao"] },
   { key: "email", label: "E-mail", keys: ["sistema.email"] },
   { key: "ai", label: "IA", keys: ["ia.chaves", "ia.modelos", "ia.bloqueios", "ia.registro", "ia.consumo"] },
-  { key: "updates", label: "Atualizacoes", keys: ["sistema.versao"] },
+  { key: "updates", label: "Atualizações", keys: ["sistema.versao"] },
   { key: "cache", label: "Cache", keys: ["sistema.cache"] },
 ];
 

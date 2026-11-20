@@ -31,7 +31,7 @@ function renderMenu(globais: string[] = [], opcoes: { admin?: boolean; colecoes?
 }
 
 function openMenu() {
-  fireEvent.click(screen.getByRole("button", { name: "Modulos" }));
+  fireEvent.click(screen.getByRole("button", { name: "Módulos" }));
 }
 
 beforeEach(() => {
@@ -44,7 +44,7 @@ beforeEach(() => {
 describe("AppsMenu", () => {
   it("sem nenhum modulo disponivel, o botao nem aparece", () => {
     renderMenu([], { colecoes: { "1": ["colecao.ver"] } });
-    expect(screen.queryByRole("button", { name: "Modulos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Módulos" })).toBeNull();
   });
 
   it("quem tem uma aba da Administracao ve Administracao, que abre Configuracoes", () => {
@@ -52,10 +52,10 @@ describe("AppsMenu", () => {
     openMenu();
 
     expect(screen.queryByRole("button", { name: "Chat de IA" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Administracao" }));
+    fireEvent.click(screen.getByRole("button", { name: "Administração" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/settings");
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull(); // menu fechou
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull(); // menu fechou
   });
 
   it.each(["sistema.geral", "sistema.email", "ia.registro", "sistema.versao", "sistema.cache"])(
@@ -63,7 +63,7 @@ describe("AppsMenu", () => {
     (chave) => {
       renderMenu([chave]);
       openMenu();
-      expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Administração" })).toBeTruthy();
     },
   );
 
@@ -71,7 +71,7 @@ describe("AppsMenu", () => {
     renderMenu(["colecao.todas"]);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Assinaturas" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Coleções" }));
 
@@ -82,7 +82,7 @@ describe("AppsMenu", () => {
     renderMenu(["assinatura.todas"]);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Coleções" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Assinaturas" }));
 
@@ -93,8 +93,8 @@ describe("AppsMenu", () => {
     renderMenu(["membros.ver"]);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Gerenciar usuarios" }));
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Gerenciar usuários" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/users");
   });
@@ -103,34 +103,34 @@ describe("AppsMenu", () => {
     renderMenu(["grupos.ver"]);
     openMenu();
 
-    expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Gerenciar usuários" })).toBeTruthy();
   });
 
   it("Administracao e Gerenciar usuarios sao itens separados: quem tem os dois ve os dois", () => {
     renderMenu(["membros.ver", "sistema.cache"]);
     openMenu();
 
-    expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Gerenciar usuários" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Administração" })).toBeTruthy();
   });
 
   it("quem so tem uma aba de Configuracoes nao ve Gerenciar usuarios", () => {
     renderMenu(["sistema.cache"]);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Gerenciar usuarios" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Gerenciar usuários" })).toBeNull();
   });
 
   it("administrar uma colecao (editar, publicar) nao mostra a Administracao do sistema", () => {
     renderMenu([], { colecoes: { "1": ["colecao.ver", "colecao.editar", "colecao.excluir", "relatorio.publicar"] } });
-    expect(screen.queryByRole("button", { name: "Modulos" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Módulos" })).toBeNull();
   });
 
   it("quem pode ver o log geral ve Auditoria, que abre a pagina propria", () => {
     renderMenu(["auditoria.ver"]);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Auditoria" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/audit");
@@ -148,7 +148,7 @@ describe("AppsMenu", () => {
     renderMenu();
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administracao" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Chat de IA" }));
 
     expect(mocks.setPanelOpen).toHaveBeenCalledWith(true);
@@ -159,7 +159,7 @@ describe("AppsMenu", () => {
     renderMenu(["sistema.email"]);
     openMenu();
 
-    expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Administração" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Chat de IA" })).toBeTruthy();
   });
 
@@ -168,7 +168,7 @@ describe("AppsMenu", () => {
     renderMenu();
     openMenu();
     expect(screen.queryByText("Auditoria")).toBeNull();
-    fireEvent.click(screen.getByText("Analiticos"));
+    fireEvent.click(screen.getByText("Analíticos"));
     expect(mocks.navigate).toHaveBeenCalledWith("/audit");
   });
 
@@ -178,15 +178,15 @@ describe("AppsMenu", () => {
     openMenu();
 
     expect(screen.getByRole("button", { name: "Auditoria" })).toBeTruthy();
-    expect(screen.queryByText("Analiticos")).toBeNull();
+    expect(screen.queryByText("Analíticos")).toBeNull();
   });
 
   it("administrador da plataforma ve Administracao e Auditoria", () => {
     renderMenu([], { admin: true });
     openMenu();
 
-    expect(screen.getByRole("button", { name: "Administracao" })).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Gerenciar usuarios" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Administração" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Gerenciar usuários" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Coleções" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Assinaturas" })).toBeTruthy();
     expect(screen.getByRole("button", { name: "Auditoria" })).toBeTruthy();

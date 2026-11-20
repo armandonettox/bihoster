@@ -109,7 +109,7 @@ describe("Audit", () => {
   it("quem so pode ver analiticos entra direto no painel, sem a aba de registros", () => {
     mocks.canRecords = false;
     renderAt();
-    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Analiticos");
+    expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Analíticos");
     expect(screen.queryByTestId("records")).toBeNull();
     expect(screen.queryByTestId("analytics")).not.toBeNull();
     expect(screen.getAllByRole("tab")).toHaveLength(1);
@@ -118,15 +118,15 @@ describe("Audit", () => {
   it("abre na aba Registros, com duas abas e o fuso no texto", () => {
     renderAt();
     expect(screen.getByRole("heading", { level: 1 }).textContent).toBe("Auditoria");
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["table_rowsRegistros", "monitoringAnaliticos"]);
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["table_rowsRegistros", "monitoringAnalíticos"]);
     expect(screen.queryByTestId("records")).not.toBeNull();
     expect(screen.queryByTestId("analytics")).toBeNull();
     expect(screen.getByText(/America\/Sao_Paulo/)).toBeTruthy();
   });
 
-  it("trocar para Analiticos mostra os graficos, e a aba fica na URL", () => {
+  it("trocar para Analíticos mostra os graficos, e a aba fica na URL", () => {
     renderAt();
-    fireEvent.click(screen.getByRole("tab", { name: /Analiticos/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Analíticos/ }));
     expect(screen.queryByTestId("analytics")).not.toBeNull();
     expect(screen.queryByTestId("records")).toBeNull();
   });
@@ -142,7 +142,7 @@ describe("Audit", () => {
     expect(records.date_from).toBeTruthy();
     expect(records.date_to).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("tab", { name: /Analiticos/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Analíticos/ }));
     expect(lastProps(mocks.analytics).filters).toEqual(records);
   });
 
@@ -197,7 +197,7 @@ describe("Audit", () => {
       fireEvent.click(screen.getByRole("tab", { name: /Registros/ }));
       expect(lastProps(mocks.table).filters).toMatchObject({ action: ["login"] });
 
-      fireEvent.click(screen.getByRole("tab", { name: /Analiticos/ }));
+      fireEvent.click(screen.getByRole("tab", { name: /Analíticos/ }));
       act(() => lastAnalytics().onFilterBy({ actions: ["login"] }));
       expect(lastAnalytics().filters.action).toBeUndefined();
     });
