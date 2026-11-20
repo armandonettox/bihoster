@@ -311,3 +311,64 @@ class TestAvisoPorEmail:
             _pedir(client, limitada)
 
         assert {chamada.args[1][0] for chamada in enviar.call_args_list} == {"admin@example.com"}
+
+
+class TestRespostaPorEmail:
+    @pytest.fixture
+    def email_pronto(self, client, admin, db_session):
+        assert client.put("/settings/email/", json=SMTP, headers=admin).status_code == 200
+        row = db_session.query(AppSettings).filter(AppSettings.id == 1).first()
+        row.site_url = "bi.exemplo.test"
+        db_session.commit()
+
+    def _destinos(self, enviar):
+        return [chamada.args[1][0] for chamada in enviar.call_args_list]
+
+    def test_aprovado_conta_a_quem_pediu_ate_quando_vale_e_o_link_de_entrada(self, client, limitada, aprovador, email_pronto):
+        pedido = _pedir(client, limitada).json()
+        with patch(SEND) as enviar:
+            assert _aprovar(client, aprovador, pedido["id"], {"minutes": 120}).status_code == 200
+
+        assert self._destinos(enviar) == ["pessoa@example.com"]
+        assunto, corpo = enviar.call_args.args[2], enviar.call_args.args[3]
+        assert "aprovado" in assunto
+        assert "12:00" in corpo and "America/Sao_Paulo" in corpo  # sabado 10:00 local + 2 horas
+        assert "https://bi.exemplo.test/login" in corpo
+
+    def test_recusado_conta_a_quem_pediu_com_o_motivo(self, client, limitada, aprovador, email_pronto):
+        pedido = _pedir(client, limitada).json()
+        with patch(SEND) as enviar:
+            client.post(f"/access-extensions/{pedido['id']}/deny", json={"note": "Fecha amanha"}, headers=aprovador)
+
+        assert self._destinos(enviar) == ["pessoa@example.com"]
+        assert "recusado" in enviar.call_args.args[2] and "Motivo: Fecha amanha" in enviar.call_args.args[3]
+
+    def test_recusado_sem_motivo_nao_inventa_motivo(self, client, limitada, aprovador, email_pronto):
+        pedido = _pedir(client, limitada).json()
+        with patch(SEND) as enviar:
+            client.post(f"/access-extensions/{pedido['id']}/deny", json={}, headers=aprovador)
+
+        assert "Motivo" not in enviar.call_args.args[3]
+
+    def test_falha_no_envio_nao_desfaz_a_decisao(self, client, limitada, aprovador, email_pronto):
+        pedido = _pedir(client, limitada).json()
+        with patch(SEND, side_effect=EmailError("servidor fora")):
+            resposta = _aprovar(client, aprovador, pedido["id"])
+
+        assert resposta.status_code == 200 and resposta.json()["status"] == "approved"
+        assert _acessa(client, limitada) == 200
+
+    def test_sem_servidor_de_email_decide_do_mesmo_jeito(self, client, limitada, aprovador):
+        pedido = _pedir(client, limitada).json()
+        with patch(SEND) as enviar:
+            assert _aprovar(client, aprovador, pedido["id"]).status_code == 200
+
+        enviar.assert_not_called()
+
+    def test_conta_bloqueada_nao_recebe(self, client, admin, limitada, aprovador, pessoa_id, email_pronto):
+        pedido = _pedir(client, limitada).json()
+        client.post(f"/users/{pessoa_id}/block", headers=admin)
+        with patch(SEND) as enviar:
+            client.post(f"/access-extensions/{pedido['id']}/deny", json={}, headers=aprovador)
+
+        enviar.assert_not_called()

@@ -126,6 +126,19 @@ def _notify_approvers(db: Session, requester: User, reason: str) -> None:
             logger.warning("Aviso de pedido de horario nao enviado: %s", exc)
 
 
+def _notify_requester(db: Session, item: AccessExtensionRequest, approved: bool, until_text: str | None = None) -> None:
+    """Conta por e-mail a quem pediu como o pedido ficou, se o e-mail estiver configurado e a conta nao estiver bloqueada.
+    Falha de envio nunca desfaz a decisao."""
+    owner = db.get(User, item.user_id)
+    if owner is None or owner.is_blocked or not owner.email:
+        return
+    row = db.query(AppSettings).filter(AppSettings.id == 1).first()
+    try:
+        account_emails.send_extension_decision_email(row, owner.email, owner.name, approved, until_text, item.note)
+    except account_emails.AccountEmailError as exc:
+        logger.warning("Resposta do pedido de horario nao enviada: %s", exc)
+
+
 @router.get("/mine", response_model=MineOut)
 def my_latest_request(db: Session = Depends(get_db), current_user: User = Depends(get_current_user_any_hours)):
     """O pedido mais recente da propria pessoa e como ficou. Funciona fora do horario: e a tela de "fora do horario" que
@@ -240,6 +253,7 @@ def approve_request(
         db, action="approve_extension", entity="user", user_id=current_user.id, entity_id=item.user_id,
         details=f"{owner.email if owner else item.user_id} até {until.astimezone(tz).strftime('%d/%m %H:%M')} ({tz_name})",
     )
+    _notify_requester(db, item, approved=True, until_text=f"{until.astimezone(tz).strftime('%d/%m às %H:%M')} (horário de {tz_name})")
     return _out(db, item, now)
 
 
@@ -264,6 +278,7 @@ def deny_request(
     db.refresh(item)
     owner = db.get(User, item.user_id)
     log_action(db, action="deny_extension", entity="user", user_id=current_user.id, entity_id=item.user_id, details=owner.email if owner else None)
+    _notify_requester(db, item, approved=False)
     return _out(db, item, now)
 
 

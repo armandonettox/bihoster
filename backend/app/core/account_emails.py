@@ -83,6 +83,33 @@ def send_extension_request_email(settings_row, to_email: str, to_name: str | Non
     _send(config, to_email, subject, body)
 
 
+def send_extension_decision_email(
+    settings_row, to_email: str, to_name: str | None, approved: bool, until_text: str | None = None, note: str | None = None
+) -> None:
+    """Conta a quem pediu mais tempo de acesso como o pedido ficou. Aprovado: até quando vale e o link para entrar."""
+    config, base = ensure_ready(settings_row)
+    company = _company(settings_row)
+    greeting = f"Olá, {to_name}." if to_name else "Olá."
+    if approved:
+        subject = f"Seu pedido de mais tempo foi aprovado - {company}"
+        body = (
+            f"{greeting}\n\n"
+            f"Seu pedido de mais tempo de acesso ao {company} foi aprovado. Você pode entrar até {until_text}:\n"
+            f"{base}/login\n\n"
+            "Depois disso, o seu horário de acesso normal volta sozinho.\n"
+        )
+    else:
+        subject = f"Seu pedido de mais tempo foi recusado - {company}"
+        reason = f"Motivo: {note}\n\n" if note else ""
+        body = (
+            f"{greeting}\n\n"
+            f"Seu pedido de mais tempo de acesso ao {company} foi recusado.\n\n"
+            f"{reason}"
+            "Se ainda precisar, fale com quem administra o sistema.\n"
+        )
+    _send(config, to_email, subject, body)
+
+
 def send_reset_email(settings_row, to_email: str, to_name: str | None, token: str, expires_in_minutes: int) -> None:
     """Manda o link para a pessoa criar uma senha nova. O link vale por pouco tempo."""
     config, base = ensure_ready(settings_row)
