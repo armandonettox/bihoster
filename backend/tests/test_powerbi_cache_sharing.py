@@ -296,7 +296,9 @@ class TestTarefaEmSegundoPlano:
             cache_warmup.stop()
             thread.join(timeout=3)
 
-        assert ciclo.call_count == 1
+        # Pelo menos um: o laco espera 30 s entre ciclos, mas uma thread de outro teste (a aplicacao sobe o aquecimento
+        # no lifespan) pode chamar o mesmo warm_once trocado aqui, e a contagem exata falhava so as vezes na CI
+        assert ciclo.call_count >= 1
         assert not thread.is_alive()
 
     def test_um_ciclo_que_levanta_excecao_nao_derruba_a_tarefa(self):
