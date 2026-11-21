@@ -84,6 +84,18 @@ máquina onde está rodando. O container detecta sozinho, ao subir, o GID do gru
 socket montado e ajusta a própria permissão antes de trocar para o usuário sem privilégios
 (`docker-entrypoint.sh`) — não precisa rebuildar nem informar nada manualmente.
 
+Como a atualização pelo botão funciona: o `docker compose` não roda dentro do backend (ele é
+recriado no meio da troca e levaria o comando junto), e sim num container auxiliar descartável,
+que usa a mesma imagem e os mesmos volumes e se remove sozinho no fim. O nome do projeto, a pasta
+do projeto no servidor e os arquivos do compose (inclusive o `docker-compose.override.yml`, se
+você usa um) são lidos dos rótulos que o próprio compose gravou no container, então a pilha
+atualizada é a mesma que já está rodando. O backend precisa enxergar o socket do Docker e a pasta
+do projeto (`.:/deploy:ro`), como no `docker-compose.yml` da raiz; se o seu override troca a lista
+de volumes (`volumes: !override`), repita esses dois itens nele. O botão **não reescreve o `.env`**
+(a pasta é só leitura): depois de atualizar pelo botão, o `APP_VERSION` do `.env` fica na versão
+antiga, então ajuste-o antes de rodar `docker compose up -d` à mão. O log de cada atualização fica
+em `update_logs/` no volume de dados.
+
 ## Usuários, grupos e permissões
 
 Tudo isso fica em **Gerenciar usuários** (menu de módulos, no canto superior), separado da Administração:
