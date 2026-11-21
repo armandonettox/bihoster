@@ -124,13 +124,21 @@ def _clean_header(value: str) -> str:
 
 
 def build_message(
-    config: SmtpConfig, to: Sequence[str], subject: str, body: str, attachments: Sequence[Attachment] = ()
+    config: SmtpConfig,
+    to: Sequence[str],
+    subject: str,
+    body: str,
+    attachments: Sequence[Attachment] = (),
+    html: Optional[str] = None,
 ) -> EmailMessage:
     message = EmailMessage()
     message["From"] = formataddr((_clean_header(config.from_name or ""), config.from_email))
     message["To"] = ", ".join(to)
     message["Subject"] = _clean_header(subject)
     message.set_content(body)
+    if html:
+        # Texto puro e HTML na mesma mensagem: o programa de e-mail mostra o HTML e, sem ele, o texto
+        message.add_alternative(html, subtype="html")
     for attachment in attachments:
         maintype, _, subtype = attachment.mimetype.partition("/")
         message.add_attachment(
@@ -145,8 +153,10 @@ def send_email(
     subject: str,
     body: str,
     attachments: Sequence[Attachment] = (),
+    html: Optional[str] = None,
 ) -> None:
-    """Envia o e-mail. Levanta EmailError (mensagem segura) em qualquer falha."""
+    """Envia o e-mail. Levanta EmailError (mensagem segura) em qualquer falha. Com `html`, o e-mail leva as duas
+    versoes (texto puro em `body` e HTML)."""
     if not to:
         raise EmailError("Nenhum destinatario informado.")
     if len(to) > MAX_RECIPIENTS:
@@ -154,7 +164,7 @@ def send_email(
     if sum(len(a.data) for a in attachments) > MAX_ATTACHMENT_BYTES:
         raise EmailError("O anexo passa de 20 MB, acima do que os servidores de e-mail costumam aceitar.")
 
-    message = build_message(config, to, subject, body, attachments)
+    message = build_message(config, to, subject, body, attachments, html)
     context = ssl.create_default_context()
     server: Optional[smtplib.SMTP] = None
     # Etapa em andamento: entra na mensagem de erro, porque "o servidor fechou a conexao" so ajuda

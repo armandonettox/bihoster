@@ -1,6 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from app.core import email_templates
+from app.core.account_emails import site_base_url
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.email_sender import EmailError, allowed_domains, disallowed_recipients, load_smtp_config, send_email
@@ -111,16 +113,10 @@ def send_test_email(
     if disallowed_recipients(row, [recipient]):
         raise HTTPException(status_code=400, detail="Esse e-mail esta fora dos dominios permitidos.")
 
+    brand = email_templates.brand_from_settings(row, site_base_url(row))
+    rendered = email_templates.render(email_templates.effective(db, "test"), {"empresa": brand.company}, brand, None)
     try:
-        send_email(
-            config,
-            [recipient],
-            subject=f"Teste de e-mail - {row.company_name}",
-            body=(
-                f"Este e um e-mail de teste do {row.company_name}.\n\n"
-                "Se voce o recebeu, o servidor de e-mail esta configurado corretamente."
-            ),
-        )
+        send_email(config, [recipient], subject=rendered.subject, body=rendered.text, html=rendered.html)
     except EmailError as exc:
         raise HTTPException(status_code=502, detail=str(exc))
 

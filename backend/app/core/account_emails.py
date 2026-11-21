@@ -1,8 +1,16 @@
-"""E-mails de conta: o aviso de que a pessoa foi adicionada (com o link para entrar) e o link de redefinição de senha.
+"""E-mails de conta e acesso: aviso de que a pessoa foi adicionada (ou convidada), link de redefinicao de senha e os avisos do
+pedido de mais tempo de acesso.
 
-Os dois usam o servidor de e-mail das Configurações e o endereço do site (campo "site_url"), que vira o começo dos links.
-Nenhum dado de relatório sai nesses e-mails, então a lista de domínios permitidos das assinaturas não se aplica aqui."""
+Todos usam o servidor de e-mail das Configuracoes e o endereco do site (campo "site_url"), que vira o comeco dos links.
+O texto de cada um vem de core/email_templates.py (o padrao, ou o que o administrador escreveu na aba E-mail) e sai em HTML
+com a marca, mais a versao em texto puro. Nenhum dado de relatorio sai nesses e-mails, entao a lista de dominios permitidos
+das assinaturas nao se aplica aqui."""
 
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
+from app.core import email_templates
 from app.core.email_sender import EmailError, SmtpConfig, load_smtp_config, send_email
 
 
@@ -24,103 +32,78 @@ def ensure_ready(settings_row) -> tuple[SmtpConfig, str]:
     """Confere que dá para mandar e-mail com link: servidor de e-mail configurado e endereço do site preenchido."""
     config = load_smtp_config(settings_row)
     if config is None:
-        raise AccountEmailError("Configure o servidor de e-mail em Configuracoes > E-mail antes de enviar.")
+        raise AccountEmailError("Configure o servidor de e-mail em Administração > E-mail antes de enviar.")
     base = site_base_url(settings_row)
     if base is None:
-        raise AccountEmailError("Preencha o endereco do site em Configuracoes > Geral para o e-mail levar o link certo.")
+        raise AccountEmailError("Preencha o endereço do site em Administração > Geral para o e-mail levar o link certo.")
     return config, base
 
 
-def _company(settings_row) -> str:
-    return (getattr(settings_row, "company_name", None) or "BIHoster").strip() or "BIHoster"
+def greeting(name: Optional[str]) -> str:
+    return f"Olá, {name}." if name else "Olá."
 
 
-def _send(config: SmtpConfig, to_email: str, subject: str, body: str) -> None:
+GOOGLE_NOTICE = "Se preferir, entre com o botão do Google usando este mesmo e-mail."
+
+
+def _deliver(
+    db: Session, settings_row, key: str, to_email: str, values: dict[str, str], link_path: Optional[str] = None
+) -> None:
+    """Monta o e-mail `key` com o texto que vale hoje e envia. `link_path` e o caminho do botao, depois do endereco do site."""
+    config, base = ensure_ready(settings_row)
+    brand = email_templates.brand_from_settings(settings_row, base)
+    rendered = email_templates.render(
+        email_templates.effective(db, key),
+        {**values, "empresa": brand.company},
+        brand,
+        f"{base}{link_path}" if link_path else None,
+    )
     try:
-        send_email(config, [to_email], subject, body)
+        # Texto puro e HTML juntos; o HTML vai como argumento nomeado
+        send_email(config, [to_email], rendered.subject, rendered.text, html=rendered.html)
     except EmailError as exc:
         raise AccountEmailError(str(exc)) from None
 
 
-def send_added_email(settings_row, to_email: str, to_name: str | None, has_account: bool) -> None:
+def send_added_email(db: Session, settings_row, to_email: str, to_name: Optional[str], has_account: bool) -> None:
     """Avisa que a pessoa foi adicionada. Com conta, o link leva para entrar; sem conta (só convite), para criar a conta."""
-    config, base = ensure_ready(settings_row)
-    company = _company(settings_row)
-    greeting = f"Olá, {to_name}." if to_name else "Olá."
-    google = ""
-    if getattr(settings_row, "google_oauth_enabled", False):
-        google = "\nSe preferir, entre com o botão do Google usando este mesmo e-mail.\n"
+    google = GOOGLE_NOTICE if getattr(settings_row, "google_oauth_enabled", False) else ""
+    values = {"saudacao": greeting(to_name), "google": google}
     if has_account:
-        subject = f"Você foi adicionado ao {company}"
-        body = (
-            f"{greeting}\n\n"
-            f"Você foi adicionado ao {company}. Para entrar, acesse:\n{base}/login\n{google}\n"
-            "Se você não lembra a senha, use a opção de esqueci a senha na tela de entrada, "
-            "ou peça a quem te adicionou para enviar um link de redefinição.\n"
-        )
+        _deliver(db, settings_row, "added", to_email, values, "/login")
     else:
-        subject = f"Você foi convidado para o {company}"
-        body = (
-            f"{greeting}\n\n"
-            f"Você foi convidado para o {company}. Para criar a sua conta, acesse:\n{base}/register\n\n"
-            f"Use este e-mail ({to_email}) no cadastro, para o acesso já vir liberado.\n{google}"
-        )
-    _send(config, to_email, subject, body)
+        _deliver(db, settings_row, "invited", to_email, {**values, "email": to_email}, "/register")
 
 
-def send_extension_request_email(settings_row, to_email: str, to_name: str | None, requester_name: str, reason: str) -> None:
+def send_extension_request_email(
+    db: Session, settings_row, to_email: str, to_name: Optional[str], requester_name: str, reason: str
+) -> None:
     """Avisa quem pode liberar que alguém pediu mais tempo de acesso. O link leva para Gerenciar usuários."""
-    config, base = ensure_ready(settings_row)
-    company = _company(settings_row)
-    greeting = f"Olá, {to_name}." if to_name else "Olá."
-    subject = f"Pedido de mais tempo de acesso - {company}"
-    body = (
-        f"{greeting}\n\n"
-        f"{requester_name} está fora do horário de acesso ao {company} e pediu mais tempo.\n\n"
-        f"Motivo: {reason}\n\n"
-        f"Para aprovar ou recusar, acesse:\n{base}/users\n"
-    )
-    _send(config, to_email, subject, body)
+    values = {"saudacao": greeting(to_name), "solicitante": requester_name, "motivo": reason}
+    _deliver(db, settings_row, "extension_request", to_email, values, "/users")
 
 
 def send_extension_decision_email(
-    settings_row, to_email: str, to_name: str | None, approved: bool, until_text: str | None = None, note: str | None = None
+    db: Session,
+    settings_row,
+    to_email: str,
+    to_name: Optional[str],
+    approved: bool,
+    until_text: Optional[str] = None,
+    note: Optional[str] = None,
 ) -> None:
     """Conta a quem pediu mais tempo de acesso como o pedido ficou. Aprovado: até quando vale e o link para entrar."""
-    config, base = ensure_ready(settings_row)
-    company = _company(settings_row)
-    greeting = f"Olá, {to_name}." if to_name else "Olá."
     if approved:
-        subject = f"Seu pedido de mais tempo foi aprovado - {company}"
-        body = (
-            f"{greeting}\n\n"
-            f"Seu pedido de mais tempo de acesso ao {company} foi aprovado. Você pode entrar até {until_text}:\n"
-            f"{base}/login\n\n"
-            "Depois disso, o seu horário de acesso normal volta sozinho.\n"
-        )
+        values = {"saudacao": greeting(to_name), "ate": until_text or ""}
+        _deliver(db, settings_row, "extension_approved", to_email, values, "/login")
     else:
-        subject = f"Seu pedido de mais tempo foi recusado - {company}"
-        reason = f"Motivo: {note}\n\n" if note else ""
-        body = (
-            f"{greeting}\n\n"
-            f"Seu pedido de mais tempo de acesso ao {company} foi recusado.\n\n"
-            f"{reason}"
-            "Se ainda precisar, fale com quem administra o sistema.\n"
-        )
-    _send(config, to_email, subject, body)
+        values = {"saudacao": greeting(to_name), "motivo": note or ""}
+        _deliver(db, settings_row, "extension_denied", to_email, values)
 
 
-def send_reset_email(settings_row, to_email: str, to_name: str | None, token: str, expires_in_minutes: int) -> None:
+def send_reset_email(
+    db: Session, settings_row, to_email: str, to_name: Optional[str], token: str, expires_in_minutes: int
+) -> None:
     """Manda o link para a pessoa criar uma senha nova. O link vale por pouco tempo."""
-    config, base = ensure_ready(settings_row)
-    company = _company(settings_row)
-    greeting = f"Olá, {to_name}." if to_name else "Olá."
-    subject = f"Redefinição de senha - {company}"
-    body = (
-        f"{greeting}\n\n"
-        f"Foi pedido um link para você criar uma senha nova no {company}. Acesse:\n"
-        f"{base}/reset-password?token={token}\n\n"
-        f"O link vale por {expires_in_minutes} minutos e só pode ser usado uma vez.\n"
-        "Se você não esperava este e-mail, pode ignorá-lo: a sua senha atual continua valendo.\n"
-    )
-    _send(config, to_email, subject, body)
+    values = {"saudacao": greeting(to_name), "minutos": str(expires_in_minutes)}
+    _deliver(db, settings_row, "reset", to_email, values, f"/reset-password?token={token}")

@@ -149,7 +149,7 @@ def send_reset_email(
     try:
         account_emails.ensure_ready(settings_row)  # confere antes de criar o codigo
         token = _new_reset_token(db, user)
-        account_emails.send_reset_email(settings_row, user.email, user.name, token, RESET_TOKEN_EXPIRE_MINUTES)
+        account_emails.send_reset_email(db, settings_row, user.email, user.name, token, RESET_TOKEN_EXPIRE_MINUTES)
     except account_emails.AccountEmailError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 
@@ -175,7 +175,7 @@ def send_welcome_email(
         raise HTTPException(status_code=400, detail=BLOCKED_MESSAGE)
 
     try:
-        account_emails.send_added_email(_settings_row(db), email, user.name if user else None, has_account=user is not None)
+        account_emails.send_added_email(db, _settings_row(db), email, user.name if user else None, has_account=user is not None)
     except account_emails.AccountEmailError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from None
 

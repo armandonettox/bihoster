@@ -120,7 +120,7 @@ def _notify_approvers(db: Session, requester: User, reason: str) -> None:
         if candidate.is_blocked or not candidate.email or not can_global(db, candidate.id, RELEASE_KEY):
             continue
         try:
-            account_emails.send_extension_request_email(row, candidate.email, candidate.name, requester.name, reason)
+            account_emails.send_extension_request_email(db, row, candidate.email, candidate.name, requester.name, reason)
             sent += 1
         except account_emails.AccountEmailError as exc:
             logger.warning("Aviso de pedido de horario nao enviado: %s", exc)
@@ -134,7 +134,7 @@ def _notify_requester(db: Session, item: AccessExtensionRequest, approved: bool,
         return
     row = db.query(AppSettings).filter(AppSettings.id == 1).first()
     try:
-        account_emails.send_extension_decision_email(row, owner.email, owner.name, approved, until_text, item.note)
+        account_emails.send_extension_decision_email(db, row, owner.email, owner.name, approved, until_text, item.note)
     except account_emails.AccountEmailError as exc:
         logger.warning("Resposta do pedido de horario nao enviada: %s", exc)
 
