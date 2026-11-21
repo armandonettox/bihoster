@@ -100,3 +100,31 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}-frontend:${{ steps.version.outputs.value }}
             ghcr.io/${{ github.repository }}-frontend:latest
+
+  # Cria a Release no GitHub com as notas da versao, tiradas do mesmo historico que a aba Atualizacoes mostra
+  # (backend/app/changelog/CHANGELOG.md). Fica num job a parte, depois da publicacao das imagens: se falhar, a
+  # imagem ja esta publicada e nada para de funcionar. Sem a versao no arquivo, cai para as notas automaticas.
+  github-release:
+    runs-on: ubuntu-latest
+    needs: [docker-publish]
+    if: startsWith(github.ref, 'refs/tags/v')
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Cria a Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="${tag#v}"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            echo "A Release $tag ja existe."
+            exit 0
+          fi
+          if title=$(python3 .github/scripts/release_notes.py "$version" "$tag" titulo) \
+            && python3 .github/scripts/release_notes.py "$version" "$tag" > notas.md; then
+            gh release create "$tag" --verify-tag --latest --title "v${version} - ${title}" --notes-file notas.md
+          else
+            gh release create "$tag" --verify-tag --latest --title "v${version}" --generate-notes
+          fi
