@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
 from sqlalchemy.orm import Session
 
 from app.core import email_templates
@@ -11,6 +11,7 @@ from app.core.access_deps import require_global_permission
 from app.models.settings import AppSettings
 from app.models.user import User
 from app.routers.auth import get_current_user
+from app.routers.settings import _delete_upload_if_exists, _save_upload
 from app.schemas.email_settings import EmailSettingsOut, EmailSettingsUpdate, EmailStatus, EmailTestRequest
 
 # Rotas proprias, so pra administradores (e o status pra qualquer pessoa logada): a rota de
@@ -40,6 +41,7 @@ def _to_out(row: AppSettings) -> EmailSettingsOut:
         smtp_from_email=row.smtp_from_email,
         smtp_from_name=row.smtp_from_name,
         email_allowed_domains=row.email_allowed_domains,
+        email_logo_url=row.email_logo_url,
         configured=load_smtp_config(row) is not None,
     )
 
@@ -93,6 +95,38 @@ def update_email_settings(
         user_id=current_user.id,
         details=", ".join(updated),  # so os nomes dos campos, nunca os valores
     )
+    return _to_out(row)
+
+
+@router.post("/logo", response_model=EmailSettingsOut)
+def upload_email_logo(
+    file: UploadFile,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_global_permission("sistema.email")),
+):
+    """Logo so dos e-mails. Sem ela, os e-mails usam a logo da marca."""
+    row = _get_or_create_settings(db)
+    old_url = row.email_logo_url
+    row.email_logo_url = _save_upload(file)
+    db.commit()
+    db.refresh(row)
+    _delete_upload_if_exists(old_url)
+    log_action(db, action="update_email_logo", entity="settings", user_id=current_user.id, details="logo dos e-mails trocada")
+    return _to_out(row)
+
+
+@router.delete("/logo", response_model=EmailSettingsOut)
+def remove_email_logo(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_global_permission("sistema.email")),
+):
+    row = _get_or_create_settings(db)
+    old_url = row.email_logo_url
+    row.email_logo_url = None
+    db.commit()
+    db.refresh(row)
+    _delete_upload_if_exists(old_url)
+    log_action(db, action="update_email_logo", entity="settings", user_id=current_user.id, details="logo dos e-mails removida")
     return _to_out(row)
 
 

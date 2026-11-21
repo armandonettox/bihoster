@@ -307,7 +307,8 @@ def brand_from_settings(settings_row, base_url: Optional[str]) -> Brand:
     primary = getattr(settings_row, "primary_color", None) or "#1E3A6B"
     if not re.fullmatch(r"#[0-9a-fA-F]{6}", primary):
         primary = "#1E3A6B"
-    logo = getattr(settings_row, "logo_url", None)
+    # Logo propria dos e-mails, se houver; senao a da marca
+    logo = getattr(settings_row, "email_logo_url", None) or getattr(settings_row, "logo_url", None)
     logo_url = f"{base_url}{logo}" if base_url and logo and logo.startswith("/") else None
     support = (getattr(settings_row, "support_email", None) or "").strip() or None
     return Brand(company=company, primary=primary, logo_url=logo_url, support_email=support)

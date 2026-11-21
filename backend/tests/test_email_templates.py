@@ -135,6 +135,12 @@ class TestHtml:
         assert "color:#ffffff;text-decoration:none" in escura
         assert "color:#1f2937;text-decoration:none" in clara  # paleta_guard: ignore
 
+    def test_logo_propria_dos_emails_vale_no_lugar_da_logo_da_marca(self):
+        linha = SimpleNamespace(company_name="Acme", primary_color="#065F46", logo_url="/static/uploads/marca.png", email_logo_url="/static/uploads/email.png", support_email=None)  # paleta_guard: ignore
+        assert templates.brand_from_settings(linha, "https://bi.exemplo.test").logo_url == "https://bi.exemplo.test/static/uploads/email.png"
+        linha.email_logo_url = None
+        assert templates.brand_from_settings(linha, "https://bi.exemplo.test").logo_url == "https://bi.exemplo.test/static/uploads/marca.png"
+
     def test_marca_a_partir_das_configuracoes(self):
         linha = SimpleNamespace(company_name="  Acme  ", primary_color="#065F46", logo_url="/static/uploads/l.png", support_email=" a@b.c ")  # paleta_guard: ignore
         marca = templates.brand_from_settings(linha, "https://bi.exemplo.test")

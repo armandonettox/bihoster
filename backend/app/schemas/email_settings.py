@@ -48,6 +48,7 @@ class EmailSettingsOut(BaseModel):
     smtp_from_email: Optional[str]
     smtp_from_name: Optional[str]
     email_allowed_domains: Optional[str]
+    email_logo_url: Optional[str]
     configured: bool
 
 

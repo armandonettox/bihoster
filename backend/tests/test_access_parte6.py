@@ -63,6 +63,8 @@ ROTAS = [
     ("get", "/settings/email/", ("sistema.email",)),
     ("put", "/settings/email/", ("sistema.email",)),
     ("post", "/settings/email/test", ("sistema.email",)),
+    ("post", "/settings/email/logo", ("sistema.email",)),
+    ("delete", "/settings/email/logo", ("sistema.email",)),
     ("get", "/system/version", ("sistema.versao",)),
     ("get", "/system/version/history", ("sistema.versao",)),
     ("get", "/system/version/logs", ("sistema.versao",)),

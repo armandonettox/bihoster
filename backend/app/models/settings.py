@@ -62,6 +62,8 @@ class AppSettings(Base):
     smtp_from_name = Column(String, nullable=True)
     # Dominios que podem receber e-mail do sistema, separados por virgula. Vazio = qualquer um.
     email_allowed_domains = Column(String, nullable=True)
+    # Logo so dos e-mails (caminho em /static/uploads/). Nulo = usa a logo da marca.
+    email_logo_url = Column(String, nullable=True)
 
     # Cache de embed tokens do Power BI (ver core/cache_warmup.py).
     # Nullable para compatibilidade com instancias existentes; o router usa os defaults abaixo.

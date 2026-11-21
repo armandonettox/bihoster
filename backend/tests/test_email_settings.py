@@ -232,3 +232,47 @@ class TestEmailDeTeste:
             ]
 
         assert codigos == [200, 200, 200, 200, 200, 429]
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"0" * 32
+
+
+class TestLogoDosEmails:
+    def _enviar(self, client, headers, nome="logo.png", tipo="image/png"):
+        return client.post("/settings/email/logo", files={"file": (nome, PNG, tipo)}, headers=headers)
+
+    def test_envia_troca_e_remove(self, client, admin):
+        assert client.get("/settings/email/", headers=admin).json()["email_logo_url"] is None
+
+        primeira = self._enviar(client, admin)
+        assert primeira.status_code == 200
+        caminho = primeira.json()["email_logo_url"]
+        assert caminho.startswith("/static/uploads/")
+
+        segunda = self._enviar(client, admin).json()["email_logo_url"]
+        assert segunda != caminho  # o arquivo antigo e apagado, o novo tem outro nome
+
+        removida = client.delete("/settings/email/logo", headers=admin)
+        assert removida.status_code == 200
+        assert removida.json()["email_logo_url"] is None
+
+    def test_nao_mexe_na_logo_da_marca(self, client, admin, db_session):
+        client.post("/settings/logo", files={"file": ("marca.png", PNG, "image/png")}, headers=admin)
+        marca = db_session.query(AppSettings).filter(AppSettings.id == 1).first().logo_url
+
+        self._enviar(client, admin)
+        client.delete("/settings/email/logo", headers=admin)
+
+        db_session.expire_all()
+        assert db_session.query(AppSettings).filter(AppSettings.id == 1).first().logo_url == marca
+
+    def test_formato_nao_aceito_e_recusado(self, client, admin):
+        assert self._enviar(client, admin, "x.gif", "image/gif").status_code == 400
+
+    def test_quem_nao_tem_a_permissao_nao_envia_nem_remove(self, client, admin, pessoa):
+        assert self._enviar(client, pessoa).status_code == 403
+        assert client.delete("/settings/email/logo", headers=pessoa).status_code == 403
+
+    def test_fica_na_auditoria(self, client, admin, db_session):
+        self._enviar(client, admin)
+        assert db_session.query(AuditLog).filter(AuditLog.action == "update_email_logo").count() == 1
