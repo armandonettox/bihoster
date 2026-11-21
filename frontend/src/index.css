@@ -316,12 +316,56 @@ table.table tr:last-child td {
 }
 
 .release-item-changelog {
-  white-space: pre-wrap;
-  font-family: inherit;
+  padding: 0 16px 16px 16px;
+}
+
+/* Texto de uma versao do historico (Markdown simples, ver ChangelogMarkdown) */
+.changelog {
   font-size: 13px;
   color: var(--color-text-muted);
-  margin: 0;
-  padding: 0 16px 16px 16px;
+  line-height: 1.55;
+}
+
+.changelog p {
+  margin: 0 0 8px;
+}
+
+.changelog h4 {
+  margin: 12px 0 6px;
+  font-size: 13px;
+  color: var(--color-text);
+}
+
+.changelog ul {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.changelog li {
+  margin-bottom: 4px;
+}
+
+.changelog code {
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--color-surface-hover);
+  font-size: 12px;
+}
+
+.changelog a {
+  color: var(--color-primary);
+}
+
+.changelog-image-link {
+  display: block;
+  margin: 8px 0;
+}
+
+.changelog-image {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
 }
 
 /* --- Tela de autenticacao --- */

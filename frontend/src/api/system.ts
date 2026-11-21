@@ -29,8 +29,9 @@ export async function getCurrentVersion(): Promise<string> {
   return data.current_version;
 }
 
-export async function getVersionStatus(): Promise<VersionStatus> {
-  const { data } = await api.get("/system/version");
+/** `refresh`: o botao "Verificar agora", que consulta o GitHub de novo em vez de usar a resposta guardada */
+export async function getVersionStatus(refresh = false): Promise<VersionStatus> {
+  const { data } = await api.get("/system/version", refresh ? { params: { refresh: true } } : undefined);
   return data;
 }
 
