@@ -286,8 +286,10 @@ export default function EmailTab() {
       <div className="settings-section">
         <h2 className="settings-section-title">E-mails enviados pelo sistema</h2>
         <p className="settings-section-desc">
-          Os avisos de convite, redefinição de senha e horário de acesso saem em HTML, com o nome, a cor e o logo da marca.
-          Abra um deles para ajustar o assunto e o texto, ver a prévia e mandar um teste.
+          Os avisos do sistema (convite, redefinição de senha, horário de acesso, alertas e assinaturas pausadas) saem em
+          HTML, com o nome, a cor e o logo da marca. Abra um deles para ajustar o assunto e o texto, ver a prévia e mandar
+          um teste. Os relatórios enviados por assinatura ou pelo botão de enviar usam o assunto e a mensagem de cada
+          envio, dentro do mesmo layout.
         </p>
 
         {templatesError && <p className="auth-error">Não foi possível carregar os e-mails.</p>}
