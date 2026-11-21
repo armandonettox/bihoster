@@ -77,7 +77,11 @@ def _due_alerts(db) -> list[ReportAlert]:
     return due
 
 
-def _send_alert_email(smtp, alert: ReportAlert, report_name: str, value: float, company: str) -> None:
+def _send_alert_email(db, row, smtp, alert: ReportAlert, report_name: str, value: float) -> None:
+    """Manda o e-mail do alerta com o texto que vale hoje (o padrao ou o que o administrador escreveu na aba E-mail), em
+    HTML com a marca. O assunto proprio do alerta, quando existe, vale no lugar do assunto do modelo."""
+    from app.core import email_templates
+    from app.core.account_emails import site_base_url
     from app.core.email_sender import send_email
 
     condition_label = {
@@ -85,21 +89,21 @@ def _send_alert_email(smtp, alert: ReportAlert, report_name: str, value: float, 
         "<=": "menor ou igual a", "=": "igual a", "!=": "diferente de",
     }.get(alert.condition, alert.condition)
 
-    subject = alert.subject or f"[Alerta] {alert.measure_name} {condition_label} {alert.threshold:g} - {report_name}"
+    brand = email_templates.brand_from_settings(row, site_base_url(row))
+    values = {
+        "empresa": brand.company,
+        "relatorio": report_name,
+        "medida": alert.measure_name,
+        "valor": f"{value:g}",
+        "condicao": condition_label,
+        "limite": f"{alert.threshold:g}",
+        "mensagem": alert.message or "",
+        "criador": alert.created_by_name or "um usuario",
+    }
+    rendered = email_templates.render(email_templates.effective(db, "alert_triggered"), values, brand, None)
+    subject = " ".join(alert.subject.split()) if alert.subject else rendered.subject
 
-    body_lines = [
-        f"O alerta configurado para o relatorio '{report_name}' foi disparado.",
-        "",
-        f"Medida:    {alert.measure_name}",
-        f"Valor:     {value:g}",
-        f"Condicao:  {condition_label} {alert.threshold:g}",
-        "",
-    ]
-    if alert.message:
-        body_lines += [alert.message, ""]
-    body_lines.append(f"Alerta configurado por {alert.created_by_name or 'um usuario'} no {company}.")
-
-    send_email(smtp, list(alert.recipients), subject, "\n".join(body_lines))
+    send_email(smtp, list(alert.recipients), subject, rendered.text, html=rendered.html)
 
 
 def check_alert(alert_id: int, session_factory: Callable = SessionLocal) -> None:
@@ -115,7 +119,6 @@ def check_alert(alert_id: int, session_factory: Callable = SessionLocal) -> None
             return
 
         row = db.query(AppSettings).filter(AppSettings.id == 1).first()
-        company = (row.company_name if row else None) or "BIHoster"
         smtp = load_smtp_config(row)
         now = _now()
 
@@ -178,7 +181,7 @@ def check_alert(alert_id: int, session_factory: Callable = SessionLocal) -> None
 
             if smtp and alert.recipients:
                 try:
-                    _send_alert_email(smtp, alert, report.name, value, company)
+                    _send_alert_email(db, row, smtp, alert, report.name, value)
                 except (EmailError, Exception):  # noqa: BLE001
                     logger.exception("falha ao enviar e-mail do alerta %s", alert_id)
             else:

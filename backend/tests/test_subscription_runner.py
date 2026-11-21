@@ -12,6 +12,7 @@ from fastapi.testclient import TestClient
 
 from app.core import powerbi, report_delivery, subscription_runner
 from app.models.audit_log import AuditLog
+from app.models.email_template import EmailTemplate
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.settings import AppSettings
@@ -596,3 +597,56 @@ class TestAgendador:
                 liga.assert_called_once()
                 desliga.assert_not_called()
             desliga.assert_called_once()
+
+
+class TestEmailEmHtml:
+    """O relatorio enviado e o aviso de pausa saem no layout da marca, e o aviso de pausa segue o texto editado."""
+
+    def test_o_relatorio_leva_o_layout_da_marca_e_o_assunto_e_a_mensagem_de_sempre(self, db_session, make_user):
+        m = montar(db_session, make_user, message="Confira o painel.")
+        deliver, chamadas = entrega(["ok"])
+
+        rodar(db_session, m.sub, deliver)
+
+        envio = chamadas[0]
+        assert envio["subject"] == "Empresa - Vendas"
+        assert "Confira o painel." in envio["body"]
+        assert "Mensagem automática do Empresa." in envio["html"]
+        assert "Segue em anexo o relatorio Vendas." in envio["html"] and "Confira o painel." in envio["html"]
+
+    def test_a_mensagem_da_assinatura_nunca_vira_html(self, db_session, make_user):
+        m = montar(db_session, make_user, message="<script>alert(1)</script>")
+        deliver, chamadas = entrega(["ok"])
+
+        rodar(db_session, m.sub, deliver)
+
+        assert "<script>" not in chamadas[0]["html"]
+        assert "&lt;script&gt;" in chamadas[0]["html"]
+
+    def test_aviso_de_pausa_sai_em_html_com_o_texto_padrao(self, db_session, make_user):
+        m = montar(db_session, make_user)
+        deliver, _ = entrega(["capacidade sem suporte"])
+
+        for _ in range(2):
+            rodar(db_session, m.sub, deliver)
+        _, aviso = rodar(db_session, m.sub, deliver)
+
+        _, destinatarios, assunto, corpo = aviso.call_args.args
+        assert destinatarios == ["criador@empresa.com"]
+        assert assunto == "Assinatura pausada: Vendas"
+        assert "Motivo: capacidade sem suporte" in corpo
+        assert "capacidade sem suporte" in aviso.call_args.kwargs["html"]
+
+    def test_aviso_de_pausa_segue_o_texto_editado_na_aba_email(self, db_session, make_user):
+        m = montar(db_session, make_user)
+        db_session.add(EmailTemplate(key="subscription_paused", subject="Pausou {relatorio}", body="Parou: {motivo}"))
+        db_session.commit()
+        deliver, _ = entrega(["capacidade sem suporte"])
+
+        for _ in range(2):
+            rodar(db_session, m.sub, deliver)
+        _, aviso = rodar(db_session, m.sub, deliver)
+
+        _, _, assunto, corpo = aviso.call_args.args
+        assert assunto == "Pausou Vendas"
+        assert "Parou: capacidade sem suporte" in corpo

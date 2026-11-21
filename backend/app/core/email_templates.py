@@ -166,6 +166,49 @@ CATALOG: dict[str, TemplateDef] = {
             button=None,
         ),
         TemplateDef(
+            key="subscription_paused",
+            label="Assinatura pausada",
+            description="Enviado a quem criou uma assinatura de relatório quando o sistema a pausa por falhas seguidas. Não leva botão.",
+            variables=(
+                _COMPANY,
+                Variable("relatorio", "Nome do relatório", "Vendas do mês"),
+                Variable("motivo", "O que deu errado no último envio", "O servidor recusou o usuário ou a senha."),
+            ),
+            subject="Assinatura pausada: {relatorio}",
+            body=(
+                "A assinatura do relatório {relatorio} foi pausada.\n\n"
+                "Motivo: {motivo}\n\n"
+                "Corrija o problema e ative a assinatura de novo na tela do relatório."
+            ),
+            button=None,
+        ),
+        TemplateDef(
+            key="alert_triggered",
+            label="Alerta de medida disparado",
+            description=(
+                "Enviado aos destinatários de um alerta quando a medida cruza o limite. Se o alerta tem um assunto próprio, "
+                "ele vale no lugar do assunto daqui. Não leva botão."
+            ),
+            variables=(
+                _COMPANY,
+                Variable("relatorio", "Nome do relatório", "Vendas do mês"),
+                Variable("medida", "Nome da medida acompanhada", "Total de vendas"),
+                Variable("valor", "Valor da medida agora", "1250"),
+                Variable("condicao", "A condição, em palavras", "maior que"),
+                Variable("limite", "O limite configurado", "1000"),
+                Variable("mensagem", "Mensagem escrita no alerta (some se não tem)", "Confira com o time comercial."),
+                Variable("criador", "Quem configurou o alerta", "Maria da Silva"),
+            ),
+            subject="[Alerta] {medida} {condicao} {limite} - {relatorio}",
+            body=(
+                'O alerta configurado para o relatório "{relatorio}" foi disparado.\n\n'
+                "Medida: {medida}\nValor: {valor}\nCondição: {condicao} {limite}\n\n"
+                "{mensagem}\n\n"
+                "Alerta configurado por {criador} no {empresa}."
+            ),
+            button=None,
+        ),
+        TemplateDef(
             key="test",
             label="E-mail de teste",
             description="Enviado pelo botão de teste do servidor de e-mail. Não leva botão.",
@@ -347,6 +390,14 @@ def render(effective_texts: Effective, values: Mapping[str, str], brand: Brand, 
         text=build_text(paragraphs, button_label, button_url),
         html=build_html(brand, subject, paragraphs, button_label, button_url),
     )
+
+
+def html_for_message(settings_row, base_url: Optional[str], subject: str, body: str) -> str:
+    """O layout da marca em volta de um texto que ja vem pronto (o relatorio enviado por assinatura ou pelo botao de enviar,
+    cujo assunto e mensagem cada envio escreve). Mesmos paragrafos do texto puro; sem botao."""
+    brand = brand_from_settings(settings_row, base_url)
+    paragraphs = [part.strip() for part in _PARAGRAPH_BREAK.split(body.replace("\r\n", "\n").strip()) if part.strip()]
+    return build_html(brand, subject, paragraphs, None, None)
 
 
 def sample_values(key: str, brand: Brand) -> dict[str, str]:

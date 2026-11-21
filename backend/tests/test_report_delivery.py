@@ -357,3 +357,33 @@ class TestRotaDoAcompanhamento:
 
     def test_exige_login(self, client, cenario):
         assert client.get(self._url(cenario, "x")).status_code == 401
+
+
+class TestLayoutDaMarca:
+    def test_o_html_vai_junto_do_anexo_quando_foi_dado(self):
+        job = report_delivery.create_job(1)
+        with patch.object(powerbi, "export_report", return_value=b"%PDF-dados"), patch.object(
+            report_delivery, "send_email"
+        ) as enviar:
+            report_delivery.run_delivery(**_entrega(job, html="<p>Corpo</p>"))
+
+        assert enviar.call_args.kwargs["html"] == "<p>Corpo</p>"
+        assert enviar.call_args.args[3] == "Corpo"
+
+    def test_sem_html_o_envio_segue_como_antes(self):
+        job = report_delivery.create_job(1)
+        with patch.object(powerbi, "export_report", return_value=b"%PDF-dados"), patch.object(
+            report_delivery, "send_email"
+        ) as enviar:
+            report_delivery.run_delivery(**_entrega(job))
+
+        assert enviar.call_args.kwargs["html"] is None
+
+    def test_a_rota_de_enviar_agora_manda_o_html_com_a_marca(self, client, cenario):
+        p1, p2 = _pbi()
+        with p1, p2, patch("app.routers.report_export.report_delivery.start_in_background") as iniciar:
+            client.post(_url(cenario), json={"to": "alvo@exemplo.com", "format": "PDF"}, headers=cenario.admin)
+
+        kw = iniciar.call_args.kwargs
+        assert "Segue em anexo o relatorio Vendas." in kw["body"]
+        assert "Segue em anexo o relatorio Vendas." in kw["html"] and "Mensagem automática do" in kw["html"]

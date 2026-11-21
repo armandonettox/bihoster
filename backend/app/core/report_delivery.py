@@ -117,6 +117,7 @@ def run_delivery(
     recipients: Sequence[str],
     subject: str,
     body: str,
+    html: Optional[str] = None,
     page_display_names: Optional[dict[str, str]] = None,
     on_finish: Optional[Callable[[bool, str], None]] = None,
 ) -> None:
@@ -154,6 +155,7 @@ def run_delivery(
             subject,
             body,
             [Attachment(attachment_name, data, mimetype)],
+            html=html,
         )
         job.status, job.message, job.progress = "done", "E-mail enviado.", 100
         ok = True

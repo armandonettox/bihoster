@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
-from app.core import powerbi, report_delivery
+from app.core import email_templates, powerbi, report_delivery
+from app.core.account_emails import site_base_url
 from app.core.audit import log_action
 from app.core.database import SessionLocal, get_db
 from app.core.email_sender import disallowed_recipients, load_smtp_config
@@ -87,6 +88,8 @@ def export_and_email(
     user_id, user_name = current_user.id, current_user.name
     job = report_delivery.create_job(user_id)
     company = settings_row.company_name if settings_row else "BIHoster"
+    email_subject = f"{company} - {report.name}"
+    email_body = f"Segue em anexo o relatorio {report.name}.\n\nEnviado por {user_name} pelo {company}."
     conn_snapshot = embed_router._connection_snapshot(connection)
     # Mapeamento nome interno -> nome de exibicao para nomear os arquivos gerados
     page_display_names: dict[str, str] = {}
@@ -106,11 +109,9 @@ def export_and_email(
         report_name=report.name,
         smtp=smtp,
         recipients=[recipient],
-        subject=f"{company} - {report.name}",
-        body=(
-            f"Segue em anexo o relatorio {report.name}.\n\n"
-            f"Enviado por {user_name} pelo {company}."
-        ),
+        subject=email_subject,
+        body=email_body,
+        html=email_templates.html_for_message(settings_row, site_base_url(settings_row), email_subject, email_body),
         page_display_names=page_display_names,
         on_finish=lambda ok, message: _audit_result(user_id, workspace_id, report_id, data.format, ok, message),
     )

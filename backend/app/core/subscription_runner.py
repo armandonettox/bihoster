@@ -20,8 +20,9 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
-from app.core import powerbi, report_delivery
+from app.core import email_templates, powerbi, report_delivery
 from app.core import subscription_schedule as sched
+from app.core.account_emails import site_base_url
 from app.core.audit import log_action
 from app.core.config import settings
 from app.core.database import SessionLocal
@@ -149,6 +150,9 @@ def _prepare(session_factory: Callable, sub_id: int) -> Optional[_Plan]:
         body = f"Segue em anexo o relatorio {report.name}."
         if sub.message:
             body += f"\n\n{sub.message}"
+        subject = sub.subject or f"{company} - {report.name}"
+        full_body = f"{body}\n\n{footer}"
+        base_url = site_base_url(row)
         plan = _Plan(
             sub_id=sub.id,
             workspace_id=report.collection_id,
@@ -159,8 +163,13 @@ def _prepare(session_factory: Callable, sub_id: int) -> Optional[_Plan]:
             report_name=report.name,
             fmt=sub.fmt,
             recipients=sub.recipients,
-            subject=sub.subject or f"{company} - {report.name}",
-            body=f"{body}\n\n{footer}",
+            subject=subject,
+            body=full_body,
+            # O mesmo texto no layout da marca; o assunto e a mensagem continuam os de cada assinatura
+            html=email_templates.html_for_message(row, base_url, subject, full_body),
+            # Para o aviso de assinatura pausada, que so e escrito se a pausa acontecer (a thread nao usa o banco)
+            paused_texts=email_templates.effective(db, "subscription_paused"),
+            brand=email_templates.brand_from_settings(row, base_url),
             page_names=sub.page_names if sub.page_names else report.pbi_page_names,
             page_display_names={},
             pbi_workspace_id=report.pbi_workspace_id,
@@ -241,13 +250,9 @@ def _notify_paused(plan: _Plan, reason: str) -> None:
     if not plan.creator_email or plan.smtp is None:
         return
     try:
-        send_email(
-            plan.smtp,
-            [plan.creator_email],
-            f"Assinatura pausada: {plan.report_name}",
-            f"A assinatura do relatorio {plan.report_name} foi pausada.\n\nMotivo: {reason}\n\n"
-            "Corrija o problema e ative a assinatura de novo na tela do relatorio.",
-        )
+        values = {"empresa": plan.brand.company, "relatorio": plan.report_name, "motivo": reason}
+        rendered = email_templates.render(plan.paused_texts, values, plan.brand, None)
+        send_email(plan.smtp, [plan.creator_email], rendered.subject, rendered.text, html=rendered.html)
     except (EmailError, Exception):  # noqa: BLE001 -- o aviso e um extra, nao pode derrubar o resto
         logger.warning("nao foi possivel avisar o criador da assinatura %s", plan.sub_id)
 
@@ -292,6 +297,7 @@ def run_subscription(
                     recipients=plan.recipients,
                     subject=plan.subject,
                     body=plan.body,
+                    html=plan.html,
                     page_display_names=plan.page_display_names,
                 )
                 if attempt_job.status == "done":

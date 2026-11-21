@@ -80,8 +80,11 @@ class TestRegras:
         for definicao in templates.CATALOG.values():
             templates.validate_texts(definicao.key, definicao.subject, definicao.body, definicao.button)
 
-    def test_o_catalogo_tem_os_sete_emails(self):
-        assert set(templates.CATALOG) == {"added", "invited", "reset", "extension_request", "extension_approved", "extension_denied", "test"}
+    def test_o_catalogo_tem_os_nove_emails(self):
+        assert set(templates.CATALOG) == {
+            "added", "invited", "reset", "extension_request", "extension_approved", "extension_denied",
+            "subscription_paused", "alert_triggered", "test",
+        }
 
 
 class TestHtml:
@@ -160,7 +163,7 @@ class TestMensagem:
 
 
 class TestApi:
-    def test_lista_os_sete_com_o_padrao_e_sem_personalizacao(self, client, admin):
+    def test_lista_os_nove_com_o_padrao_e_sem_personalizacao(self, client, admin):
         itens = client.get("/settings/email/templates/", headers=admin).json()
         assert [i["key"] for i in itens] == list(templates.CATALOG)
         reset = next(i for i in itens if i["key"] == "reset")
@@ -358,3 +361,72 @@ class TestNoEnvioDeVerdade:
             assert client.post("/settings/email/test", json={"to": "alvo@exemplo.com"}, headers=admin).status_code == 200
         assert enviar.call_args.kwargs["subject"] == "Funcionou - BIHoster"
         assert "<html" in enviar.call_args.kwargs["html"]
+
+
+class TestAlertaEPausa:
+    """Os dois modelos novos: o aviso de assinatura pausada e o alerta de medida."""
+
+    def _alerta(self, **extra):
+        from types import SimpleNamespace as NS
+
+        base = dict(
+            condition=">", measure_name="Total de vendas", threshold=1000.0, subject=None, message=None,
+            created_by_name="Maria da Silva", recipients=["gestor@empresa.com"],
+        )
+        base.update(extra)
+        return NS(**base)
+
+    def _enviar(self, db_session, alerta):
+        from app.core import alert_runner
+        from app.core.email_sender import SmtpConfig
+
+        linha = db_session.query(AppSettings).filter(AppSettings.id == 1).first() or AppSettings(id=1)
+        smtp = SmtpConfig("h", 587, "starttls", None, None, "de@exemplo.com", None)
+        with patch("app.core.email_sender.send_email") as enviar:
+            alert_runner._send_alert_email(db_session, linha, smtp, alerta, "Vendas do mês", 1250.0)
+        return enviar
+
+    def test_alerta_usa_o_texto_padrao_em_html(self, db_session):
+        enviar = self._enviar(db_session, self._alerta())
+
+        _, destinos, assunto, corpo = enviar.call_args.args
+        assert destinos == ["gestor@empresa.com"]
+        assert assunto == "[Alerta] Total de vendas maior que 1000 - Vendas do mês"
+        assert "Medida: Total de vendas" in corpo and "Valor: 1250" in corpo and "Condição: maior que 1000" in corpo
+        assert "Alerta configurado por Maria da Silva no BIHoster." in corpo
+        assert "Total de vendas" in enviar.call_args.kwargs["html"]
+
+    def test_mensagem_do_alerta_aparece_e_some_quando_vazia(self, db_session):
+        com = self._enviar(db_session, self._alerta(message="Confira com o comercial.")).call_args.args[3]
+        sem = self._enviar(db_session, self._alerta()).call_args.args[3]
+        assert "Confira com o comercial." in com
+        assert "Confira com o comercial." not in sem
+        assert "\n\n\n" not in sem
+
+    def test_assunto_proprio_do_alerta_vale_no_lugar_do_modelo(self, db_session):
+        enviar = self._enviar(db_session, self._alerta(subject="Vendas passaram da meta"))
+        assert enviar.call_args.args[2] == "Vendas passaram da meta"
+
+    def test_texto_editado_na_aba_email_vale_para_o_alerta(self, db_session):
+        db_session.add(EmailTemplate(key="alert_triggered", subject="Meta batida: {medida}", body="{medida} chegou a {valor}."))
+        db_session.commit()
+
+        enviar = self._enviar(db_session, self._alerta())
+
+        _, _, assunto, corpo = enviar.call_args.args
+        assert assunto == "Meta batida: Total de vendas"
+        assert "Total de vendas chegou a 1250." in corpo
+
+    def test_os_dois_modelos_novos_aparecem_na_lista_com_as_variaveis(self, client, admin):
+        itens = {i["key"]: i for i in client.get("/settings/email/templates/", headers=admin).json()}
+        assert {v["name"] for v in itens["alert_triggered"]["variables"]} >= {"medida", "valor", "condicao", "limite", "relatorio", "mensagem", "criador"}
+        assert {v["name"] for v in itens["subscription_paused"]["variables"]} == {"empresa", "relatorio", "motivo"}
+        assert itens["alert_triggered"]["has_button"] is False and itens["subscription_paused"]["has_button"] is False
+
+    def test_previa_do_alerta_mostra_os_valores_de_exemplo(self, client, admin):
+        html = client.post("/settings/email/templates/alert_triggered/preview", json={}, headers=admin).json()["html"]
+        assert "Total de vendas" in html and "Confira com o time comercial." in html
+
+    def test_previa_da_pausa_nao_leva_botao(self, client, admin):
+        html = client.post("/settings/email/templates/subscription_paused/preview", json={}, headers=admin).json()["html"]
+        assert "<a " not in html and "O servidor recusou o usuário ou a senha." in html
