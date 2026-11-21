@@ -107,10 +107,11 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   membro dá para ligar o aviso por e-mail com o link para entrar (desligado por padrão). O mesmo envio, e o do link de
   nova senha, estão no menu dos 3 pontinhos de cada pessoa. O link de nova senha vai só para o e-mail da pessoa.
 - **Texto dos e-mails.** Os e-mails que o sistema escreve (adicionado ao sistema, convite, redefinição de senha, pedido de
-  mais tempo, horário liberado, pedido recusado e o de teste) saem em HTML, com o nome, a cor e o logo da marca, e em texto
+  mais tempo, horário liberado, pedido recusado, assinatura pausada, alerta de medida e o de teste) saem em HTML, com o nome, a cor e o logo da marca, e em texto
   puro para quem não vê HTML. Em Administração > E-mail dá para ajustar o assunto, a mensagem e o texto do botão de cada um,
   ver a prévia e mandar um teste. A mensagem aceita dados entre chaves, como `{empresa}`, e uma linha que usa um dado vazio
-  é omitida. O texto digitado nunca vira HTML. Para a logo aparecer no e-mail, preencha o endereço do site em Administração > Geral.
+  é omitida. O texto digitado nunca vira HTML. Os relatórios enviados por assinatura ou pelo botão de enviar saem no mesmo
+  layout, com o assunto e a mensagem de cada envio (esses não são editados nesta aba). Para a logo aparecer no e-mail, preencha o endereço do site em Administração > Geral.
 - **Horário de acesso.** Cada grupo pode ter faixas de dias e horas (por exemplo "Seg a Sex, 08:00 às 12:00" e "13:00 às 18:00")
   em que as pessoas dele podem usar o sistema, no fuso definido em Administração. A pessoa também pode ter uma exceção
   individual (faixas próprias ou sem limite), que substitui o horário dos grupos. Quem está em mais de um grupo com
