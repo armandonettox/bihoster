@@ -5099,6 +5099,18 @@ table.table tr:last-child td {
   margin-top: 16px;
 }
 
+/* Bloco de uma aba da Administração dentro de uma janela: sem a caixa própria e sem o título, que a janela já tem */
+.admin-modal-body .settings-section {
+  background: none;
+  border: 0;
+  padding: 0;
+  margin-bottom: 0;
+}
+
+.admin-modal-body .settings-section-title {
+  display: none;
+}
+
 .email-template-list {
   list-style: none;
   margin: 0;

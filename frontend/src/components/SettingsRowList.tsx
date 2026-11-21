@@ -6,10 +6,16 @@ export interface SettingsRow {
   description: string;
   /** O estado atual em poucas palavras (ex.: "Cadastro aberto"), abaixo da descrição */
   summary?: string;
-  /** A etiqueta da direita (ex.: "Personalizado", "Ligado") */
-  status: string;
+  /** A etiqueta da direita (ex.: "Personalizado", "Ligado"); sem ela, a linha não tem etiqueta */
+  status?: string;
   /** Destaca a etiqueta: algo foi personalizado ou está ligado */
   highlight?: boolean;
+  /** O que o botão faz: "Editar" (padrão), "Abrir" para telas de consulta, "Resetar" etc. */
+  actionLabel?: string;
+  /** Nome do botão para leitor de tela, quando "<ação> <nome da linha>" não soa bem */
+  ariaLabel?: string;
+  /** Botão vermelho, para ações que apagam algo */
+  danger?: boolean;
   onEdit: () => void;
   disabled?: boolean;
 }
@@ -26,17 +32,19 @@ export default function SettingsRowList({ rows }: { rows: SettingsRow[] }) {
             <span className="field-hint">{row.description}</span>
             {row.summary && <span className="field-hint">{row.summary}</span>}
           </div>
-          <span className={row.highlight ? "email-template-badge email-template-badge-custom" : "email-template-badge"}>
-            {row.status}
-          </span>
+          {row.status && (
+            <span className={row.highlight ? "email-template-badge email-template-badge-custom" : "email-template-badge"}>
+              {row.status}
+            </span>
+          )}
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
-            aria-label={`Editar ${row.label}`}
+            className={row.danger ? "btn btn-danger btn-sm" : "btn btn-secondary btn-sm"}
+            aria-label={row.ariaLabel ?? `${row.actionLabel ?? "Editar"} ${row.label}`}
             disabled={row.disabled}
             onClick={row.onEdit}
           >
-            Editar
+            {row.actionLabel ?? "Editar"}
           </button>
         </li>
       ))}

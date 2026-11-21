@@ -57,10 +57,12 @@ function renderAi(itens: string[] = ITENS_DA_IA) {
   );
 }
 
+/** Abre a janela do provedor, onde ficam a lista suspensa e o formulario de cada um */
 async function abrir(dados: AIProvider[] = VAZIOS) {
   list.mockResolvedValue(dados);
   renderAi();
-  await screen.findByRole("heading", { name: "Provedor de IA" });
+  fireEvent.click(await screen.findByRole("button", { name: "Editar Provedor de IA" }));
+  await screen.findByLabelText("Provedor");
 }
 
 const escolher = (chave: string) => fireEvent.change(screen.getByLabelText("Provedor"), { target: { value: chave } });
@@ -408,35 +410,83 @@ describe("AiTab - testar conexao", () => {
 });
 
 
-describe("AiTab - cada parte pelo seu item", () => {
-  const marcas = ["cartao-registro", "cartao-bloqueios", "cartao-modelos", "cartao-consumo"];
-  const visiveis = () => marcas.filter((marca) => screen.queryByText(marca) !== null);
+describe("AiTab - a lista e cada parte pelo seu item", () => {
+  const linhas = [
+    ["Registro das respostas", "cartao-registro"],
+    ["Relatórios e o chat", "cartao-bloqueios"],
+    ["Chat: histórico, limites e orçamento", "cartao-modelos"],
+    ["Consumo da IA", "cartao-consumo"],
+  ] as const;
+  const nomesDasLinhas = () => screen.getAllByRole("listitem").map((li) => li.querySelector(".email-template-name")?.textContent);
 
-  it("com todos os itens aparecem o provedor e os quatro cartoes", async () => {
-    await abrir();
+  it("com todos os itens a lista tem o provedor e as quatro partes, e nada abre sozinho", async () => {
+    list.mockResolvedValue(VAZIOS);
+    renderAi();
 
-    expect(visiveis()).toEqual(marcas);
+    expect(await screen.findByRole("button", { name: "Editar Provedor de IA" })).toBeTruthy();
+    expect(nomesDasLinhas()).toEqual(["Provedor de IA", ...linhas.map(([nome]) => nome)]);
+    expect(screen.queryByRole("dialog")).toBeNull();
+    for (const [, marca] of linhas) expect(screen.queryByText(marca)).toBeNull();
+  });
+
+  it("o registro e o consumo se abrem, e o resto se edita", async () => {
+    list.mockResolvedValue(VAZIOS);
+    renderAi();
+    await screen.findByRole("button", { name: "Editar Provedor de IA" });
+
+    expect(screen.getByRole("button", { name: "Abrir Registro das respostas" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Abrir Consumo da IA" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Editar Relatórios e o chat" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Editar Chat: histórico, limites e orçamento" })).toBeTruthy();
   });
 
   it.each([
-    ["ia.registro", "cartao-registro"],
-    ["ia.bloqueios", "cartao-bloqueios"],
-    ["ia.modelos", "cartao-modelos"],
-    ["ia.consumo", "cartao-consumo"],
-  ])("so %s mostra so o cartao dele, sem o provedor e sem consultar as chaves", async (item, marca) => {
-    renderAi([item]);
+    ["Abrir Registro das respostas", "cartao-registro"],
+    ["Editar Relatórios e o chat", "cartao-bloqueios"],
+    ["Editar Chat: histórico, limites e orçamento", "cartao-modelos"],
+    ["Abrir Consumo da IA", "cartao-consumo"],
+  ])("%s abre a janela com o bloco certo e Cancelar fecha", async (botao, marca) => {
+    list.mockResolvedValue(VAZIOS);
+    renderAi();
+    fireEvent.click(await screen.findByRole("button", { name: botao }));
 
     expect(await screen.findByText(marca)).toBeTruthy();
-    expect(visiveis()).toEqual([marca]);
-    expect(screen.queryByRole("heading", { name: "Provedor de IA" })).toBeNull();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByText(marca)).toBeNull());
+  });
+
+  it.each([
+    ["ia.registro", "Registro das respostas"],
+    ["ia.bloqueios", "Relatórios e o chat"],
+    ["ia.modelos", "Chat: histórico, limites e orçamento"],
+    ["ia.consumo", "Consumo da IA"],
+  ])("so %s mostra so a linha dele, sem o provedor e sem consultar as chaves", async (item, nome) => {
+    renderAi([item]);
+
+    await waitFor(() => expect(nomesDasLinhas()).toEqual([nome]));
     expect(list).not.toHaveBeenCalled();
   });
 
-  it("so as chaves mostram o provedor e nenhum cartao", async () => {
+  it("so as chaves mostram so a linha do provedor, com o estado de cada um", async () => {
+    list.mockResolvedValue([
+      provedor("openai", "OpenAI (ChatGPT)", { api_key_configured: true, model: "m", enabled: true, chat_default: true }),
+      provedor("anthropic", "Anthropic (Claude)"),
+    ]);
+    renderAi(["ia.chaves"]);
+
+    await screen.findByRole("button", { name: "Editar Provedor de IA" });
+    expect(nomesDasLinhas()).toEqual(["Provedor de IA"]);
+    expect(screen.getByText("Responde o chat: OpenAI (ChatGPT)")).toBeTruthy();
+    expect(screen.getByText("1 ativo")).toBeTruthy();
+  });
+
+  it("sem nenhum provedor ativo a linha diz isso", async () => {
     list.mockResolvedValue(VAZIOS);
     renderAi(["ia.chaves"]);
 
-    expect(await screen.findByRole("heading", { name: "Provedor de IA" })).toBeTruthy();
-    expect(visiveis()).toEqual([]);
+    await screen.findByRole("button", { name: "Editar Provedor de IA" });
+    expect(screen.getByText("Nenhum provedor responde o chat")).toBeTruthy();
+    expect(screen.getByText("Sem provedor ativo")).toBeTruthy();
   });
 });
