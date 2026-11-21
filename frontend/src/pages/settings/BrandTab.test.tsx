@@ -25,43 +25,17 @@ vi.mock("../../api/settings", () => ({
 }));
 // As prévias têm o desenho da tela inteira: aqui só importa o que cada uma recebe
 vi.mock("../../components/AppShellPreview", () => ({
-  default: (props: { primaryColor: string; secondaryColor: string; scale?: number; label?: string | null; logoUrl: string | null }) => (
-    <div
-      data-testid="previa-sistema"
-      data-primary={props.primaryColor}
-      data-secondary={props.secondaryColor}
-      data-scale={props.scale}
-      data-label={String(props.label)}
-      data-logo={props.logoUrl ?? ""}
-    />
+  default: (props: { primaryColor: string; secondaryColor: string; logoUrl: string | null }) => (
+    <div data-testid="previa-sistema" data-primary={props.primaryColor} data-secondary={props.secondaryColor} data-logo={props.logoUrl ?? ""} />
   ),
 }));
 vi.mock("../../components/LoginPreview", () => ({
-  default: (props: {
-    primaryColor: string;
-    layout: string;
-    loginImageUrl: string | null;
-    scale?: number;
-    label?: string | null;
-  }) => (
-    <div
-      data-testid="previa-login"
-      data-primary={props.primaryColor}
-      data-layout={props.layout}
-      data-image={props.loginImageUrl ?? ""}
-      data-scale={props.scale}
-      data-label={String(props.label)}
-    />
+  default: (props: { primaryColor: string; layout: string; loginImageUrl: string | null }) => (
+    <div data-testid="previa-login" data-primary={props.primaryColor} data-layout={props.layout} data-image={props.loginImageUrl ?? ""} />
   ),
 }));
 vi.mock("../../components/ErrorScreenPreview", () => ({
-  default: (props: {
-    kind: string;
-    texts: { title: string; message: string; button: string };
-    logoUrl: string | null;
-    primaryColor: string;
-    scale?: number;
-  }) => (
+  default: (props: { kind: string; texts: { title: string; message: string; button: string }; logoUrl: string | null; primaryColor: string }) => (
     <div
       data-testid={`previa-erro-${props.kind}`}
       data-title={props.texts.title}
@@ -69,7 +43,17 @@ vi.mock("../../components/ErrorScreenPreview", () => ({
       data-button={props.texts.button}
       data-primary={props.primaryColor}
       data-logo={props.logoUrl ?? ""}
-      data-scale={props.scale}
+    />
+  ),
+}));
+vi.mock("../../components/NoticeScreenPreview", () => ({
+  default: (props: { kind: string; texts: { title: string; message: string; button: string }; openingLine?: boolean }) => (
+    <div
+      data-testid={`previa-aviso-${props.kind}`}
+      data-title={props.texts.title}
+      data-message={props.texts.message}
+      data-button={props.texts.button}
+      data-opening={String(Boolean(props.openingLine))}
     />
   ),
 }));
@@ -90,20 +74,24 @@ const BASE = {
   error_title: null,
   error_message: null,
   error_button: null,
+  outside_hours_title: null,
+  outside_hours_message: null,
+  outside_hours_button: null,
+  no_access_title: null,
+  no_access_message: null,
+  no_access_button: null,
 } as unknown as AppSettings;
-
-const primaria = () => screen.getByLabelText("Cor primária") as HTMLInputElement;
-const secundaria = () => screen.getByLabelText("Cor secundária") as HTMLInputElement;
-const salvar = () => screen.getByText("Salvar") as HTMLButtonElement;
-const semBarra = () => expect(screen.queryByText("Salvar")).toBeNull();
-const previaSistema = () => screen.getByTestId("previa-sistema");
-const previaLogin = () => screen.getByTestId("previa-login");
-const arquivos = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]'));
 
 function abrir(settings: Partial<AppSettings> = {}) {
   mocks.settings = { ...BASE, ...settings };
   return render(<BrandTab />);
 }
+
+const editar = (nome: string) => fireEvent.click(screen.getByRole("button", { name: `Editar ${nome}` }));
+const salvar = () => screen.getByRole("button", { name: /^Salvar/ }) as HTMLButtonElement;
+const campo = (nome: string) => screen.getByLabelText(new RegExp(`^${nome}`)) as HTMLInputElement;
+const linha = (nome: string) => screen.getByText(nome).closest("li") as HTMLElement;
+const arquivos = () => Array.from(document.querySelectorAll<HTMLInputElement>('input[type="file"]'));
 
 beforeEach(() => {
   mocks.showToast.mockClear();
@@ -120,613 +108,431 @@ beforeEach(() => {
   }
 });
 
-describe("BrandTab - a prévia dentro do mesmo cartão do que ela mostra", () => {
-  const cartoes = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(".brand-card"));
+describe("BrandTab - a lista", () => {
+  it("tem uma linha por tela, com o nome, uma frase e o botão de editar", () => {
+    abrir();
 
-  it("são quatro cartões: cores e logo com a prévia do sistema, o login com a prévia do login, as telas de erro e as de aviso", () => {
-    const { container } = abrir();
-
-    const [primeira, segunda, terceira, quarta] = cartoes(container);
-    expect(cartoes(container)).toHaveLength(4);
-    expect(within(quarta).getByText("Telas de aviso")).toBeTruthy();
-    expect(within(terceira).getByText("Telas de erro")).toBeTruthy();
-    expect(within(terceira).getByTestId("previa-erro-notFound")).toBeTruthy();
-    expect(within(terceira).getByTestId("previa-erro-error")).toBeTruthy();
-    expect(within(primeira).getByText("Cores")).toBeTruthy();
-    expect(within(primeira).getByText("Logo e favicon")).toBeTruthy();
-    expect(within(primeira).getByTestId("previa-sistema")).toBeTruthy();
-    expect(within(primeira).queryByTestId("previa-login")).toBeNull();
-    expect(within(segunda).getByText("Tela de login")).toBeTruthy();
-    expect(within(segunda).getByTestId("previa-login")).toBeTruthy();
-    expect(within(segunda).queryByTestId("previa-sistema")).toBeNull();
-  });
-
-  it("em cada cartão o formulário vem antes e a prévia depois, à direita", () => {
-    const { container } = abrir();
-
-    for (const cartao of cartoes(container)) {
-      const form = cartao.querySelector(".brand-card-main") as HTMLElement;
-      const colunaDaPrevia = cartao.querySelector(".brand-card-preview") as HTMLElement;
-      expect(form.compareDocumentPosition(colunaDaPrevia) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(within(colunaDaPrevia).getAllByRole("complementary").length).toBeGreaterThan(0);
+    const nomes = [
+      "Cores e logos",
+      "Tela de login",
+      "Página não encontrada",
+      "Algo deu errado",
+      "Fora do horário de acesso",
+      "Sem acesso a nenhuma coleção",
+    ];
+    expect(screen.getAllByRole("listitem")).toHaveLength(nomes.length);
+    for (const nome of nomes) {
+      expect(within(linha(nome)).getByRole("button", { name: `Editar ${nome}` })).toBeTruthy();
+      expect(within(linha(nome)).getByText("Padrão")).toBeTruthy();
     }
   });
 
-  it("a prévia não é um cartão separado: fica dentro do cartão do formulário, na mesma caixa", () => {
-    const { container } = abrir();
-
-    for (const previa of screen.getAllByRole("complementary")) {
-      const cartao = previa.closest(".brand-card") as HTMLElement;
-      expect(cartao).not.toBeNull();
-      expect(cartao.querySelector(".brand-card-main")).not.toBeNull();
-      // A caixa da prévia não tem borda e fundo próprios: o cartão é um só
-      expect(previa.classList.contains("card")).toBe(false);
-    }
-    expect(container.querySelector(".brand-preview-card")).toBeNull();
-  });
-
-  it("as duas prévias das telas de erro ficam juntas, na mesma coluna do mesmo cartão", () => {
-    const { container } = abrir();
-
-    const terceiro = cartoes(container)[2];
-    const coluna = terceiro.querySelector(".brand-card-preview") as HTMLElement;
-    expect(within(coluna).getAllByRole("complementary")).toHaveLength(2);
-  });
-
-  it("cada prévia é uma região com nome próprio", () => {
+  it("nada está aberto até clicar em Editar, e as prévias só existem dentro da janela", () => {
     abrir();
 
-    expect(screen.getByRole("complementary", { name: "Prévia do sistema" })).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "Prévia da tela de login" })).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByTestId("previa-sistema")).toBeNull();
+    expect(screen.queryByTestId("previa-login")).toBeNull();
   });
 
-  it("nada fica grudado: não existe mais a coluna de prévias que acompanhava a rolagem", () => {
-    const { container } = abrir();
+  it("marca como Personalizado só o que foge do padrão", () => {
+    abrir({
+      primary_color: "#065F46",
+      login_layout: "split",
+      error_title: "Ops",
+    } as Partial<AppSettings>);
 
-    expect(container.querySelector(".brand-previews")).toBeNull();
-    expect(container.querySelector(".brand-form")).toBeNull();
-    expect(container.querySelector(".brand-row")).toBeNull();
+    expect(within(linha("Cores e logos")).getByText("Personalizado")).toBeTruthy();
+    expect(within(linha("Tela de login")).getByText("Personalizado")).toBeTruthy();
+    expect(within(linha("Algo deu errado")).getByText("Personalizado")).toBeTruthy();
+    expect(within(linha("Página não encontrada")).getByText("Padrão")).toBeTruthy();
+    expect(within(linha("Fora do horário de acesso")).getByText("Padrão")).toBeTruthy();
+    expect(within(linha("Sem acesso a nenhuma coleção")).getByText("Padrão")).toBeTruthy();
   });
 
-  it("cada prévia tem uma nota dizendo o que ela mostra", () => {
-    abrir();
-
-    expect(screen.getByText("Mostra as cores, mesmo as ainda não salvas, e o logo.")).toBeTruthy();
-    expect(screen.getByText("Mostra o layout, a imagem, o logo e as cores.")).toBeTruthy();
+  it("um logo enviado conta como personalizado, e as mesmas cores de fábrica em minúsculas não", () => {
+    abrir({ primary_color: "#1e3a6b", logo_url: "/static/uploads/l.png" } as Partial<AppSettings>);
+    expect(within(linha("Cores e logos")).getByText("Personalizado")).toBeTruthy();
   });
 
-  it("cada prévia tem um título próprio e a prévia não repete o texto de cima", () => {
-    abrir();
-
-    expect(screen.getByText("Prévia do sistema")).toBeTruthy();
-    expect(screen.getByText("Prévia da tela de login")).toBeTruthy();
-    expect(previaSistema().getAttribute("data-label")).toBe("null");
-    expect(previaLogin().getAttribute("data-label")).toBe("null");
+  it("as mesmas cores de fábrica, em minúsculas, continuam sendo o padrão", () => {
+    abrir({ primary_color: "#1e3a6b", secondary_color: "#5b9bd5" } as Partial<AppSettings>);
+    expect(within(linha("Cores e logos")).getByText("Padrão")).toBeTruthy();
   });
 
-  it("as prévias usam o tamanho maior, que cabe na coluna", () => {
-    abrir();
+  it("sem a marca carregada o botão de editar fica desligado", () => {
+    mocks.settings = null;
+    render(<BrandTab />);
 
-    expect(previaSistema().getAttribute("data-scale")).toBe("0.55");
-    expect(previaLogin().getAttribute("data-scale")).toBe("0.55");
-  });
-
-  it("as prévias recebem as cores e o layout salvos", () => {
-    abrir({ primary_color: "#065F46", secondary_color: "#10B981", login_layout: "split" });
-
-    expect(previaSistema().getAttribute("data-primary")).toBe("#065F46");
-    expect(previaSistema().getAttribute("data-secondary")).toBe("#10B981");
-    expect(previaLogin().getAttribute("data-layout")).toBe("split");
+    expect((screen.getByRole("button", { name: "Editar Cores e logos" }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("os textos da aba têm acento", () => {
     abrir();
 
-    expect(screen.getByLabelText("Cor primária")).toBeTruthy();
-    expect(screen.getByText("Restaurar padrão")).toBeTruthy();
-    expect(screen.getAllByText(/Só valem depois de salvar/)).toHaveLength(2);
+    expect(screen.getByText("Página não encontrada")).toBeTruthy();
+    expect(screen.getByText("Fora do horário de acesso")).toBeTruthy();
+    expect(screen.getByText("Sem acesso a nenhuma coleção")).toBeTruthy();
   });
 });
 
-describe("BrandTab - cores", () => {
-  it("sem mudança não mostra a barra de salvar", () => {
-    abrir();
+describe("BrandTab - cores e logos", () => {
+  const primaria = () => campo("Cor primária");
+  const secundaria = () => campo("Cor secundária");
 
-    semBarra();
-    expect(screen.queryByText("Descartar")).toBeNull();
+  it("abre com as cores salvas e a prévia do sistema, e o botão de salvar desligado", () => {
+    abrir({ primary_color: "#065F46", secondary_color: "#10B981" } as Partial<AppSettings>);
+    editar("Cores e logos");
+
+    expect(primaria().value).toBe("#065F46");
+    expect(secundaria().value).toBe("#10B981");
+    expect(screen.getByTestId("previa-sistema").getAttribute("data-primary")).toBe("#065F46");
+    expect(salvar().disabled).toBe(true);
   });
 
-  it("as prévias seguem as cores ainda não salvas e a barra aparece", () => {
+  it("a prévia segue a cor ainda não salva e liga o botão de salvar", () => {
     abrir();
+    editar("Cores e logos");
 
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
+    fireEvent.change(primaria(), { target: { value: "#7F1D1D" } });
 
-    expect(previaSistema().getAttribute("data-primary")).toBe("#065F46");
-    expect(previaLogin().getAttribute("data-primary")).toBe("#065F46");
+    expect(screen.getByTestId("previa-sistema").getAttribute("data-primary")).toBe("#7F1D1D");
     expect(salvar().disabled).toBe(false);
-    expect(screen.getByText("Você tem alterações não salvas.")).toBeTruthy();
-    expect(api.updateSettings).not.toHaveBeenCalled();
   });
 
   it("a mesma cor escrita em minúsculas não conta como mudança", () => {
     abrir();
+    editar("Cores e logos");
 
     fireEvent.change(primaria(), { target: { value: "#1e3a6b" } });
 
-    semBarra();
-    expect(previaSistema().getAttribute("data-primary")).toBe("#1e3a6b");
-  });
-
-  it("o código sem o # é apontado como fora do formato #RRGGBB", () => {
-    abrir();
-
-    fireEvent.change(primaria(), { target: { value: "065F46" } });
-
-    expect(screen.getByRole("alert").textContent).toBe("Use o formato #RRGGBB");
     expect(salvar().disabled).toBe(true);
   });
 
   it("código incompleto mostra o erro, mantém a última cor boa na prévia e não deixa salvar", () => {
     abrir();
+    editar("Cores e logos");
 
     fireEvent.change(primaria(), { target: { value: "#12" } });
 
-    expect(screen.getByRole("alert").textContent).toBe("Use o formato #RRGGBB");
-    expect(primaria().getAttribute("aria-invalid")).toBe("true");
-    expect(previaSistema().getAttribute("data-primary")).toBe("#1E3A6B");
+    expect(screen.getByRole("alert").textContent).toContain("#RRGGBB");
+    expect(screen.getByTestId("previa-sistema").getAttribute("data-primary")).toBe("#1E3A6B");
     expect(salvar().disabled).toBe(true);
-    expect(screen.getByText("Corrija o código da cor para poder salvar.")).toBeTruthy();
-  });
-
-  it("Descartar volta as duas cores ao que está salvo", () => {
-    abrir();
-
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
-    fireEvent.change(secundaria(), { target: { value: "#10B981" } });
-    fireEvent.click(screen.getByText("Descartar"));
-
-    expect(primaria().value).toBe("#1E3A6B");
-    expect(secundaria().value).toBe("#5B9BD5");
-    expect(previaSistema().getAttribute("data-primary")).toBe("#1E3A6B");
-    semBarra();
   });
 
   it("uma paleta pronta troca as duas cores de uma vez", () => {
     abrir();
+    editar("Cores e logos");
 
     fireEvent.click(screen.getByRole("button", { name: "Aplicar a paleta Esmeralda" }));
 
     expect(primaria().value).toBe("#065F46");
     expect(secundaria().value).toBe("#10B981");
-    expect(previaLogin().getAttribute("data-primary")).toBe("#065F46");
-    expect(salvar().disabled).toBe(false);
   });
 
-  it("Restaurar padrão volta às cores de fábrica (e só conta como mudança se forem diferentes das salvas)", () => {
-    abrir({ primary_color: "#065F46", secondary_color: "#10B981" });
+  it("Restaurar padrão volta às cores de fábrica, como mudança a salvar", () => {
+    abrir({ primary_color: "#065F46", secondary_color: "#10B981" } as Partial<AppSettings>);
+    editar("Cores e logos");
 
-    fireEvent.click(screen.getByText("Restaurar padrão"));
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar padrão" }));
 
     expect(primaria().value).toBe("#1E3A6B");
     expect(secundaria().value).toBe("#5B9BD5");
     expect(salvar().disabled).toBe(false);
   });
 
-  it("Salvar manda só as duas cores (nenhum texto), recarrega, avisa e esconde a barra", async () => {
+  it("Salvar manda só as duas cores, recarrega a marca, avisa e fecha a janela", async () => {
     abrir();
+    editar("Cores e logos");
 
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
+    fireEvent.change(primaria(), { target: { value: "#7F1D1D" } });
     fireEvent.click(salvar());
 
-    await waitFor(() =>
-      expect(api.updateSettings).toHaveBeenCalledWith({ primary_color: "#065F46", secondary_color: "#5B9BD5" }),
-    );
-    expect(api.updateSettings).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Alterações salvas."));
-    expect(mocks.reload).toHaveBeenCalledTimes(1);
-    await waitFor(() => semBarra());
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith({ primary_color: "#7F1D1D", secondary_color: "#5B9BD5" }));
+    expect(mocks.reload).toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith("Cores salvas.");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("falha ao salvar avisa o erro, mantém as cores digitadas e deixa o botão ligado", async () => {
+  it("falha ao salvar avisa o erro e mantém a janela aberta com as cores digitadas", async () => {
     abrir();
-    api.updateSettings.mockRejectedValue({ response: { data: { detail: "Sem permissão" } } });
+    editar("Cores e logos");
+    api.updateSettings.mockRejectedValueOnce(new Error("500"));
 
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
+    fireEvent.change(primaria(), { target: { value: "#7F1D1D" } });
     fireEvent.click(salvar());
 
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Sem permissão", "error"));
-    expect(primaria().value).toBe("#065F46");
-    await waitFor(() => expect(salvar().disabled).toBe(false));
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Não foi possível salvar as alterações.", "error"));
+    expect(primaria().value).toBe("#7F1D1D");
+    expect(screen.getByRole("dialog")).toBeTruthy();
   });
 
   it("Enter no campo do código também salva", async () => {
     abrir();
+    editar("Cores e logos");
 
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
+    fireEvent.change(primaria(), { target: { value: "#7F1D1D" } });
     fireEvent.submit(primaria().closest("form") as HTMLFormElement);
 
-    await waitFor(() => expect(api.updateSettings).toHaveBeenCalled());
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledTimes(1));
   });
-});
 
-describe("BrandTab - logo e favicon", () => {
-  const enviar = (campo: HTMLInputElement) =>
-    fireEvent.change(campo, { target: { files: [new File(["x"], "marca.png", { type: "image/png" })] } });
-
-  it("enviar o logo vale na hora, sem precisar salvar", async () => {
+  it("enviar o logo vale na hora, sem salvar, e recarrega a marca", async () => {
     abrir();
+    editar("Cores e logos");
+    const arquivo = new File(["x"], "logo.png", { type: "image/png" });
 
-    enviar(arquivos()[0]);
+    fireEvent.change(arquivos()[0], { target: { files: [arquivo] } });
 
-    await waitFor(() => expect(api.uploadLogo).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Logo atualizado."));
+    await waitFor(() => expect(api.uploadLogo).toHaveBeenCalledWith(arquivo));
     expect(mocks.reload).toHaveBeenCalled();
-    semBarra();
+    expect(mocks.showToast).toHaveBeenCalledWith("Logo atualizado.");
+    expect(api.updateSettings).not.toHaveBeenCalled();
   });
 
   it("enviar o favicon vale na hora", async () => {
     abrir();
+    editar("Cores e logos");
+    const arquivo = new File(["x"], "fav.png", { type: "image/png" });
 
-    enviar(arquivos()[1]);
+    fireEvent.change(arquivos()[1], { target: { files: [arquivo] } });
 
-    await waitFor(() => expect(api.uploadFavicon).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Favicon atualizado."));
+    await waitFor(() => expect(api.uploadFavicon).toHaveBeenCalledWith(arquivo));
+    expect(mocks.showToast).toHaveBeenCalledWith("Favicon atualizado.");
   });
 
   it("falha ao enviar o logo avisa o erro", async () => {
     abrir();
-    api.uploadLogo.mockRejectedValue({ response: { data: { detail: "Arquivo grande demais" } } });
+    editar("Cores e logos");
+    api.uploadLogo.mockRejectedValueOnce(new Error("400"));
 
-    enviar(arquivos()[0]);
+    fireEvent.change(arquivos()[0], { target: { files: [new File(["x"], "logo.png", { type: "image/png" })] } });
 
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Arquivo grande demais", "error"));
-  });
-
-  it("a descrição avisa que cada imagem vale ao enviar", () => {
-    abrir();
-
-    expect(screen.getByText(/Cada imagem vale assim que você a envia/)).toBeTruthy();
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Não foi possível enviar o logo.", "error"));
   });
 
   it("o logo enviado aparece na prévia do sistema", () => {
-    abrir({ logo_url: "/static/uploads/logo.png" });
+    abrir({ logo_url: "/static/uploads/logo.png" } as Partial<AppSettings>);
+    editar("Cores e logos");
 
-    expect(previaSistema().getAttribute("data-logo")).toContain("logo.png");
+    expect(screen.getByTestId("previa-sistema").getAttribute("data-logo")).toContain("/static/uploads/logo.png");
   });
 });
 
 describe("BrandTab - tela de login", () => {
-  const layout = (nome: string) => screen.getByRole("radio", { name: new RegExp(nome) }) as HTMLInputElement;
+  it("abre com o layout salvo e a prévia do login", () => {
+    abrir({ login_layout: "split" } as Partial<AppSettings>);
+    editar("Tela de login");
 
-  it("as duas opções de layout ficam num grupo de opções com nome", () => {
-    abrir();
-
-    const grupo = screen.getByRole("radiogroup", { name: "Layout da tela de login" });
-    expect(within(grupo).getAllByRole("radio")).toHaveLength(2);
-    expect(layout("Centralizado").checked).toBe(true);
-    expect(layout("Dividido").checked).toBe(false);
+    expect(screen.getByTestId("previa-login").getAttribute("data-layout")).toBe("split");
+    expect(screen.getByRole("radiogroup", { name: "Layout da tela de login" })).toBeTruthy();
+    expect(salvar().disabled).toBe(true);
   });
 
-  it("escolher o layout dividido vale na hora e a prévia do login já o mostra", async () => {
+  it("escolher o layout dividido muda a prévia, mas só vale depois de salvar", async () => {
     abrir();
+    editar("Tela de login");
 
-    fireEvent.click(layout("Dividido"));
+    fireEvent.click(screen.getByLabelText(/Dividido, com imagem/));
 
+    expect(screen.getByTestId("previa-login").getAttribute("data-layout")).toBe("split");
+    expect(api.updateSettings).not.toHaveBeenCalled();
+
+    fireEvent.click(salvar());
     await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith({ login_layout: "split" }));
-    expect(mocks.reload).toHaveBeenCalled();
-    semBarra();
+    expect(mocks.showToast).toHaveBeenCalledWith("Tela de login salva.");
   });
 
-  it("falha ao mudar o layout avisa o erro", async () => {
+  it("falha ao salvar o layout avisa o erro", async () => {
     abrir();
-    api.updateSettings.mockRejectedValue(new Error("rede"));
+    editar("Tela de login");
+    api.updateSettings.mockRejectedValueOnce(new Error("500"));
 
-    fireEvent.click(layout("Dividido"));
+    fireEvent.click(screen.getByLabelText(/Dividido, com imagem/));
+    fireEvent.click(salvar());
 
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Não foi possível mudar o layout.", "error"));
   });
 
   it("o campo da imagem do painel só aparece no layout dividido", () => {
     abrir();
-    expect(screen.queryByText("Imagem do painel direito")).toBeNull();
+    editar("Tela de login");
 
-    abrir({ login_layout: "split" });
-    expect(screen.getByText("Imagem do painel direito")).toBeTruthy();
-  });
-
-  it("o campo da imagem de login é compacto, do mesmo tamanho do logo, e não a caixa grande tracejada", () => {
-    const { container } = abrir({ login_layout: "split" });
-
-    expect(container.querySelector(".image-upload-wide")).toBeNull();
-    expect(container.querySelectorAll(".image-upload")).toHaveLength(3);
-    expect(container.querySelector(".brand-login-image")).not.toBeNull();
+    expect(arquivos()).toHaveLength(0);
+    fireEvent.click(screen.getByLabelText(/Dividido, com imagem/));
+    expect(arquivos()).toHaveLength(1);
   });
 
   it("enviar a imagem de login vale na hora", async () => {
-    abrir({ login_layout: "split" });
+    abrir({ login_layout: "split" } as Partial<AppSettings>);
+    editar("Tela de login");
+    const arquivo = new File(["x"], "painel.png", { type: "image/png" });
 
-    fireEvent.change(arquivos()[2], { target: { files: [new File(["x"], "fundo.jpg", { type: "image/jpeg" })] } });
+    fireEvent.change(arquivos()[0], { target: { files: [arquivo] } });
 
-    await waitFor(() => expect(api.uploadLoginImage).toHaveBeenCalledTimes(1));
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Imagem de login atualizada."));
+    await waitFor(() => expect(api.uploadLoginImage).toHaveBeenCalledWith(arquivo));
+    expect(mocks.showToast).toHaveBeenCalledWith("Imagem de login atualizada.");
   });
 
-  it("a imagem de login enviada aparece na prévia do login", () => {
-    abrir({ login_layout: "split", login_image_url: "/static/uploads/fundo.jpg" });
+  it("a imagem de login enviada aparece na prévia", () => {
+    abrir({ login_layout: "split", login_image_url: "/static/uploads/painel.png" } as Partial<AppSettings>);
+    editar("Tela de login");
 
-    expect(previaLogin().getAttribute("data-image")).toContain("fundo.jpg");
+    expect(screen.getByTestId("previa-login").getAttribute("data-image")).toContain("/static/uploads/painel.png");
   });
 });
 
-describe("BrandTab - telas de erro", () => {
-  const campo = (rotulo: string, indice: number) => screen.getAllByLabelText(rotulo)[indice] as HTMLInputElement;
-  const tituloNaoEncontrada = () => campo("Título", 0);
-  const mensagemNaoEncontrada = () => campo("Mensagem", 0);
-  const botaoNaoEncontrada = () => campo("Texto do botão", 0);
-  const tituloErro = () => campo("Título", 1);
-  const botaoErro = () => campo("Texto do botão", 1);
-  const previaNaoEncontrada = () => screen.getByTestId("previa-erro-notFound");
-  const previaErro = () => screen.getByTestId("previa-erro-error");
+describe("BrandTab - telas de erro e de aviso", () => {
+  const salvos = {
+    not_found_title: "Sumiu",
+    not_found_message: "Não achamos.",
+    not_found_button: "Início",
+  } as Partial<AppSettings>;
 
-  it("mostra os seis campos, dois grupos, com o texto padrão como sugestão", () => {
-    abrir();
+  it("abre com os textos salvos nos campos, o padrão de sugestão e a prévia da tela certa", () => {
+    abrir(salvos);
+    editar("Página não encontrada");
 
-    expect(screen.getByText("Página não encontrada (404)")).toBeTruthy();
-    expect(screen.getAllByText("Algo deu errado")).not.toHaveLength(0);
-    expect(tituloNaoEncontrada().placeholder).toBe("Página não encontrada");
-    expect(mensagemNaoEncontrada().placeholder).toBe("O endereço que você tentou acessar não existe ou foi removido.");
-    expect(botaoNaoEncontrada().placeholder).toBe("Voltar para o início");
-    expect(tituloErro().placeholder).toBe("Algo deu errado");
-    // Os dois primeiros grupos sao as telas de erro; os outros dois sao os das telas de aviso
-    expect(screen.getAllByLabelText("Título")).toHaveLength(4);
-    expect(screen.getAllByLabelText("Mensagem")).toHaveLength(4);
-    expect(screen.getAllByLabelText("Texto do botão")).toHaveLength(4);
+    expect(campo("Título").value).toBe("Sumiu");
+    expect(campo("Mensagem").value).toBe("Não achamos.");
+    expect(campo("Texto do botão").value).toBe("Início");
+    expect(screen.getByTestId("previa-erro-notFound").getAttribute("data-title")).toBe("Sumiu");
+    expect(screen.queryByTestId("previa-erro-error")).toBeNull();
+    expect(salvar().disabled).toBe(true);
   });
 
-  it("sem personalização as prévias mostram os textos padrão e a barra não aparece", () => {
+  it("sem personalização os campos vêm vazios, com o texto padrão de sugestão, e a prévia mostra o padrão", () => {
     abrir();
+    editar("Algo deu errado");
 
-    expect(previaNaoEncontrada().getAttribute("data-title")).toBe("Página não encontrada");
-    expect(previaErro().getAttribute("data-title")).toBe("Algo deu errado");
-    expect(previaErro().getAttribute("data-button")).toBe("Voltar para o início");
-    semBarra();
+    expect(campo("Título").value).toBe("");
+    expect(campo("Título").placeholder).toBe("Algo deu errado");
+    expect(screen.getByTestId("previa-erro-error").getAttribute("data-title")).toBe("Algo deu errado");
   });
 
-  it("os textos salvos aparecem nos campos e nas prévias", () => {
-    abrir({ not_found_title: "Essa página sumiu", error_button: "Tentar de novo" });
-
-    expect(tituloNaoEncontrada().value).toBe("Essa página sumiu");
-    expect(botaoErro().value).toBe("Tentar de novo");
-    expect(previaNaoEncontrada().getAttribute("data-title")).toBe("Essa página sumiu");
-    expect(previaErro().getAttribute("data-button")).toBe("Tentar de novo");
-    expect(previaErro().getAttribute("data-title")).toBe("Algo deu errado");
-    semBarra();
-  });
-
-  it("digitar muda a prévia da tela certa na hora, sem salvar, e liga a barra", () => {
+  it("digitar muda a prévia na hora, sem salvar, e liga o botão", () => {
     abrir();
+    editar("Algo deu errado");
 
-    fireEvent.change(tituloErro(), { target: { value: "Tivemos um problema" } });
+    fireEvent.change(campo("Título"), { target: { value: "Ops, tente de novo" } });
 
-    expect(previaErro().getAttribute("data-title")).toBe("Tivemos um problema");
-    expect(previaNaoEncontrada().getAttribute("data-title")).toBe("Página não encontrada");
+    expect(screen.getByTestId("previa-erro-error").getAttribute("data-title")).toBe("Ops, tente de novo");
     expect(salvar().disabled).toBe(false);
-    expect(screen.getByText("Você tem alterações não salvas.")).toBeTruthy();
     expect(api.updateSettings).not.toHaveBeenCalled();
   });
 
-  it("o contador mostra quantos caracteres foram usados do limite de cada campo", () => {
+  it("campo só com espaços volta a mostrar o texto padrão na prévia", () => {
     abrir();
+    editar("Algo deu errado");
 
-    fireEvent.change(tituloNaoEncontrada(), { target: { value: "Sumiu" } });
-    fireEvent.change(mensagemNaoEncontrada(), { target: { value: "abc" } });
+    fireEvent.change(campo("Título"), { target: { value: "   " } });
 
-    expect(screen.getByText("5/80. Em branco, usa o texto padrão.")).toBeTruthy();
-    expect(screen.getByText("3/300. Em branco, usa o texto padrão.")).toBeTruthy();
-    expect(botaoNaoEncontrada().getAttribute("maxlength")).toBe("40");
-    expect(tituloNaoEncontrada().getAttribute("maxlength")).toBe("80");
-    expect(mensagemNaoEncontrada().getAttribute("maxlength")).toBe("300");
+    expect(screen.getByTestId("previa-erro-error").getAttribute("data-title")).toBe("Algo deu errado");
   });
 
-  it("campo em branco ou só com espaços volta a mostrar o texto padrão na prévia", () => {
-    abrir({ error_title: "Tivemos um problema" });
+  it("o contador mostra quantos caracteres foram usados do limite", () => {
+    abrir();
+    editar("Algo deu errado");
 
-    fireEvent.change(tituloErro(), { target: { value: "   " } });
+    fireEvent.change(campo("Título"), { target: { value: "Oi" } });
 
-    expect(previaErro().getAttribute("data-title")).toBe("Algo deu errado");
+    expect(screen.getByText(/^2\/80\./)).toBeTruthy();
   });
 
-  it("Salvar manda só os textos que mudaram, sem as cores, e esconde a barra", async () => {
+  it("Salvar manda só os textos que mudaram, recarrega, avisa e fecha", async () => {
     abrir();
+    editar("Algo deu errado");
 
-    fireEvent.change(tituloErro(), { target: { value: "  Tivemos um problema  " } });
-    fireEvent.change(botaoNaoEncontrada(), { target: { value: "Ir para o início" } });
+    fireEvent.change(campo("Título"), { target: { value: "  Ops  " } });
     fireEvent.click(salvar());
 
-    await waitFor(() =>
-      expect(api.updateSettings).toHaveBeenCalledWith({
-        error_title: "Tivemos um problema",
-        not_found_button: "Ir para o início",
-      }),
-    );
-    expect(api.updateSettings).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Alterações salvas."));
-    await waitFor(() => semBarra());
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith({ error_title: "Ops" }));
+    expect(mocks.reload).toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith("Tela salva.");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("apagar um texto salvo manda nulo, para o servidor voltar ao padrão", async () => {
-    abrir({ error_message: "Já estamos vendo isso." });
+    abrir(salvos);
+    editar("Página não encontrada");
 
-    fireEvent.change(campo("Mensagem", 1), { target: { value: "" } });
+    fireEvent.change(campo("Título"), { target: { value: "" } });
     fireEvent.click(salvar());
 
-    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith({ error_message: null }));
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith({ not_found_title: null }));
   });
 
-  it("cores e textos mudados juntos vão numa gravação só", async () => {
-    abrir();
+  it("Restaurar o texto padrão limpa os três campos da tela e fecha, sem mexer nas outras telas", async () => {
+    abrir({ ...salvos, error_title: "Ops" } as Partial<AppSettings>);
+    editar("Página não encontrada");
 
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
-    fireEvent.change(tituloErro(), { target: { value: "Tivemos um problema" } });
-    fireEvent.click(salvar());
+    fireEvent.click(screen.getByRole("button", { name: "Restaurar o texto padrão" }));
 
     await waitFor(() =>
-      expect(api.updateSettings).toHaveBeenCalledWith({
-        primary_color: "#065F46",
-        secondary_color: "#5B9BD5",
-        error_title: "Tivemos um problema",
-      }),
+      expect(api.updateSettings).toHaveBeenCalledWith({ not_found_title: null, not_found_message: null, not_found_button: null }),
     );
-    expect(api.updateSettings).toHaveBeenCalledTimes(1);
+    expect(mocks.showToast).toHaveBeenCalledWith("Tela restaurada ao texto padrão.");
   });
 
-  it("Descartar desfaz as cores e os textos juntos", () => {
-    abrir({ not_found_title: "Essa página sumiu" });
-
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
-    fireEvent.change(tituloNaoEncontrada(), { target: { value: "Outro" } });
-    fireEvent.change(tituloErro(), { target: { value: "Tivemos um problema" } });
-    fireEvent.click(screen.getByText("Descartar"));
-
-    expect(primaria().value).toBe("#1E3A6B");
-    expect(tituloNaoEncontrada().value).toBe("Essa página sumiu");
-    expect(tituloErro().value).toBe("");
-    semBarra();
-  });
-
-  it("Restaurar textos padrão esvazia os seis campos e conta como mudança só se havia texto salvo", () => {
-    abrir({ not_found_title: "Essa página sumiu", error_message: "Já estamos vendo isso." });
-
-    fireEvent.click(screen.getByText("Restaurar textos padrão"));
-
-    expect(tituloNaoEncontrada().value).toBe("");
-    expect(campo("Mensagem", 1).value).toBe("");
-    expect(previaNaoEncontrada().getAttribute("data-title")).toBe("Página não encontrada");
-    expect(salvar().disabled).toBe(false);
-  });
-
-  it("Restaurar textos padrão sem nada salvo não liga a barra", () => {
+  it("sem texto salvo não há o botão de restaurar", () => {
     abrir();
+    editar("Página não encontrada");
 
-    fireEvent.click(screen.getByText("Restaurar textos padrão"));
-
-    semBarra();
+    expect(screen.queryByRole("button", { name: "Restaurar o texto padrão" })).toBeNull();
   });
 
-  it("falha ao salvar avisa o erro e mantém o que foi digitado", async () => {
+  it("falha ao salvar mostra o erro na janela e mantém o que foi digitado", async () => {
     abrir();
-    api.updateSettings.mockRejectedValue({ response: { data: { detail: "Sem permissão" } } });
+    editar("Algo deu errado");
+    api.updateSettings.mockRejectedValueOnce(new Error("500"));
 
-    fireEvent.change(tituloErro(), { target: { value: "Tivemos um problema" } });
+    fireEvent.change(campo("Título"), { target: { value: "Ops" } });
     fireEvent.click(salvar());
 
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Sem permissão", "error"));
-    expect(tituloErro().value).toBe("Tivemos um problema");
+    expect((await screen.findByRole("alert")).textContent).toBe("Não foi possível salvar as alterações.");
+    expect(campo("Título").value).toBe("Ops");
   });
 
-  it("as duas prévias de erro usam o logo da marca e as cores ainda não salvas, e dizem que cai no logo padrão", () => {
-    abrir({ logo_url: "/static/uploads/logo.png" });
+  it("a prévia das telas de erro usa o logo e as cores da marca", () => {
+    abrir({ logo_url: "/static/uploads/logo.png", primary_color: "#065F46" } as Partial<AppSettings>);
+    editar("Página não encontrada");
 
-    fireEvent.change(primaria(), { target: { value: "#065F46" } });
-
-    expect(previaNaoEncontrada().getAttribute("data-logo")).toContain("logo.png");
-    expect(previaErro().getAttribute("data-logo")).toContain("logo.png");
-    expect(previaNaoEncontrada().getAttribute("data-primary")).toBe("#065F46");
-    expect(previaErro().getAttribute("data-primary")).toBe("#065F46");
-    expect(screen.getByText("Usa o logo da marca; se a imagem não carregar, mostra o logo padrão.")).toBeTruthy();
+    const previa = screen.getByTestId("previa-erro-notFound");
+    expect(previa.getAttribute("data-logo")).toContain("/static/uploads/logo.png");
+    expect(previa.getAttribute("data-primary")).toBe("#065F46");
   });
 
-  it("as duas prévias de erro são regiões com nome próprio e usam o tamanho que cabe na coluna", () => {
+  it("fora do horário: com mensagem própria a linha de quando o acesso volta continua na prévia", () => {
     abrir();
+    editar("Fora do horário de acesso");
 
-    expect(screen.getByRole("complementary", { name: "Prévia da página não encontrada" })).toBeTruthy();
-    expect(screen.getByRole("complementary", { name: "Prévia da tela de erro inesperado" })).toBeTruthy();
-    expect(previaNaoEncontrada().getAttribute("data-scale")).toBe("0.55");
-    expect(previaErro().getAttribute("data-scale")).toBe("0.55");
-  });
-});
+    expect(screen.getByTestId("previa-aviso-outsideHours").getAttribute("data-opening")).toBe("false");
+    fireEvent.change(campo("Mensagem"), { target: { value: "Volte amanhã." } });
 
-describe("BrandTab - telas de aviso (fora do horário e sem acesso)", () => {
-  const campo = (rotulo: string, indice: number) => screen.getAllByLabelText(rotulo)[indice] as HTMLInputElement;
-  // Os dois primeiros grupos sao as telas de erro; o terceiro e o quarto sao os de fora do horario e sem acesso
-  const tituloHorario = () => campo("Título", 2);
-  const mensagemHorario = () => campo("Mensagem", 2);
-  const botaoHorario = () => campo("Texto do botão", 2);
-  const tituloSemAcesso = () => campo("Título", 3);
-  const mensagemSemAcesso = () => campo("Mensagem", 3);
-  const botaoSemAcesso = () => campo("Texto do botão", 3);
-  const previaHorario = () => screen.getByRole("complementary", { name: "Prévia da tela fora do horário" });
-  const previaSemAcesso = () => screen.getByRole("complementary", { name: "Prévia da tela sem acesso a coleção" });
-
-  it("mostra os seis campos com o texto padrão como sugestão", () => {
-    abrir();
-
-    expect(screen.getByText("Fora do horário de acesso", { selector: "legend" })).toBeTruthy();
-    expect(screen.getByText("Sem acesso a nenhuma coleção", { selector: "legend" })).toBeTruthy();
-    expect(tituloHorario().placeholder).toBe("Fora do horário de acesso");
-    expect(mensagemHorario().placeholder).toBe("Você não pode usar o sistema neste momento.");
-    expect(botaoHorario().placeholder).toBe("Tentar novamente");
-    expect(tituloSemAcesso().placeholder).toBe("Bem-vindo, e o nome da pessoa");
-    expect(mensagemSemAcesso().placeholder).toContain("Você ainda não tem acesso a nenhuma coleção.");
-    expect(botaoSemAcesso().placeholder).toBe("Sair");
+    const previa = screen.getByTestId("previa-aviso-outsideHours");
+    expect(previa.getAttribute("data-message")).toBe("Volte amanhã.");
+    expect(previa.getAttribute("data-opening")).toBe("true");
   });
 
-  it("as duas prévias seguem o que está digitado e usam o padrão quando o campo está em branco", () => {
+  it("sem acesso a coleção: o título sugere o nome da pessoa e Salvar manda só o que mudou", async () => {
     abrir();
+    editar("Sem acesso a nenhuma coleção");
 
-    expect(within(previaHorario()).getByText("Fora do horário de acesso")).toBeTruthy();
-    expect(within(previaHorario()).getByText("Tentar novamente")).toBeTruthy();
-    expect(within(previaSemAcesso()).getByText("Sair")).toBeTruthy();
-
-    fireEvent.change(tituloHorario(), { target: { value: "Volte no seu horário" } });
-    fireEvent.change(botaoSemAcesso(), { target: { value: "Trocar de conta" } });
-
-    expect(within(previaHorario()).getByText("Volte no seu horário")).toBeTruthy();
-    expect(within(previaSemAcesso()).getByText("Trocar de conta")).toBeTruthy();
-  });
-
-  it("com mensagem própria na tela de fora do horário, a linha de quando o acesso volta continua na prévia", () => {
-    abrir();
-    expect(within(previaHorario()).queryByText(/O seu acesso volta em/)).toBeNull();
-
-    fireEvent.change(mensagemHorario(), { target: { value: "Seu acesso é só em horário comercial." } });
-
-    expect(within(previaHorario()).getByText("Seu acesso é só em horário comercial.")).toBeTruthy();
-    expect(within(previaHorario()).getByText(/O seu acesso volta em/)).toBeTruthy();
-  });
-
-  it("Salvar manda só os textos de aviso que mudaram", async () => {
-    abrir();
-
-    fireEvent.change(tituloHorario(), { target: { value: "  Volte no seu horário  " } });
-    fireEvent.change(mensagemSemAcesso(), { target: { value: "Falta alguém liberar uma coleção." } });
+    expect(campo("Título").placeholder).toBe("Bem-vindo, e o nome da pessoa");
+    fireEvent.change(campo("Texto do botão"), { target: { value: "Encerrar sessão" } });
     fireEvent.click(salvar());
 
-    await waitFor(() =>
-      expect(api.updateSettings).toHaveBeenCalledWith({
-        outside_hours_title: "Volte no seu horário",
-        no_access_message: "Falta alguém liberar uma coleção.",
-      }),
-    );
-    expect(api.updateSettings).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(api.updateSettings).toHaveBeenCalledWith({ no_access_button: "Encerrar sessão" }));
   });
 
-  it("Restaurar textos das telas de aviso esvazia só os campos de aviso", () => {
-    abrir({ error_title: "Tivemos um problema", outside_hours_title: "Volte no seu horário", no_access_button: "Trocar de conta" });
+  it("Cancelar fecha a janela sem gravar nada", () => {
+    abrir();
+    editar("Algo deu errado");
 
-    fireEvent.click(screen.getByText("Restaurar textos das telas de aviso"));
+    fireEvent.change(campo("Título"), { target: { value: "Ops" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
-    expect(tituloHorario().value).toBe("");
-    expect(botaoSemAcesso().value).toBe("");
-    expect(campo("Título", 1).value).toBe("Tivemos um problema"); // o campo da tela de erro nao mexe
-  });
-
-  it("Restaurar textos padrão das telas de erro não apaga os de aviso", () => {
-    abrir({ error_title: "Tivemos um problema", outside_hours_title: "Volte no seu horário" });
-
-    fireEvent.click(screen.getByText("Restaurar textos padrão"));
-
-    expect(campo("Título", 1).value).toBe("");
-    expect(tituloHorario().value).toBe("Volte no seu horário");
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(api.updateSettings).not.toHaveBeenCalled();
   });
 });
