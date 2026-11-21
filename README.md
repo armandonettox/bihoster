@@ -111,7 +111,7 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   puro para quem não vê HTML. Em Administração > E-mail dá para ajustar o assunto, a mensagem e o texto do botão de cada um,
   ver a prévia e mandar um teste. A mensagem aceita dados entre chaves, como `{empresa}`, e uma linha que usa um dado vazio
   é omitida. O texto digitado nunca vira HTML. Os relatórios enviados por assinatura ou pelo botão de enviar saem no mesmo
-  layout, com o assunto e a mensagem de cada envio (esses não são editados nesta aba). Para a logo aparecer no e-mail, preencha o endereço do site em Administração > Geral.
+  layout, com o assunto e a mensagem de cada envio (esses não são editados nesta aba). O logo do topo é o da marca, ou um logo só dos e-mails enviado em Administração > E-mail. Para a logo aparecer no e-mail, preencha o endereço do site em Administração > Geral.
 - **Horário de acesso.** Cada grupo pode ter faixas de dias e horas (por exemplo "Seg a Sex, 08:00 às 12:00" e "13:00 às 18:00")
   em que as pessoas dele podem usar o sistema, no fuso definido em Administração. A pessoa também pode ter uma exceção
   individual (faixas próprias ou sem limite), que substitui o horário dos grupos. Quem está em mais de um grupo com
