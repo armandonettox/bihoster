@@ -3,10 +3,11 @@ import * as emailApi from "../../api/emailSettings";
 import type { EmailSettings, SmtpSecurity } from "../../api/emailSettings";
 import * as templatesApi from "../../api/emailTemplates";
 import type { EmailTemplate } from "../../api/emailTemplates";
-import { extractErrorMessage } from "../../api/client";
+import { assetUrl, extractErrorMessage } from "../../api/client";
 import { useAuth } from "../../context/AuthContext";
 import { useToast } from "../../context/ToastContext";
 import EmailTemplateModal from "../../components/EmailTemplateModal";
+import ImageUploadField from "../../components/ImageUploadField";
 import { SkeletonList } from "../../components/Skeleton";
 
 // Porta comum de cada tipo de seguranca: sugerida ao trocar o tipo, se a porta ainda for a do tipo anterior
@@ -123,6 +124,24 @@ export default function EmailTab() {
       setTestResult({ ok: false, text: extractErrorMessage(err) || "Não foi possível enviar o e-mail de teste." });
     } finally {
       setTesting(false);
+    }
+  }
+
+  async function handleLogoUpload(file: File) {
+    try {
+      fill(await emailApi.uploadEmailLogo(file));
+      showToast("Logo dos e-mails atualizado.");
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Não foi possível enviar o logo.", "error");
+    }
+  }
+
+  async function handleLogoRemove() {
+    try {
+      fill(await emailApi.removeEmailLogo());
+      showToast("Logo dos e-mails removido. Os e-mails voltam a usar o logo da marca.");
+    } catch (err: any) {
+      showToast(extractErrorMessage(err) || "Não foi possível remover o logo.", "error");
     }
   }
 
@@ -282,7 +301,26 @@ export default function EmailTab() {
         </div>
       </div>
 
-      {/* Cartão 2: os e-mails que o sistema envia, para ver e ajustar o texto de cada um */}
+      {/* Cartão 2: o logo que aparece no topo de todos os e-mails */}
+      <div className="settings-section">
+        <h2 className="settings-section-title">Logo dos e-mails</h2>
+        <p className="settings-section-desc">
+          Aparece no topo de todos os e-mails do sistema e dos relatórios enviados. Sem um logo próprio, os e-mails usam o
+          logo da marca. Cada imagem vale assim que você a envia, e as prévias abaixo já mostram. Para o logo aparecer, o
+          endereço do site precisa estar preenchido em Administração &gt; Geral.
+        </p>
+        <div className="settings-grid settings-grid-two">
+          <ImageUploadField
+            label="Logo dos e-mails"
+            hint="PNG ou JPG. Fundo transparente funciona melhor; o e-mail mostra o logo com 40 px de altura."
+            imageUrl={loaded.email_logo_url ? assetUrl(loaded.email_logo_url) : null}
+            onUpload={handleLogoUpload}
+            onRemove={loaded.email_logo_url ? handleLogoRemove : undefined}
+          />
+        </div>
+      </div>
+
+      {/* Cartão 3: os e-mails que o sistema envia, para ver e ajustar o texto de cada um */}
       <div className="settings-section">
         <h2 className="settings-section-title">E-mails enviados pelo sistema</h2>
         <p className="settings-section-desc">

@@ -14,6 +14,8 @@ vi.mock("../../api/emailSettings", () => ({
   getEmailSettings: vi.fn(),
   updateEmailSettings: vi.fn(),
   sendTestEmail: vi.fn(),
+  uploadEmailLogo: vi.fn(),
+  removeEmailLogo: vi.fn(),
 }));
 
 vi.mock("../../api/emailTemplates", () => ({
@@ -48,15 +50,17 @@ function modelo(extra: Partial<EmailTemplate> = {}): EmailTemplate {
 const getSettings = vi.mocked(emailApi.getEmailSettings);
 const update = vi.mocked(emailApi.updateEmailSettings);
 const sendTest = vi.mocked(emailApi.sendTestEmail);
+const uploadLogo = vi.mocked(emailApi.uploadEmailLogo);
+const removeLogo = vi.mocked(emailApi.removeEmailLogo);
 
 const VAZIO: EmailSettings = {
   smtp_host: null, smtp_port: null, smtp_security: null, smtp_username: null, smtp_password_configured: false,
-  smtp_from_email: null, smtp_from_name: null, email_allowed_domains: null, configured: false,
+  smtp_from_email: null, smtp_from_name: null, email_allowed_domains: null, email_logo_url: null, configured: false,
 };
 const CONFIGURADO: EmailSettings = {
   smtp_host: "smtp.empresa.com", smtp_port: 587, smtp_security: "starttls", smtp_username: "relatorios",
   smtp_password_configured: true, smtp_from_email: "relatorios@empresa.com", smtp_from_name: "BIHoster",
-  email_allowed_domains: "empresa.com", configured: true,
+  email_allowed_domains: "empresa.com", email_logo_url: null, configured: true,
 };
 
 async function abrir(dados: EmailSettings = VAZIO) {
@@ -259,5 +263,36 @@ describe("EmailTab - e-mails enviados pelo sistema", () => {
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     expect(screen.getByText("Personalizado")).toBeTruthy();
+  });
+});
+
+describe("EmailTab - logo dos e-mails", () => {
+  it("envia a imagem escolhida e mostra o logo novo", async () => {
+    await abrir(CONFIGURADO);
+    uploadLogo.mockResolvedValue({ ...CONFIGURADO, email_logo_url: "/static/uploads/novo.png" });
+
+    const arquivo = new File(["x"], "logo.png", { type: "image/png" });
+    const entrada = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(entrada, { target: { files: [arquivo] } });
+
+    await waitFor(() => expect(uploadLogo).toHaveBeenCalledWith(arquivo));
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Logo dos e-mails atualizado."));
+    expect(document.querySelector('img[src$="/static/uploads/novo.png"]')).toBeTruthy();
+  });
+
+  it("sem logo proprio nao mostra a opcao de remover", async () => {
+    await abrir(CONFIGURADO);
+    expect(removeLogo).not.toHaveBeenCalled();
+    expect(document.querySelector(".kebab-menu-item-danger")).toBeNull();
+  });
+
+  it("avisa quando o envio falha", async () => {
+    await abrir(CONFIGURADO);
+    uploadLogo.mockRejectedValue(new Error("400"));
+
+    const entrada = document.querySelector('input[type="file"]') as HTMLInputElement;
+    fireEvent.change(entrada, { target: { files: [new File(["x"], "logo.png", { type: "image/png" })] } });
+
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Não foi possível enviar o logo.", "error"));
   });
 });

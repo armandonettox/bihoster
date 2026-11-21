@@ -12,6 +12,8 @@ export interface EmailSettings {
   smtp_from_email: string | null;
   smtp_from_name: string | null;
   email_allowed_domains: string | null;
+  /** Logo so dos e-mails; nulo = usa a logo da marca */
+  email_logo_url: string | null;
   configured: boolean;
 }
 
@@ -51,4 +53,16 @@ export async function getEmailStatus(): Promise<EmailStatus> {
 
 export async function sendTestEmail(to: string): Promise<void> {
   await api.post("/settings/email/test", { to });
+}
+
+export async function uploadEmailLogo(file: File): Promise<EmailSettings> {
+  const form = new FormData();
+  form.append("file", file);
+  const { data } = await api.post("/settings/email/logo", form);
+  return data;
+}
+
+export async function removeEmailLogo(): Promise<EmailSettings> {
+  const { data } = await api.delete("/settings/email/logo");
+  return data;
 }
