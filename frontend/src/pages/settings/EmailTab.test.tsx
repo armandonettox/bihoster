@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as emailApi from "../../api/emailSettings";
 import type { EmailSettings } from "../../api/emailSettings";
+import * as templatesApi from "../../api/emailTemplates";
+import type { EmailTemplate } from "../../api/emailTemplates";
 import EmailTab from "./EmailTab";
 
 const mocks = vi.hoisted(() => ({ showToast: vi.fn() }));
@@ -13,6 +15,35 @@ vi.mock("../../api/emailSettings", () => ({
   updateEmailSettings: vi.fn(),
   sendTestEmail: vi.fn(),
 }));
+
+vi.mock("../../api/emailTemplates", () => ({
+  listEmailTemplates: vi.fn(),
+  saveEmailTemplate: vi.fn(),
+  resetEmailTemplate: vi.fn(),
+  previewEmailTemplate: vi.fn(),
+  sendEmailTemplateTest: vi.fn(),
+}));
+
+const listTemplates = vi.mocked(templatesApi.listEmailTemplates);
+const previewTemplate = vi.mocked(templatesApi.previewEmailTemplate);
+
+function modelo(extra: Partial<EmailTemplate> = {}): EmailTemplate {
+  return {
+    key: "reset",
+    label: "Redefinição de senha",
+    description: "Enviado quando alguém pede o link.",
+    variables: [{ name: "empresa", label: "Nome da empresa", sample: "BIHoster" }],
+    has_button: true,
+    default_subject: "Redefinição de senha - {empresa}",
+    default_body: "Oi.\n\nUse o botão.",
+    default_button: "Criar senha nova",
+    subject: null,
+    body: null,
+    button: null,
+    customized: false,
+    ...extra,
+  };
+}
 
 const getSettings = vi.mocked(emailApi.getEmailSettings);
 const update = vi.mocked(emailApi.updateEmailSettings);
@@ -38,6 +69,10 @@ async function abrir(dados: EmailSettings = VAZIO) {
 const campo = (nome: string) => screen.getByLabelText(new RegExp(`^${nome}`)) as HTMLInputElement;
 
 beforeEach(() => {
+  listTemplates.mockReset();
+  listTemplates.mockResolvedValue([]);
+  previewTemplate.mockReset();
+  previewTemplate.mockResolvedValue({ subject: "Assunto", html: "<p>oi</p>" });
   mocks.showToast.mockClear();
   update.mockImplementation(async () => CONFIGURADO);
 });
@@ -47,7 +82,7 @@ describe("EmailTab - carregar", () => {
     await abrir();
 
     expect(campo("Porta").value).toBe("587");
-    expect((screen.getByLabelText("Seguranca") as HTMLSelectElement).value).toBe("starttls");
+    expect((screen.getByLabelText("Segurança") as HTMLSelectElement).value).toBe("starttls");
     expect(campo("Servidor").value).toBe("");
   });
 
@@ -55,18 +90,18 @@ describe("EmailTab - carregar", () => {
     await abrir(CONFIGURADO);
 
     expect(campo("Servidor").value).toBe("smtp.empresa.com");
-    expect(campo("Usuario").value).toBe("relatorios");
+    expect(campo("Usuário").value).toBe("relatorios");
     expect(campo("E-mail de origem").value).toBe("relatorios@empresa.com");
     const senha = campo("Senha");
     expect(senha.value).toBe("");
-    expect(senha.placeholder).toMatch(/Ja configurada/);
+    expect(senha.placeholder).toMatch(/Já configurada/);
   });
 
   it("avisa quando nao consegue carregar", async () => {
     getSettings.mockRejectedValue(new Error("403"));
     render(<EmailTab />);
 
-    expect(await screen.findByText("Nao foi possivel carregar as configuracoes de e-mail.")).toBeTruthy();
+    expect(await screen.findByText("Não foi possível carregar as configurações de e-mail.")).toBeTruthy();
   });
 });
 
@@ -74,7 +109,7 @@ describe("EmailTab - salvar", () => {
   it("envia o que foi preenchido e avisa que salvou", async () => {
     await abrir();
     fireEvent.change(campo("Servidor"), { target: { value: " smtp.empresa.com " } });
-    fireEvent.change(campo("Usuario"), { target: { value: "relatorios" } });
+    fireEvent.change(campo("Usuário"), { target: { value: "relatorios" } });
     fireEvent.change(campo("Senha"), { target: { value: "segredo" } });
     fireEvent.change(campo("E-mail de origem"), { target: { value: "relatorios@empresa.com" } });
 
@@ -89,7 +124,7 @@ describe("EmailTab - salvar", () => {
       smtp_password: "segredo",
       smtp_from_email: "relatorios@empresa.com",
     });
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Configuracoes de e-mail salvas."));
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Configurações de e-mail salvas."));
   });
 
   it("deixar a senha em branco mantem a atual: o campo nem vai no pedido", async () => {
@@ -113,7 +148,7 @@ describe("EmailTab - salvar", () => {
 
   it("campos vazios viram nulo, e nao texto vazio", async () => {
     await abrir(CONFIGURADO);
-    fireEvent.change(campo("Usuario"), { target: { value: "" } });
+    fireEvent.change(campo("Usuário"), { target: { value: "" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
 
@@ -135,7 +170,7 @@ describe("EmailTab - porta e seguranca", () => {
   it("trocar a seguranca sugere a porta do novo tipo", async () => {
     await abrir();
 
-    fireEvent.change(screen.getByLabelText("Seguranca"), { target: { value: "ssl" } });
+    fireEvent.change(screen.getByLabelText("Segurança"), { target: { value: "ssl" } });
 
     expect(campo("Porta").value).toBe("465");
   });
@@ -144,7 +179,7 @@ describe("EmailTab - porta e seguranca", () => {
     await abrir();
     fireEvent.change(campo("Porta"), { target: { value: "2525" } });
 
-    fireEvent.change(screen.getByLabelText("Seguranca"), { target: { value: "ssl" } });
+    fireEvent.change(screen.getByLabelText("Segurança"), { target: { value: "ssl" } });
 
     expect(campo("Porta").value).toBe("2525");
   });
@@ -177,5 +212,52 @@ describe("EmailTab - e-mail de teste", () => {
     fireEvent.click(screen.getByRole("button", { name: "Enviar teste" }));
 
     expect(await screen.findByText("O servidor recusou o usuario ou a senha do SMTP.")).toBeTruthy();
+  });
+});
+
+describe("EmailTab - e-mails enviados pelo sistema", () => {
+  it("lista cada e-mail com o nome, a descrição e se é padrão ou personalizado", async () => {
+    listTemplates.mockResolvedValue([
+      modelo(),
+      modelo({ key: "added", label: "Adicionado ao sistema", description: "Enviado a quem já tem conta.", customized: true, subject: "Bem-vindo" }),
+    ]);
+    await abrir(CONFIGURADO);
+
+    expect(await screen.findByText("Redefinição de senha")).toBeTruthy();
+    expect(screen.getByText("Adicionado ao sistema")).toBeTruthy();
+    expect(screen.getByText("Enviado quando alguém pede o link.")).toBeTruthy();
+    expect(screen.getByText("Padrão")).toBeTruthy();
+    expect(screen.getByText("Personalizado")).toBeTruthy();
+  });
+
+  it("Editar abre o editor daquele e-mail", async () => {
+    listTemplates.mockResolvedValue([modelo()]);
+    await abrir(CONFIGURADO);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+
+    expect(screen.getByRole("dialog")).toBeTruthy();
+    expect((screen.getByLabelText("Assunto") as HTMLInputElement).value).toBe("Redefinição de senha - {empresa}");
+  });
+
+  it("avisa quando não consegue carregar os e-mails, sem derrubar o servidor", async () => {
+    listTemplates.mockRejectedValue(new Error("500"));
+    await abrir(CONFIGURADO);
+
+    expect(await screen.findByText("Não foi possível carregar os e-mails.")).toBeTruthy();
+    expect(campo("Servidor").value).toBe("smtp.empresa.com");
+  });
+
+  it("depois de salvar no editor a linha vira Personalizado", async () => {
+    listTemplates.mockResolvedValue([modelo()]);
+    vi.mocked(templatesApi.saveEmailTemplate).mockResolvedValue(modelo({ customized: true, subject: "Nova senha" }));
+    await abrir(CONFIGURADO);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Editar" }));
+    fireEvent.change(screen.getByLabelText("Assunto"), { target: { value: "Nova senha" } });
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.getByText("Personalizado")).toBeTruthy();
   });
 });

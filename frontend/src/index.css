@@ -5112,3 +5112,136 @@ table.table tr:last-child td {
 .outside-hours-request textarea.input {
   resize: vertical;
 }
+
+/* --- Aba E-mail: lista dos e-mails que o sistema envia e o editor com a prévia em HTML --- */
+
+.email-template-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.email-template-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--color-border);
+}
+
+.email-template-row:last-child {
+  border-bottom: 0;
+}
+
+.email-template-text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.email-template-name {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.email-template-badge {
+  flex-shrink: 0;
+  padding: 2px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--color-border);
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.email-template-badge-custom {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  font-weight: 600;
+}
+
+.email-editor {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: 24px;
+  align-items: start;
+}
+
+.email-editor-preview {
+  min-width: 0;
+  border-left: 1px solid var(--color-border);
+  padding-left: 24px;
+}
+
+.email-preview-subject {
+  margin: 0 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.email-preview-frame {
+  display: block;
+  width: 100%;
+  height: 440px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: #fff;
+}
+
+.email-variables {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.email-variable-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.email-variable-chip {
+  padding: 3px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: inherit;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.email-variable-chip:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+}
+
+.email-test {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.email-test .field {
+  flex: 1;
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .email-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .email-editor-preview {
+    border-left: 0;
+    padding-left: 0;
+    border-top: 1px solid var(--color-border);
+    padding-top: 20px;
+  }
+
+  .email-template-row {
+    flex-wrap: wrap;
+  }
+}
