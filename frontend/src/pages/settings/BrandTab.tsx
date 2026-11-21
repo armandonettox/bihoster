@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { AppSettings } from "../../api/settings";
 import { useBranding } from "../../context/BrandingContext";
+import SettingsRowList from "../../components/SettingsRowList";
 import BrandIdentityModal from "./brand/BrandIdentityModal";
 import BrandLoginModal from "./brand/BrandLoginModal";
 import BrandTextScreenModal from "./brand/BrandTextScreenModal";
@@ -67,28 +68,17 @@ export default function BrandTab() {
           As cores, os logos e os textos das telas que a pessoa vê. Abra uma delas para ajustar, ver a prévia e salvar.
         </p>
 
-        <ul className="email-template-list">
-          {rows.map((row) => (
-            <li key={row.key} className="email-template-row">
-              <div className="email-template-text">
-                <span className="email-template-name">{row.label}</span>
-                <span className="field-hint">{row.description}</span>
-              </div>
-              <span className={row.customized ? "email-template-badge email-template-badge-custom" : "email-template-badge"}>
-                {row.customized ? "Personalizado" : "Padrão"}
-              </span>
-              <button
-                type="button"
-                className="btn btn-secondary btn-sm"
-                aria-label={`Editar ${row.label}`}
-                disabled={settings === null}
-                onClick={() => setEditing(row.edit)}
-              >
-                Editar
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SettingsRowList
+          rows={rows.map((row) => ({
+            key: row.key,
+            label: row.label,
+            description: row.description,
+            status: row.customized ? "Personalizado" : "Padrão",
+            highlight: row.customized,
+            onEdit: () => setEditing(row.edit),
+            disabled: settings === null,
+          }))}
+        />
       </div>
 
       {settings && editing?.kind === "identity" && <BrandIdentityModal settings={settings} onClose={close} />}

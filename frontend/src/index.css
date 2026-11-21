@@ -5094,6 +5094,11 @@ table.table tr:last-child td {
 
 /* --- Aba E-mail: lista dos e-mails que o sistema envia e o editor com a prévia em HTML --- */
 
+/* Espaço acima de um campo que vem depois de outro bloco, nas janelas de edição da Administração */
+.field-spaced {
+  margin-top: 16px;
+}
+
 .email-template-list {
   list-style: none;
   margin: 0;

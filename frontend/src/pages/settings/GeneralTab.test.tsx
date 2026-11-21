@@ -39,92 +39,104 @@ const fuso = () => screen.getByLabelText(/Fuso horário/) as HTMLSelectElement;
 const https = () => screen.getByLabelText(/Redirecionar para HTTPS/) as HTMLInputElement;
 const colecao = () => screen.getByLabelText(/^Coleção/) as HTMLSelectElement;
 const unica = () => screen.getByLabelText(/Abrir direto na coleção única/) as HTMLInputElement;
-// A barra de salvar só existe quando há mudança (ou enquanto salva)
-const salvar = () => screen.getByText("Salvar") as HTMLButtonElement;
-const semBarra = () => expect(screen.queryByText("Salvar")).toBeNull();
+const salvar = () => screen.getByRole("button", { name: /^Salvar/ }) as HTMLButtonElement;
+const editar = (nomeDaLinha: string) => fireEvent.click(screen.getByRole("button", { name: `Editar ${nomeDaLinha}` }));
+const linha = (nomeDaLinha: string) => screen.getByText(nomeDaLinha).closest("li") as HTMLElement;
 
 async function abrir(settings: Partial<AppSettings> = {}) {
   mocks.settings = { ...BASE, ...settings };
   render(<GeneralTab />);
-  await waitFor(() => expect(colecao().options.length).toBeGreaterThan(1));
+  await waitFor(() => expect(listWorkspaces).toHaveBeenCalled());
 }
 
 beforeEach(() => {
   mocks.showToast.mockClear();
   mocks.settings = { ...BASE };
+  mocks.reload.mockReset();
+  mocks.reload.mockResolvedValue(undefined);
   // Recarregar a marca devolve o que acabou de ser salvo, como o servidor faz
   updateSettings.mockReset();
   updateSettings.mockImplementation(async (data) => {
     mocks.settings = { ...(mocks.settings as object), ...data };
     return mocks.settings as AppSettings;
   });
-  mocks.reload.mockReset();
-  mocks.reload.mockResolvedValue(undefined);
   listWorkspaces.mockReset();
   listWorkspaces.mockResolvedValue([
-    { id: 1, name: "Comercial" },
-    { id: 2, name: "Saude" },
+    { id: 1, name: "Financeiro" },
+    { id: 2, name: "Comercial" },
   ] as never);
 });
 
-describe("GeneralTab - salvar tudo junto", () => {
-  it("sem mudança não mostra a barra de salvar nem o aviso", async () => {
+describe("GeneralTab - a lista", () => {
+  it("tem uma linha para cada parte, com o botão de editar, e nada aberto", async () => {
     await abrir();
 
-    semBarra();
-    expect(screen.queryByText("Descartar")).toBeNull();
-    expect(screen.queryByText(/alterações não salvas/)).toBeNull();
+    for (const nomeDaLinha of ["Dados do aplicativo", "Acesso seguro (HTTPS)", "Homepage"]) {
+      expect(within(linha(nomeDaLinha)).getByRole("button", { name: `Editar ${nomeDaLinha}` })).toBeTruthy();
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("mudar qualquer campo mostra a barra com o Salvar ligado, o aviso e o Descartar", async () => {
+  it("cada linha mostra o estado atual", async () => {
     await abrir();
 
-    fireEvent.change(nome(), { target: { value: "Portal Best" } });
-
-    expect(salvar().disabled).toBe(false);
-    expect(screen.getByText("Você tem alterações não salvas.")).toBeTruthy();
-    expect(screen.getByText("Descartar")).toBeTruthy();
+    expect(within(linha("Dados do aplicativo")).getByText(/BIHoster · UTC−03:00|BIHoster · UTC-03:00/)).toBeTruthy();
+    expect(within(linha("Acesso seguro (HTTPS)")).getByText("Desligado")).toBeTruthy();
+    await waitFor(() => expect(within(linha("Homepage")).getByText("Coleção: Comercial")).toBeTruthy());
+    expect(within(linha("Homepage")).getByText("Definida")).toBeTruthy();
   });
 
-  it("voltar ao valor salvo esconde a barra de novo", async () => {
-    await abrir();
+  it("com HTTPS ligado e sem homepage a linha mostra Ligado e tela padrão", async () => {
+    await abrir({ force_https: true, default_workspace_id: null } as Partial<AppSettings>);
 
-    fireEvent.change(nome(), { target: { value: "Portal Best" } });
-    fireEvent.change(nome(), { target: { value: "BIHoster" } });
-
-    semBarra();
+    expect(within(linha("Acesso seguro (HTTPS)")).getByText("Ligado")).toBeTruthy();
+    expect(within(linha("Homepage")).getByText("Tela padrão")).toBeTruthy();
+    expect(within(linha("Homepage")).getByText("Padrão")).toBeTruthy();
   });
 
-  it("Descartar volta todos os campos ao que está salvo e some com a barra", async () => {
+  it("sem a marca carregada os botões de editar ficam desligados", async () => {
+    mocks.settings = null;
+    render(<GeneralTab />);
+
+    expect((screen.getByRole("button", { name: "Editar Homepage" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("os textos da aba têm acento", async () => {
     await abrir();
 
-    fireEvent.change(nome(), { target: { value: "Portal Best" } });
-    fireEvent.change(colecao(), { target: { value: "1" } });
-    fireEvent.click(unica());
-    fireEvent.click(screen.getByText("Descartar"));
+    expect(screen.getByText("Configuração do aplicativo")).toBeTruthy();
+    expect(screen.getByText("Dados do aplicativo")).toBeTruthy();
+  });
+});
+
+describe("GeneralTab - dados do aplicativo", () => {
+  it("abre com o que está salvo e o Salvar desligado", async () => {
+    await abrir();
+    editar("Dados do aplicativo");
 
     expect(nome().value).toBe("BIHoster");
-    expect(colecao().value).toBe("2");
-    expect(unica().checked).toBe(false);
-    semBarra();
+    expect(url().value).toBe("https://bi.exemplo.com");
+    expect(email().value).toBe("suporte@exemplo.com");
+    expect(fuso().value).toBe("America/Sao_Paulo");
+    expect(salvar().disabled).toBe(true);
   });
 
-  it("a Homepage e o redirecionamento da coleção única não gravam na hora", async () => {
+  it("mudar um campo liga o Salvar e voltar ao valor salvo desliga de novo", async () => {
     await abrir();
-
-    fireEvent.change(colecao(), { target: { value: "1" } });
-    fireEvent.click(unica());
-
-    expect(updateSettings).not.toHaveBeenCalled();
-    expect(salvar().disabled).toBe(false);
-  });
-
-  it("Salvar manda todos os campos numa chamada só, recarrega, avisa e esconde a barra", async () => {
-    await abrir();
+    editar("Dados do aplicativo");
 
     fireEvent.change(nome(), { target: { value: "Portal Best" } });
-    fireEvent.change(colecao(), { target: { value: "1" } });
-    fireEvent.click(unica());
+    expect(salvar().disabled).toBe(false);
+    fireEvent.change(nome(), { target: { value: "BIHoster" } });
+    expect(salvar().disabled).toBe(true);
+  });
+
+  it("Salvar manda os quatro campos, recarrega, avisa e fecha a janela", async () => {
+    await abrir();
+    editar("Dados do aplicativo");
+
+    fireEvent.change(nome(), { target: { value: "Portal Best" } });
+    fireEvent.change(fuso(), { target: { value: "UTC" } });
     fireEvent.click(salvar());
 
     await waitFor(() =>
@@ -132,89 +144,95 @@ describe("GeneralTab - salvar tudo junto", () => {
         company_name: "Portal Best",
         site_url: "https://bi.exemplo.com",
         support_email: "suporte@exemplo.com",
-        force_https: false,
-        timezone: "America/Sao_Paulo",
-        default_workspace_id: 1,
-        single_collection_redirect: true,
+        timezone: "UTC",
       }),
     );
-    expect(updateSettings).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Configurações salvas."));
-    expect(mocks.reload).toHaveBeenCalledTimes(1);
-    await waitFor(() => semBarra());
-    expect(screen.queryByText(/alterações não salvas/)).toBeNull();
+    expect(mocks.reload).toHaveBeenCalled();
+    expect(mocks.showToast).toHaveBeenCalledWith("Configurações salvas.");
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
-  it("enquanto grava, a barra mostra Salvando e o botão fica desligado", async () => {
+  it("campos opcionais vazios vão como nulo", async () => {
     await abrir();
-    let terminar: () => void = () => undefined;
-    updateSettings.mockImplementation(() => new Promise<AppSettings>((resolve) => (terminar = () => resolve(BASE))));
-
-    fireEvent.change(nome(), { target: { value: "Portal Best" } });
-    fireEvent.click(salvar());
-
-    const botao = await screen.findByText("Salvando...");
-    expect((botao as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.queryByText("Descartar")).toBeNull();
-    terminar();
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Configurações salvas."));
-  });
-
-  it("campos opcionais vazios e Nenhuma coleção vão como nulo", async () => {
-    await abrir();
+    editar("Dados do aplicativo");
 
     fireEvent.change(url(), { target: { value: "" } });
     fireEvent.change(email(), { target: { value: "" } });
-    fireEvent.change(colecao(), { target: { value: "" } });
     fireEvent.click(salvar());
 
-    await waitFor(() =>
-      expect(updateSettings).toHaveBeenCalledWith(
-        expect.objectContaining({ site_url: null, support_email: null, default_workspace_id: null }),
-      ),
-    );
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ site_url: null, support_email: null })));
   });
 
-  it("falha ao salvar avisa o erro, mantém o que foi digitado e deixa o Salvar ligado", async () => {
+  it("falha ao salvar mostra o erro na janela, mantém o que foi digitado e deixa o Salvar ligado", async () => {
     await abrir();
-    updateSettings.mockRejectedValue({ response: { data: { detail: "Sem permissao" } } });
+    editar("Dados do aplicativo");
+    updateSettings.mockRejectedValueOnce({ response: { data: { detail: "Fuso inválido" } } });
 
     fireEvent.change(nome(), { target: { value: "Portal Best" } });
     fireEvent.click(salvar());
 
-    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Sem permissao", "error"));
-    expect(mocks.showToast).not.toHaveBeenCalledWith("Configurações salvas.");
-    expect(mocks.reload).not.toHaveBeenCalled();
+    expect((await screen.findByRole("alert")).textContent).toBe("Fuso inválido");
     expect(nome().value).toBe("Portal Best");
-    await waitFor(() => expect(salvar().disabled).toBe(false));
+    expect(salvar().disabled).toBe(false);
   });
 
   it("falha sem mensagem do servidor mostra um aviso padrão", async () => {
     await abrir();
-    updateSettings.mockRejectedValue(new Error("rede"));
+    editar("Dados do aplicativo");
+    updateSettings.mockRejectedValueOnce(new Error("rede"));
 
     fireEvent.change(nome(), { target: { value: "Portal Best" } });
     fireEvent.click(salvar());
 
-    await waitFor(() =>
-      expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining("Não foi possível salvar"), "error"),
-    );
+    expect((await screen.findByRole("alert")).textContent).toBe("Não foi possível salvar as configurações.");
   });
 
-  it("se a lista de coleções falhar a tela continua e o seletor fica só com Nenhuma", async () => {
-    listWorkspaces.mockRejectedValue(new Error("falhou"));
-    mocks.settings = { ...BASE, default_workspace_id: null };
-    render(<GeneralTab />);
+  it("Cancelar fecha sem gravar", async () => {
+    await abrir();
+    editar("Dados do aplicativo");
 
-    await waitFor(() => expect(listWorkspaces).toHaveBeenCalled());
-    expect(nome().value).toBe("BIHoster");
-    expect(colecao().options).toHaveLength(1);
+    fireEvent.change(nome(), { target: { value: "Portal Best" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(updateSettings).not.toHaveBeenCalled();
+  });
+
+  it("a dica do fuso mostra o deslocamento do fuso escolhido e os fusos têm o nome correto", async () => {
+    await abrir();
+    editar("Dados do aplicativo");
+
+    expect(within(fuso()).getByText(/Brasília, São Paulo/)).toBeTruthy();
+    fireEvent.change(fuso(), { target: { value: "UTC" } });
+
+    expect(screen.getByText(/Atual: UTC\+00:00\./)).toBeTruthy();
+  });
+
+  it("todo campo tem rótulo e dica ligados, e nenhum rótulo fica dentro de outro", async () => {
+    await abrir();
+    editar("Dados do aplicativo");
+
+    for (const campo of [nome(), url(), email(), fuso()]) {
+      expect(document.querySelector(`label[for="${campo.id}"]`)).not.toBeNull();
+      expect(document.getElementById(campo.getAttribute("aria-describedby") ?? "")).not.toBeNull();
+    }
+    expect(document.querySelectorAll("label label")).toHaveLength(0);
   });
 });
 
 describe("GeneralTab - ligar o HTTPS", () => {
+  it("o interruptor é do tipo switch, com nome e dica ligados por aria", async () => {
+    await abrir();
+    editar("Acesso seguro (HTTPS)");
+
+    expect(https().getAttribute("role")).toBe("switch");
+    expect(https().getAttribute("aria-labelledby")).toContain("general-force-https-label");
+    expect(document.getElementById(https().getAttribute("aria-describedby") ?? "")?.textContent?.length).toBeGreaterThan(20);
+  });
+
   it("ligar o HTTPS e salvar pede confirmação antes de gravar", async () => {
     await abrir();
+    editar("Acesso seguro (HTTPS)");
 
     fireEvent.click(https());
     fireEvent.click(salvar());
@@ -226,10 +244,12 @@ describe("GeneralTab - ligar o HTTPS", () => {
 
   it("cancelar a confirmação não grava e mantém o que estava marcado", async () => {
     await abrir();
+    editar("Acesso seguro (HTTPS)");
 
     fireEvent.click(https());
     fireEvent.click(salvar());
-    fireEvent.click(screen.getByText("Cancelar"));
+    const cancelar = screen.getAllByText("Cancelar");
+    fireEvent.click(cancelar[cancelar.length - 1]);
 
     expect(screen.queryByText("Ligar o redirecionamento para HTTPS?")).toBeNull();
     expect(updateSettings).not.toHaveBeenCalled();
@@ -237,110 +257,81 @@ describe("GeneralTab - ligar o HTTPS", () => {
     expect(salvar().disabled).toBe(false);
   });
 
-  it("confirmar grava com o HTTPS ligado", async () => {
+  it("confirmar grava só o HTTPS ligado e fecha a janela", async () => {
     await abrir();
+    editar("Acesso seguro (HTTPS)");
 
     fireEvent.click(https());
     fireEvent.click(salvar());
     fireEvent.click(screen.getByText("Ligar e salvar"));
 
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ force_https: true })));
-    expect(screen.queryByText("Ligar o redirecionamento para HTTPS?")).toBeNull();
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ force_https: true }));
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Configurações salvas."));
-  });
-
-  it("com o HTTPS já ligado, salvar outra coisa não pede confirmação", async () => {
-    await abrir({ force_https: true });
-
-    fireEvent.change(nome(), { target: { value: "Portal Best" } });
-    fireEvent.click(salvar());
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalled());
-    expect(screen.queryByText("Ligar o redirecionamento para HTTPS?")).toBeNull();
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   });
 
   it("desligar o HTTPS salva sem pedir confirmação", async () => {
     await abrir({ force_https: true });
+    editar("Acesso seguro (HTTPS)");
 
     fireEvent.click(https());
     fireEvent.click(salvar());
 
-    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith(expect.objectContaining({ force_https: false })));
-    expect(screen.queryByText("Ligar o redirecionamento para HTTPS?")).toBeNull();
-  });
-
-  it("mudar só outra coisa com o HTTPS desligado também não pede confirmação", async () => {
-    await abrir();
-
-    fireEvent.change(email(), { target: { value: "novo@exemplo.com" } });
-    fireEvent.click(salvar());
-
-    await waitFor(() => expect(updateSettings).toHaveBeenCalled());
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ force_https: false }));
     expect(screen.queryByText("Ligar o redirecionamento para HTTPS?")).toBeNull();
   });
 });
 
-describe("GeneralTab - acessibilidade e textos", () => {
-  it("os interruptores são do tipo switch, com nome e dica ligados por aria", async () => {
-    await abrir();
+describe("GeneralTab - homepage", () => {
+  it("abre com a coleção salva e o atalho da coleção única", async () => {
+    await abrir({ single_collection_redirect: true } as Partial<AppSettings>);
+    editar("Homepage");
 
-    for (const interruptor of [https(), unica()]) {
-      expect(interruptor.getAttribute("role")).toBe("switch");
-      const hint = document.getElementById(interruptor.getAttribute("aria-describedby") ?? "");
-      expect(hint?.textContent?.length).toBeGreaterThan(20);
-    }
-    expect(https().getAttribute("aria-labelledby")).toContain("general-force-https-label");
+    await waitFor(() => expect(colecao().options.length).toBeGreaterThan(1));
+    expect(colecao().value).toBe("2");
+    expect(unica().checked).toBe(true);
+    expect(within(colecao()).getByText("Nenhuma (tela padrão)")).toBeTruthy();
+    expect(salvar().disabled).toBe(true);
+  });
+
+  it("Salvar manda a coleção e o atalho", async () => {
+    await abrir();
+    editar("Homepage");
+    await waitFor(() => expect(colecao().options.length).toBeGreaterThan(1));
+
+    fireEvent.change(colecao(), { target: { value: "1" } });
+    fireEvent.click(unica());
+    fireEvent.click(salvar());
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ default_workspace_id: 1, single_collection_redirect: true }));
+  });
+
+  it("Nenhuma coleção vai como nulo", async () => {
+    await abrir();
+    editar("Homepage");
+    await waitFor(() => expect(colecao().options.length).toBeGreaterThan(1));
+
+    fireEvent.change(colecao(), { target: { value: "" } });
+    fireEvent.click(salvar());
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ default_workspace_id: null, single_collection_redirect: false }));
+  });
+
+  it("se a lista de coleções falhar a tela continua e o seletor fica só com Nenhuma", async () => {
+    listWorkspaces.mockRejectedValue(new Error("403"));
+    await abrir({ default_workspace_id: null } as Partial<AppSettings>);
+    editar("Homepage");
+
+    expect(colecao().options).toHaveLength(1);
+    expect(screen.getByText("Nenhuma (tela padrão)")).toBeTruthy();
   });
 
   it("o estado do interruptor faz parte do nome e muda ao ligar", async () => {
     await abrir();
+    editar("Homepage");
 
-    expect(screen.getAllByText("Desabilitado")).toHaveLength(2);
-    fireEvent.click(https());
-
-    expect(screen.getAllByText("Desabilitado")).toHaveLength(1);
+    expect(screen.getByText("Desabilitado")).toBeTruthy();
+    fireEvent.click(unica());
     expect(screen.getByText("Habilitado")).toBeTruthy();
-  });
-
-  it("nenhum rótulo fica dentro de outro rótulo", async () => {
-    await abrir();
-
-    expect(document.querySelectorAll("label label")).toHaveLength(0);
-  });
-
-  it("a dica fica fora do rótulo e é ligada ao campo, então o nome do campo é só o rótulo", async () => {
-    await abrir();
-
-    const campo = nome();
-    const rotulo = document.querySelector(`label[for="${campo.id}"]`);
-    expect(rotulo?.textContent).toBe("Nome do site");
-    const hint = document.getElementById(campo.getAttribute("aria-describedby") ?? "");
-    expect(hint?.textContent).toContain("barra lateral");
-  });
-
-  it("todo campo de texto e seletor tem rótulo e dica ligados", async () => {
-    await abrir();
-
-    for (const campo of [nome(), url(), email(), fuso(), colecao()]) {
-      expect(document.querySelector(`label[for="${campo.id}"]`)).not.toBeNull();
-      expect(document.getElementById(campo.getAttribute("aria-describedby") ?? "")).not.toBeNull();
-    }
-  });
-
-  it("os textos da aba têm acento e os fusos aparecem com o nome correto", async () => {
-    await abrir();
-
-    expect(screen.getByText("Configuração do aplicativo")).toBeTruthy();
-    expect(screen.getByText("Informações gerais desta instância do sistema.")).toBeTruthy();
-    expect(within(fuso()).getByText(/Brasília, São Paulo/)).toBeTruthy();
-    expect(within(colecao()).getByText("Nenhuma (tela padrão)")).toBeTruthy();
-  });
-
-  it("a dica do fuso mostra o deslocamento do fuso escolhido", async () => {
-    await abrir();
-
-    fireEvent.change(fuso(), { target: { value: "UTC" } });
-
-    expect(screen.getByText(/Atual: UTC\+00:00\./)).toBeTruthy();
   });
 });
