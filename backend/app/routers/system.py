@@ -80,6 +80,11 @@ def apply_update(
         raise HTTPException(status_code=409, detail=str(exc))
     except FileNotFoundError as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+    except system_update.UpdateCouldNotStart as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Nao foi possivel iniciar a atualizacao: {exc}",
+        )
 
     log_action(
         db,

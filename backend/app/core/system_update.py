@@ -1,5 +1,7 @@
+import json
 import os
 import re
+import shlex
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -34,6 +36,10 @@ _T = TypeVar("_T")
 
 class UpdateAlreadyRunning(Exception):
     """Ja existe uma atualizacao em andamento neste host."""
+
+
+class UpdateCouldNotStart(Exception):
+    """O Docker recusou iniciar o container que faz a atualizacao."""
 
 
 def clear_release_cache() -> None:
@@ -178,17 +184,99 @@ def _fetch_latest_release() -> Optional[ReleaseInfo]:
     )
 
 
+def _inspect_self() -> Optional[dict]:
+    """O que o Docker sabe deste proprio container (imagem, rotulos do compose), ou None se nao der para saber: fora do
+    Docker, sem o socket montado ou sem o docker no PATH. O nome do host de um container e o id dele."""
+    ident = os.environ.get("HOSTNAME", "").strip()
+    if not ident:
+        return None
+    try:
+        result = subprocess.run(["docker", "inspect", ident], capture_output=True, text=True, timeout=15)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    try:
+        data = json.loads(result.stdout)
+    except ValueError:
+        return None
+    return data[0] if isinstance(data, list) and data and isinstance(data[0], dict) else None
+
+
+def build_helper_command(
+    info: dict, target_version: str, log_path: Path, deploy_dir: Path, helper_name: str
+) -> Optional[list[str]]:
+    """O `docker run` do container auxiliar que atualiza o sistema, ou None se faltar algo para montar o comando.
+
+    Por que um container auxiliar: o `docker compose up -d` recria o backend, e um comando que roda dentro do backend morre
+    junto com ele no meio da troca. O auxiliar usa a mesma imagem (que ja tem o docker e o compose), os mesmos volumes
+    (`--volumes-from`: o socket do Docker, a pasta do projeto e os dados, onde fica o log) e termina sozinho.
+
+    O nome do projeto, a pasta real do projeto no servidor e os arquivos do compose (inclusive o override) saem dos
+    rotulos que o proprio compose gravou neste container. Sem isso o `docker compose` de dentro do container calcularia
+    outro nome de projeto (a pasta aqui dentro se chama deploy), ignoraria o override e subiria uma pilha paralela, com
+    volumes vazios, em vez de atualizar a que esta rodando."""
+    config = info.get("Config") or {}
+    labels = config.get("Labels") or {}
+    project = labels.get("com.docker.compose.project")
+    workdir = labels.get("com.docker.compose.project.working_dir")
+    host_files = [f for f in (labels.get("com.docker.compose.project.config_files") or "").split(",") if f]
+    image = config.get("Image")
+    container_id = info.get("Id")
+    if not (project and workdir and host_files and image and container_id):
+        return None
+
+    # Os arquivos do compose, como aparecem montados aqui (so o nome do arquivo conta: eles ficam na pasta do projeto)
+    files = []
+    for host_file in host_files:
+        name = host_file.replace("\\", "/").rsplit("/", 1)[-1]
+        if not (deploy_dir / name).is_file():
+            return None
+        files.append(f"{deploy_dir.as_posix()}/{name}")
+
+    compose = ["docker", "compose", "-p", project, "--project-directory", workdir]
+    if (deploy_dir / ".env").is_file():
+        compose += ["--env-file", f"{deploy_dir.as_posix()}/.env"]
+    for file in files:
+        compose += ["-f", file]
+
+    log = shlex.quote(str(log_path))
+    pull = " ".join(shlex.quote(part) for part in compose + ["pull"])
+    up = " ".join(shlex.quote(part) for part in compose + ["up", "-d"])
+    script = f"{pull} >> {log} 2>&1 && {up} >> {log} 2>&1"
+
+    return [
+        "docker", "run", "-d", "--rm",
+        "--name", helper_name,
+        "--user", "root",
+        "--entrypoint", "sh",
+        "--volumes-from", container_id,
+        "-e", f"APP_VERSION={target_version}",
+        image,
+        "-c", script,
+    ]
+
+
 def apply_update(target_version: str) -> Path:
-    """Dispara a atualizacao em background e retorna o arquivo de log. O processo do backend
-    provavelmente vai morrer no meio (o proprio container e recriado) -- por isso roda
-    desacoplado (`start_new_session`) em vez de esperar o resultado dentro da requisicao.
+    """Dispara a atualizacao em background e retorna o arquivo de log. O backend vai ser recriado no meio do caminho, por
+    isso quem roda o `docker compose` e um container auxiliar (ver build_helper_command), e nao este processo.
 
     Nao toca em volumes (`backend_data`/`backend_uploads`), so troca a imagem e recria os
     containers -- banco, uploads e os secrets gerados automaticamente continuam intactos.
     """
     deploy_dir = _deploy_dir()
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    log_path = _update_log_dir() / f"{timestamp}_v{target_version}.log"
+
+    info = _inspect_self()
+    helper = (
+        build_helper_command(info, target_version, log_path, deploy_dir, f"bihoster-updater-{timestamp}")
+        if info
+        else None
+    )
+
     compose_file = deploy_dir / "docker-compose.yml"
-    if not compose_file.exists():
+    if helper is None and not compose_file.exists():
         raise FileNotFoundError(
             f"docker-compose.yml nao encontrado em {deploy_dir} -- verifique se o volume "
             "`.:/deploy:ro` esta montado no servico backend."
@@ -196,35 +284,40 @@ def apply_update(target_version: str) -> Path:
 
     lock_path = _acquire_apply_lock()
 
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
-    log_path = _update_log_dir() / f"{timestamp}_v{target_version}.log"
-
-    env = os.environ.copy()
-    env["APP_VERSION"] = target_version
-
     try:
         with open(log_path, "wb") as log_file:
             log_file.write(f"Atualizando para v{target_version}\n".encode("utf-8"))
             log_file.flush()
-            subprocess.Popen(
-                [
-                    "sh",
-                    "-c",
-                    f"docker compose --project-directory {deploy_dir} -f {compose_file} pull "
-                    f"&& docker compose --project-directory {deploy_dir} -f {compose_file} up -d",
-                ],
-                stdout=log_file,
-                stderr=subprocess.STDOUT,
-                env=env,
-                start_new_session=True,
-            )
-    except Exception:
+            if helper is None:
+                # Sem os rotulos do compose (ex: instalacao fora do compose): o jeito antigo, direto daqui
+                env = os.environ.copy()
+                env["APP_VERSION"] = target_version
+                subprocess.Popen(
+                    [
+                        "sh",
+                        "-c",
+                        f"docker compose --project-directory {deploy_dir} -f {compose_file} pull "
+                        f"&& docker compose --project-directory {deploy_dir} -f {compose_file} up -d",
+                    ],
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                    env=env,
+                    start_new_session=True,
+                )
+            else:
+                result = subprocess.run(helper, capture_output=True, text=True, timeout=60)
+                if result.returncode != 0:
+                    raise UpdateCouldNotStart((result.stderr or result.stdout or "o Docker recusou").strip()[-400:])
+                log_file.write(f"Container auxiliar iniciado: {result.stdout.strip()[:20]}\n".encode("utf-8"))
+    except Exception as exc:
         # Nao conseguiu disparar: solta a trava, senao o admin ficaria bloqueado ate ela expirar
         lock_path.unlink(missing_ok=True)
+        if isinstance(exc, subprocess.SubprocessError):
+            raise UpdateCouldNotStart(str(exc)) from exc
         raise
 
-    # Em sucesso a trava fica de proposito: o processo segue em background e o container vai ser
-    # recriado. Ela expira sozinha (APPLY_LOCK_STALE_SECONDS).
+    # Em sucesso a trava fica de proposito: a atualizacao segue em background e o backend vai ser recriado. Ela
+    # expira sozinha (APPLY_LOCK_STALE_SECONDS).
     return log_path
 
 
