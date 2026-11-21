@@ -59,8 +59,17 @@ expira enquanto alguém a mantiver aberta.
 ### Atualizações
 
 **Administração → Atualizações** mostra a versão instalada, se há uma versão mais nova
-publicada (com o changelog da release) e o histórico de versões — consultando as releases
-públicas do GitHub, sem precisar configurar nada.
+publicada (com as notas dela) e o histórico de tudo o que mudou em cada versão. O botão
+**Verificar atualizações** consulta o GitHub na hora, sem precisar configurar nada.
+
+O histórico não depende do GitHub: ele vem junto com o sistema, do arquivo
+`backend/app/changelog/CHANGELOG.md`, então sempre bate com a versão instalada. Cada versão é
+uma seção `## 1.2.3 - 2026-01-31 - Título curto`, da mais recente para a mais antiga, com texto
+em Markdown simples (listas, títulos com `###`, **negrito**, `código`, links e imagens). Para
+mostrar uma imagem, coloque o arquivo em `backend/app/changelog/img/` e cite na seção com
+`![descrição](img/nome-do-arquivo.png)`; só imagens dessa pasta são carregadas. **Toda tag nova
+precisa da sua seção nesse arquivo antes de ser criada**: a CI usa a mesma seção para criar a
+Release no GitHub (sem ela, cai para as notas automáticas do GitHub).
 
 Por padrão, atualizar continua sendo manual: `git pull` (se você clonou o repo) e
 `docker compose pull && docker compose up -d`. Nenhum dado é perdido nesse processo — o banco,
