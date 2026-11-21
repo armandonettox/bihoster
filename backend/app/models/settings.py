@@ -31,6 +31,13 @@ class AppSettings(Base):
     error_title = Column(String, nullable=True)
     error_message = Column(String, nullable=True)
     error_button = Column(String, nullable=True)
+    # Textos das telas de aviso: fora do horario de acesso e sem acesso a nenhuma colecao (mesma regra: nulo = padrao)
+    outside_hours_title = Column(String, nullable=True)
+    outside_hours_message = Column(String, nullable=True)
+    outside_hours_button = Column(String, nullable=True)
+    no_access_title = Column(String, nullable=True)
+    no_access_message = Column(String, nullable=True)
+    no_access_button = Column(String, nullable=True)
 
     # nullable por causa da migracao automatica: ALTER TABLE nao suporta DEFAULT, entao linhas
     # existentes chegam com NULL; _to_out usa bool() para normalizar antes de devolver ao cliente

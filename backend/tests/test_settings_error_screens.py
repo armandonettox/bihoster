@@ -1,4 +1,4 @@
-"""Textos das telas de erro (404 e erro inesperado) personalizáveis em Configurações > Marca. Nulo ou vazio
+"""Textos das telas de erro (404, erro inesperado, fora do horário e sem acesso a coleção) personalizáveis em Configurações > Marca. Nulo ou vazio
 significa "usar o texto padrão da interface"; a rota GET é pública porque a tela de erro aparece até sem login."""
 
 import pytest
@@ -7,7 +7,10 @@ from sqlalchemy import inspect, text
 from app.models.settings import AppSettings
 from app.schemas.settings import ERROR_BUTTON_MAX_CHARS, ERROR_MESSAGE_MAX_CHARS, ERROR_TITLE_MAX_CHARS
 
-CAMPOS = ("not_found_title", "not_found_message", "not_found_button", "error_title", "error_message", "error_button")
+CAMPOS = (
+    "not_found_title", "not_found_message", "not_found_button", "error_title", "error_message", "error_button",
+    "outside_hours_title", "outside_hours_message", "outside_hours_button", "no_access_title", "no_access_message", "no_access_button",
+)
 
 
 def _headers(client, email: str = "admin@example.com") -> dict:
@@ -23,7 +26,7 @@ def test_por_padrao_todos_os_textos_vem_nulos(client):
         assert corpo[campo] is None
 
 
-def test_admin_grava_os_seis_textos_e_o_get_publico_devolve(client):
+def test_admin_grava_os_doze_textos_e_o_get_publico_devolve(client):
     headers = _headers(client)
     textos = {
         "not_found_title": "Não achamos essa página",
@@ -32,6 +35,12 @@ def test_admin_grava_os_seis_textos_e_o_get_publico_devolve(client):
         "error_title": "Tivemos um problema",
         "error_message": "Já estamos olhando. Tente de novo em instantes.",
         "error_button": "Tentar de novo",
+        "outside_hours_title": "Volte no seu horário",
+        "outside_hours_message": "Seu acesso é liberado só em horário comercial.",
+        "outside_hours_button": "Verificar de novo",
+        "no_access_title": "Quase lá",
+        "no_access_message": "Falta alguém liberar uma coleção para você.",
+        "no_access_button": "Trocar de conta",
     }
 
     resp = client.put("/settings/", json=textos, headers=headers)
@@ -100,6 +109,12 @@ def test_mudar_so_a_cor_nao_apaga_os_textos(client):
         ("error_message", ERROR_MESSAGE_MAX_CHARS),
         ("not_found_button", ERROR_BUTTON_MAX_CHARS),
         ("error_button", ERROR_BUTTON_MAX_CHARS),
+        ("outside_hours_title", ERROR_TITLE_MAX_CHARS),
+        ("no_access_title", ERROR_TITLE_MAX_CHARS),
+        ("outside_hours_message", ERROR_MESSAGE_MAX_CHARS),
+        ("no_access_message", ERROR_MESSAGE_MAX_CHARS),
+        ("outside_hours_button", ERROR_BUTTON_MAX_CHARS),
+        ("no_access_button", ERROR_BUTTON_MAX_CHARS),
     ],
 )
 def test_o_limite_de_tamanho_vale_e_um_a_mais_e_recusado(client, campo, limite):
