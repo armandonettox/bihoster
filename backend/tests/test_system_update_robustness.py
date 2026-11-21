@@ -38,42 +38,54 @@ def _headers(client) -> dict:
     return {"Authorization": f"Bearer {_register_and_login(client)}"}
 
 
-def test_consulta_da_ultima_release_usa_cache(monkeypatch):
-    with patch.object(system_update.httpx, "get", return_value=_fake_response(_release_payload())) as mocked:
+def _github(tags=("v1.2.0",), release_status: int = 200):
+    """Um GitHub de mentira: a lista de tags numa rota e a Release da tag mais nova na outra."""
+
+    def fake_get(url, **kwargs):
+        if url.endswith("/tags"):
+            return _fake_response([{"name": tag} for tag in tags])
+        return _fake_response(_release_payload("v1.2.0"), status=release_status)
+
+    return fake_get
+
+
+def test_consulta_da_ultima_versao_usa_cache(monkeypatch):
+    with patch.object(system_update.httpx, "get", side_effect=_github()) as mocked:
         system_update.fetch_latest_release()
         system_update.fetch_latest_release()
         system_update.fetch_latest_release()
 
-    assert mocked.call_count == 1
+    # Uma busca completa sao duas chamadas (as tags e a Release da mais nova); as outras duas vieram do cache
+    assert mocked.call_count == 2
 
 
 def test_force_ignora_o_cache():
-    with patch.object(system_update.httpx, "get", return_value=_fake_response(_release_payload())) as mocked:
+    with patch.object(system_update.httpx, "get", side_effect=_github()) as mocked:
         system_update.fetch_latest_release()
         system_update.fetch_latest_release(force=True)
 
-    assert mocked.call_count == 2
+    assert mocked.call_count == 4
 
 
 def test_falha_do_github_nao_e_cacheada():
-    ok = _fake_response(_release_payload())
-    with patch.object(system_update.httpx, "get", side_effect=[httpx.ConnectError("boom"), ok]) as mocked:
+    tags = _fake_response([{"name": "v1.2.0"}])
+    release = _fake_response(_release_payload("v1.2.0"))
+    with patch.object(system_update.httpx, "get", side_effect=[httpx.ConnectError("boom"), tags, release]) as mocked:
         with pytest.raises(httpx.HTTPError):
             system_update.fetch_latest_release()
-        release = system_update.fetch_latest_release()
+        latest = system_update.fetch_latest_release()
 
-    assert release.version == "1.2.0"
-    assert mocked.call_count == 2
+    assert latest.version == "1.2.0"
+    assert mocked.call_count == 3
 
 
-def test_historico_usa_cache():
-    payload = [_release_payload("v1.2.0"), _release_payload("v1.1.0")]
-    with patch.object(system_update.httpx, "get", return_value=_fake_response(payload)) as mocked:
-        first = system_update.fetch_release_history()
-        second = system_update.fetch_release_history()
+def test_historico_vem_do_sistema_e_nao_consulta_o_github(monkeypatch):
+    monkeypatch.setattr(system_update.settings, "app_version", "1.0.0")
+    with patch.object(system_update.httpx, "get", side_effect=AssertionError("nao deve ir ao GitHub")):
+        history = system_update.local_history()
 
-    assert mocked.call_count == 1
-    assert [r.version for r in first] == [r.version for r in second] == ["1.2.0", "1.1.0"]
+    assert history[0].version != history[-1].version
+    assert [r.version for r in history if r.is_current] == ["1.0.0"]
 
 
 def test_status_avisa_quando_a_verificacao_falha(client, monkeypatch):

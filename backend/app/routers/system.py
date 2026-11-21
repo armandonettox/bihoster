@@ -22,10 +22,11 @@ def get_current_version(_=Depends(get_current_user)):
 
 
 @router.get("/version")
-def get_version_status(_=Depends(require_global_permission("sistema.versao"))):
+def get_version_status(refresh: bool = False, _=Depends(require_global_permission("sistema.versao"))):
+    """`refresh=true` e o botao "Verificar agora": ignora o cache de alguns minutos e consulta o GitHub de novo."""
     check_failed = False
     try:
-        latest = system_update.fetch_latest_release()
+        latest = system_update.fetch_latest_release(force=refresh)
     except httpx.HTTPError:
         # GitHub fora do ar ou rate limit -- nao pode derrubar a aba, mas tambem nao pode fingir
         # que "esta atualizado": sinaliza a falha pra interface avisar em vez de mostrar "sem
@@ -45,10 +46,9 @@ def get_version_status(_=Depends(require_global_permission("sistema.versao"))):
 
 @router.get("/version/history")
 def get_version_history(_=Depends(require_global_permission("sistema.versao"))):
-    try:
-        return system_update.fetch_release_history()
-    except httpx.HTTPError:
-        raise HTTPException(status_code=502, detail="Nao foi possivel consultar as releases no GitHub agora.")
+    # Vem do historico que acompanha o sistema (app/changelog), sem consultar o GitHub: sempre completo e igual a versao
+    # instalada.
+    return system_update.local_history()
 
 
 @router.post("/version/apply")

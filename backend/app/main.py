@@ -11,7 +11,7 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core import ai_history_runner, alert_runner, cache_warmup, subscription_runner
+from app.core import ai_history_runner, alert_runner, cache_warmup, changelog, subscription_runner
 from app.core import powerbi as core_powerbi
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
@@ -195,6 +195,9 @@ async def request_timing(request: Request, call_next):
 # Absoluto (relativo a este arquivo, nao ao cwd) -- rodar `uvicorn app.main:app` de um
 # diretorio diferente de backend/ nao deve quebrar silenciosamente o serving de uploads.
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "static"
+# As imagens do historico de versoes vem na imagem do sistema (app/changelog/img). Esta rota precisa vir antes de
+# "/static", que senao responderia por ela.
+app.mount("/static/changelog", StaticFiles(directory=changelog.IMAGES_DIR), name="changelog-images")
 app.mount("/static", StaticFiles(directory=_STATIC_DIR), name="static")
 
 app.include_router(auth.router)

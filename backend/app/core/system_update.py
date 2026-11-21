@@ -1,4 +1,5 @@
 import os
+import re
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -8,6 +9,7 @@ from typing import Callable, Optional, TypeVar
 import httpx
 from pydantic import BaseModel
 
+from app.core import changelog
 from app.core.config import settings
 
 GITHUB_REPO = "armandonettox/bihoster"
@@ -94,52 +96,79 @@ def is_newer(candidate: str, current: str) -> bool:
     return _parse_version(candidate) > _parse_version(current)
 
 
-def fetch_release_history(limit: int = 10, force: bool = False) -> list[ReleaseInfo]:
-    """Ultimas releases publicadas no GitHub, mais recente primeiro. Marca qual delas e a
-    versao rodando agora (settings.app_version, gravada em /app/VERSION no build)."""
-    return _cached(f"history:{limit}", lambda: _fetch_release_history(limit), force)
+# Tags de versao (v1.2.3). Pre-lancamentos e outras tags nao contam.
+_TAG_PATTERN = re.compile(r"v?(\d+\.\d+\.\d+)")
+# O GitHub devolve no maximo 100 tags por pagina; cinco paginas cobrem 500 versoes
+_MAX_TAG_PAGES = 5
+_GITHUB_HEADERS = {"Accept": "application/vnd.github+json"}
 
 
-def _fetch_release_history(limit: int) -> list[ReleaseInfo]:
-    response = httpx.get(
-        f"{GITHUB_API_BASE}/releases",
-        params={"per_page": limit},
-        headers={"Accept": "application/vnd.github+json"},
-        timeout=_HTTP_TIMEOUT,
-    )
-    response.raise_for_status()
-    releases = []
-    for item in response.json():
-        version = item["tag_name"].lstrip("vV")
-        releases.append(
-            ReleaseInfo(
-                version=version,
-                name=item.get("name") or item["tag_name"],
-                changelog=item.get("body") or "",
-                published_at=item.get("published_at"),
-                is_current=version == settings.app_version,
-            )
+def local_history() -> list[ReleaseInfo]:
+    """Todas as versoes do historico que vem junto com o sistema (app/changelog/CHANGELOG.md), da mais recente para a
+    mais antiga. Nao consulta o GitHub: o historico sempre bate com a versao instalada."""
+    return [
+        ReleaseInfo(
+            version=entry.version,
+            name=entry.title,
+            changelog=entry.body,
+            published_at=entry.date,
+            is_current=entry.version == settings.app_version,
         )
-    return releases
+        for entry in changelog.load_entries()
+    ]
 
 
 def fetch_latest_release(force: bool = False) -> Optional[ReleaseInfo]:
-    """`force=True` ignora o cache -- usado ao aplicar a atualizacao, que precisa da versao real."""
+    """A versao mais nova publicada no GitHub. `force=True` ignora o cache -- usado ao aplicar a atualizacao, que precisa
+    da versao real."""
     return _cached("latest", _fetch_latest_release, force)
 
 
+def _latest_tag_version() -> Optional[str]:
+    """A maior versao entre as tags do repositorio. Olha as tags, e nao as Releases, porque nem toda tag ganha uma
+    Release (o projeto passou muitas versoes sem publicar nenhuma, e a ultima Release virou a mais velha da lista)."""
+    best: Optional[str] = None
+    for page in range(1, _MAX_TAG_PAGES + 1):
+        response = httpx.get(
+            f"{GITHUB_API_BASE}/tags",
+            params={"per_page": 100, "page": page},
+            headers=_GITHUB_HEADERS,
+            timeout=_HTTP_TIMEOUT,
+        )
+        response.raise_for_status()
+        items = response.json()
+        for item in items:
+            match = _TAG_PATTERN.fullmatch(item.get("name", ""))
+            if match and (best is None or _parse_version(match.group(1)) > _parse_version(best)):
+                best = match.group(1)
+        if len(items) < 100:
+            break
+    return best
+
+
 def _fetch_latest_release() -> Optional[ReleaseInfo]:
+    version = _latest_tag_version()
+    if version is None:
+        # Repo sem nenhuma tag de versao ainda.
+        return None
+
     response = httpx.get(
-        f"{GITHUB_API_BASE}/releases/latest",
-        headers={"Accept": "application/vnd.github+json"},
+        f"{GITHUB_API_BASE}/releases/tags/v{version}",
+        headers=_GITHUB_HEADERS,
         timeout=_HTTP_TIMEOUT,
     )
     if response.status_code == 404:
-        # Repo sem nenhuma release publicada ainda.
-        return None
+        # Tag sem Release: usa as notas do historico, se esta versao ja estiver nele, e senao so o numero.
+        entry = changelog.entry_for(version)
+        return ReleaseInfo(
+            version=version,
+            name=entry.title if entry else f"v{version}",
+            changelog=entry.body if entry else "",
+            published_at=entry.date if entry else None,
+            is_current=version == settings.app_version,
+        )
     response.raise_for_status()
     item = response.json()
-    version = item["tag_name"].lstrip("vV")
     return ReleaseInfo(
         version=version,
         name=item.get("name") or item["tag_name"],
