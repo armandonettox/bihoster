@@ -123,11 +123,12 @@ beforeEach(() => {
 describe("BrandTab - a prévia dentro do mesmo cartão do que ela mostra", () => {
   const cartoes = (container: HTMLElement) => Array.from(container.querySelectorAll<HTMLElement>(".brand-card"));
 
-  it("são três cartões: cores e logo com a prévia do sistema, o login com a prévia do login e as telas de erro", () => {
+  it("são quatro cartões: cores e logo com a prévia do sistema, o login com a prévia do login, as telas de erro e as de aviso", () => {
     const { container } = abrir();
 
-    const [primeira, segunda, terceira] = cartoes(container);
-    expect(cartoes(container)).toHaveLength(3);
+    const [primeira, segunda, terceira, quarta] = cartoes(container);
+    expect(cartoes(container)).toHaveLength(4);
+    expect(within(quarta).getByText("Telas de aviso")).toBeTruthy();
     expect(within(terceira).getByText("Telas de erro")).toBeTruthy();
     expect(within(terceira).getByTestId("previa-erro-notFound")).toBeTruthy();
     expect(within(terceira).getByTestId("previa-erro-error")).toBeTruthy();
@@ -476,9 +477,10 @@ describe("BrandTab - telas de erro", () => {
     expect(mensagemNaoEncontrada().placeholder).toBe("O endereço que você tentou acessar não existe ou foi removido.");
     expect(botaoNaoEncontrada().placeholder).toBe("Voltar para o início");
     expect(tituloErro().placeholder).toBe("Algo deu errado");
-    expect(screen.getAllByLabelText("Título")).toHaveLength(2);
-    expect(screen.getAllByLabelText("Mensagem")).toHaveLength(2);
-    expect(screen.getAllByLabelText("Texto do botão")).toHaveLength(2);
+    // Os dois primeiros grupos sao as telas de erro; os outros dois sao os das telas de aviso
+    expect(screen.getAllByLabelText("Título")).toHaveLength(4);
+    expect(screen.getAllByLabelText("Mensagem")).toHaveLength(4);
+    expect(screen.getAllByLabelText("Texto do botão")).toHaveLength(4);
   });
 
   it("sem personalização as prévias mostram os textos padrão e a barra não aparece", () => {
@@ -622,15 +624,16 @@ describe("BrandTab - telas de erro", () => {
     expect(tituloErro().value).toBe("Tivemos um problema");
   });
 
-  it("a prévia da 404 usa o logo da marca e as cores ainda não salvas; a de erro explica por que usa o logo padrão", () => {
+  it("as duas prévias de erro usam o logo da marca e as cores ainda não salvas, e dizem que cai no logo padrão", () => {
     abrir({ logo_url: "/static/uploads/logo.png" });
 
     fireEvent.change(primaria(), { target: { value: "#065F46" } });
 
     expect(previaNaoEncontrada().getAttribute("data-logo")).toContain("logo.png");
+    expect(previaErro().getAttribute("data-logo")).toContain("logo.png");
     expect(previaNaoEncontrada().getAttribute("data-primary")).toBe("#065F46");
     expect(previaErro().getAttribute("data-primary")).toBe("#065F46");
-    expect(screen.getByText(/Usa sempre o logo padrão: essa tela aparece quando algo já quebrou/)).toBeTruthy();
+    expect(screen.getByText("Usa o logo da marca; se a imagem não carregar, mostra o logo padrão.")).toBeTruthy();
   });
 
   it("as duas prévias de erro são regiões com nome próprio e usam o tamanho que cabe na coluna", () => {
@@ -640,5 +643,90 @@ describe("BrandTab - telas de erro", () => {
     expect(screen.getByRole("complementary", { name: "Prévia da tela de erro inesperado" })).toBeTruthy();
     expect(previaNaoEncontrada().getAttribute("data-scale")).toBe("0.55");
     expect(previaErro().getAttribute("data-scale")).toBe("0.55");
+  });
+});
+
+describe("BrandTab - telas de aviso (fora do horário e sem acesso)", () => {
+  const campo = (rotulo: string, indice: number) => screen.getAllByLabelText(rotulo)[indice] as HTMLInputElement;
+  // Os dois primeiros grupos sao as telas de erro; o terceiro e o quarto sao os de fora do horario e sem acesso
+  const tituloHorario = () => campo("Título", 2);
+  const mensagemHorario = () => campo("Mensagem", 2);
+  const botaoHorario = () => campo("Texto do botão", 2);
+  const tituloSemAcesso = () => campo("Título", 3);
+  const mensagemSemAcesso = () => campo("Mensagem", 3);
+  const botaoSemAcesso = () => campo("Texto do botão", 3);
+  const previaHorario = () => screen.getByRole("complementary", { name: "Prévia da tela fora do horário" });
+  const previaSemAcesso = () => screen.getByRole("complementary", { name: "Prévia da tela sem acesso a coleção" });
+
+  it("mostra os seis campos com o texto padrão como sugestão", () => {
+    abrir();
+
+    expect(screen.getByText("Fora do horário de acesso", { selector: "legend" })).toBeTruthy();
+    expect(screen.getByText("Sem acesso a nenhuma coleção", { selector: "legend" })).toBeTruthy();
+    expect(tituloHorario().placeholder).toBe("Fora do horário de acesso");
+    expect(mensagemHorario().placeholder).toBe("Você não pode usar o sistema neste momento.");
+    expect(botaoHorario().placeholder).toBe("Tentar novamente");
+    expect(tituloSemAcesso().placeholder).toBe("Bem-vindo, e o nome da pessoa");
+    expect(mensagemSemAcesso().placeholder).toContain("Você ainda não tem acesso a nenhuma coleção.");
+    expect(botaoSemAcesso().placeholder).toBe("Sair");
+  });
+
+  it("as duas prévias seguem o que está digitado e usam o padrão quando o campo está em branco", () => {
+    abrir();
+
+    expect(within(previaHorario()).getByText("Fora do horário de acesso")).toBeTruthy();
+    expect(within(previaHorario()).getByText("Tentar novamente")).toBeTruthy();
+    expect(within(previaSemAcesso()).getByText("Sair")).toBeTruthy();
+
+    fireEvent.change(tituloHorario(), { target: { value: "Volte no seu horário" } });
+    fireEvent.change(botaoSemAcesso(), { target: { value: "Trocar de conta" } });
+
+    expect(within(previaHorario()).getByText("Volte no seu horário")).toBeTruthy();
+    expect(within(previaSemAcesso()).getByText("Trocar de conta")).toBeTruthy();
+  });
+
+  it("com mensagem própria na tela de fora do horário, a linha de quando o acesso volta continua na prévia", () => {
+    abrir();
+    expect(within(previaHorario()).queryByText(/O seu acesso volta em/)).toBeNull();
+
+    fireEvent.change(mensagemHorario(), { target: { value: "Seu acesso é só em horário comercial." } });
+
+    expect(within(previaHorario()).getByText("Seu acesso é só em horário comercial.")).toBeTruthy();
+    expect(within(previaHorario()).getByText(/O seu acesso volta em/)).toBeTruthy();
+  });
+
+  it("Salvar manda só os textos de aviso que mudaram", async () => {
+    abrir();
+
+    fireEvent.change(tituloHorario(), { target: { value: "  Volte no seu horário  " } });
+    fireEvent.change(mensagemSemAcesso(), { target: { value: "Falta alguém liberar uma coleção." } });
+    fireEvent.click(salvar());
+
+    await waitFor(() =>
+      expect(api.updateSettings).toHaveBeenCalledWith({
+        outside_hours_title: "Volte no seu horário",
+        no_access_message: "Falta alguém liberar uma coleção.",
+      }),
+    );
+    expect(api.updateSettings).toHaveBeenCalledTimes(1);
+  });
+
+  it("Restaurar textos das telas de aviso esvazia só os campos de aviso", () => {
+    abrir({ error_title: "Tivemos um problema", outside_hours_title: "Volte no seu horário", no_access_button: "Trocar de conta" });
+
+    fireEvent.click(screen.getByText("Restaurar textos das telas de aviso"));
+
+    expect(tituloHorario().value).toBe("");
+    expect(botaoSemAcesso().value).toBe("");
+    expect(campo("Título", 1).value).toBe("Tivemos um problema"); // o campo da tela de erro nao mexe
+  });
+
+  it("Restaurar textos padrão das telas de erro não apaga os de aviso", () => {
+    abrir({ error_title: "Tivemos um problema", outside_hours_title: "Volte no seu horário" });
+
+    fireEvent.click(screen.getByText("Restaurar textos padrão"));
+
+    expect(campo("Título", 1).value).toBe("");
+    expect(tituloHorario().value).toBe("Volte no seu horário");
   });
 });

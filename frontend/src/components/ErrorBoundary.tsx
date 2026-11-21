@@ -1,7 +1,8 @@
 import { Component, type ContextType, type ReactNode } from "react";
 import { BrandingContext } from "../context/brandingContextObject";
 import { errorScreenTexts } from "../utils/errorScreens";
-import DefaultBrandLogo from "./DefaultBrandLogo";
+import { assetUrl } from "../api/client";
+import BrandLogo from "./BrandLogo";
 import ErrorScreen from "./ErrorScreen";
 
 interface Props {
@@ -46,12 +47,13 @@ export default class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       const texts = errorScreenTexts("error", this.context?.settings);
+      const logo = this.context?.settings?.logo_url;
+      const logoUrl = typeof logo === "string" && logo ? assetUrl(logo) : null;
       return (
         <ErrorScreen
-          // Sempre a logo padrao: este componente roda quando algo ja quebrou, entao nao depende da logo da marca
-          // (que poderia ser justamente a causa do erro). So os textos podem ser personalizados, e voltam ao padrao
-          // se a marca nao tiver carregado.
-          logo={<DefaultBrandLogo className="error-page-logo" />}
+          // A logo da marca quando existe; se a imagem nao carregar (ou a marca nao tiver carregado), a logo padrao,
+          // porque esta tela roda quando algo ja quebrou e precisa conseguir aparecer sempre.
+          logo={<BrandLogo logoUrl={logoUrl} className="error-page-logo" />}
           code="Ops"
           title={texts.title}
           message={texts.message}

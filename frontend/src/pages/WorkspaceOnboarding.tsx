@@ -7,6 +7,7 @@ import { useWorkspace } from "../context/WorkspaceContext";
 import { assetUrl, extractErrorMessage } from "../api/client";
 import { useBranding } from "../context/BrandingContext";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
+import { customText, noticeScreenTexts } from "../utils/errorScreens";
 
 export default function WorkspaceOnboarding() {
   const { settings } = useBranding();
@@ -31,6 +32,9 @@ export default function WorkspaceOnboarding() {
   }
 
   const canCreateCollection = useAccess().can("colecao.criar");
+  // Textos da marca: o titulo padrao leva o nome da pessoa; a mensagem personalizada vale para quem nao pode criar coleção
+  const texts = noticeScreenTexts("noAccess", settings);
+  const title = customText(settings?.no_access_title) ?? `Bem-vindo, ${formatPersonName(user?.name ?? "")}`;
 
   return (
     <div className="auth-screen">
@@ -40,7 +44,7 @@ export default function WorkspaceOnboarding() {
         ) : (
           <DefaultBrandLogo className="auth-logo" />
         )}
-        <h1 className="auth-title">Bem-vindo, {formatPersonName(user?.name ?? "")}</h1>
+        <h1 className="auth-title">{title}</h1>
 
         {canCreateCollection ? (
           <form onSubmit={handleSubmit}>
@@ -62,14 +66,11 @@ export default function WorkspaceOnboarding() {
             </button>
           </form>
         ) : (
-          <p className="auth-subtitle">
-            Voce ainda nao tem acesso a nenhuma colecao. Peca para um administrador te adicionar a um
-            grupo com acesso -- so quem esta no grupo Administradores pode criar colecoes.
-          </p>
+          <p className="auth-subtitle">{texts.message}</p>
         )}
 
         <button type="button" className="btn btn-ghost btn-sm" onClick={logout} style={{ marginTop: 4 }}>
-          Sair
+          {texts.button}
         </button>
       </div>
     </div>

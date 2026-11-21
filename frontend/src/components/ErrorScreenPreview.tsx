@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import type { ErrorScreenKind, ErrorScreenTexts } from "../utils/errorScreens";
-import DefaultBrandLogo from "./DefaultBrandLogo";
+import BrandLogo from "./BrandLogo";
 import ErrorScreen from "./ErrorScreen";
 
 const STAGE_WIDTH = 720;
@@ -8,7 +8,7 @@ const STAGE_HEIGHT = 340;
 const DEFAULT_SCALE = 0.5;
 
 /** Prévia, em escala, de uma tela de erro com os textos e as cores da marca (mesmo desenho da tela de verdade).
- * A página 404 usa o logo da marca; a de erro inesperado usa sempre o logo padrão, como acontece de verdade. */
+ * As duas usam o logo da marca e, sem ele (ou se não carregar), o logo padrão, como acontece de verdade. */
 export default function ErrorScreenPreview({
   kind,
   texts,
@@ -30,12 +30,7 @@ export default function ErrorScreenPreview({
     "--color-secondary": secondaryColor,
   } as CSSProperties;
 
-  const logo =
-    kind === "notFound" && logoUrl ? (
-      <img src={logoUrl} alt="" className="error-page-logo" />
-    ) : (
-      <DefaultBrandLogo className="error-page-logo" />
-    );
+  const logo = <BrandLogo logoUrl={logoUrl} className="error-page-logo" />;
 
   return (
     <div className="login-preview-frame" style={{ width: STAGE_WIDTH * scale, height: STAGE_HEIGHT * scale }}>

@@ -7,18 +7,22 @@ import ImageUploadField from "../../components/ImageUploadField";
 import LoginPreview from "../../components/LoginPreview";
 import AppShellPreview from "../../components/AppShellPreview";
 import ErrorScreenPreview from "../../components/ErrorScreenPreview";
+import NoticeScreenPreview from "../../components/NoticeScreenPreview";
 import { useToast } from "../../context/ToastContext";
 import { extractErrorMessage } from "../../api/client";
 import {
   DEFAULT_ERROR_TEXTS,
+  DEFAULT_NOTICE_TEXTS,
   ERROR_BUTTON_MAX,
   ERROR_MESSAGE_MAX,
   ERROR_TITLE_MAX,
+  customText,
   errorScreenTexts,
+  noticeScreenTexts,
 } from "../../utils/errorScreens";
 
-// Os seis textos das telas de erro, na ordem em que aparecem na tela
-const ERROR_TEXT_FIELDS = [
+// Os seis textos das telas de erro e os seis das telas de aviso, na ordem em que aparecem na tela
+const ERROR_SCREEN_FIELDS = [
   "not_found_title",
   "not_found_message",
   "not_found_button",
@@ -26,6 +30,15 @@ const ERROR_TEXT_FIELDS = [
   "error_message",
   "error_button",
 ] as const;
+const NOTICE_SCREEN_FIELDS = [
+  "outside_hours_title",
+  "outside_hours_message",
+  "outside_hours_button",
+  "no_access_title",
+  "no_access_message",
+  "no_access_button",
+] as const;
+const ERROR_TEXT_FIELDS = [...ERROR_SCREEN_FIELDS, ...NOTICE_SCREEN_FIELDS] as const;
 type ErrorTextField = (typeof ERROR_TEXT_FIELDS)[number];
 type ErrorTextValues = Record<ErrorTextField, string>;
 
@@ -210,8 +223,17 @@ export default function BrandTab() {
     setErrorTexts((current) => ({ ...current, [field]: value }));
   }
 
+  // Cada cartao restaura so os seus campos
+  function resetTexts(fields: readonly ErrorTextField[]) {
+    setErrorTexts((current) => ({ ...current, ...Object.fromEntries(fields.map((field) => [field, ""])) }));
+  }
+
   function handleResetErrorTexts() {
-    setErrorTexts(errorTextsFromSettings(null));
+    resetTexts(ERROR_SCREEN_FIELDS);
+  }
+
+  function handleResetNoticeTexts() {
+    resetTexts(NOTICE_SCREEN_FIELDS);
   }
 
   function handlePrimaryPickerChange(value: string) {
@@ -360,6 +382,8 @@ export default function BrandTab() {
   // As prévias das telas de erro seguem o que está digitado, mesmo sem salvar; campo em branco mostra o padrão
   const notFoundTexts = errorScreenTexts("notFound", errorTexts);
   const errorTextsLive = errorScreenTexts("error", errorTexts);
+  const outsideHoursTexts = noticeScreenTexts("outsideHours", errorTexts);
+  const noAccessTexts = noticeScreenTexts("noAccess", errorTexts);
 
   return (
     <div className="brand-layout">
@@ -624,9 +648,120 @@ export default function BrandTab() {
               secondaryColor={previewSecondary}
               scale={PREVIEW_SCALE}
             />
-            <p className="field-hint brand-preview-note">
-              Usa sempre o logo padrão: essa tela aparece quando algo já quebrou e não pode depender da marca.
+            <p className="field-hint brand-preview-note">Usa o logo da marca; se a imagem não carregar, mostra o logo padrão.</p>
+          </aside>
+        </div>
+      </div>
+
+      {/* Cartão 4: os textos das telas de aviso (fora do horário e sem acesso a coleção) e a prévia de cada uma */}
+      <div className="settings-section brand-card">
+        <div className="brand-card-main">
+          <h2 className="settings-section-title">Telas de aviso</h2>
+          <p className="settings-section-desc">
+            Os textos das telas que avisam a pessoa que ela não pode entrar agora: fora do horário de acesso e sem acesso a
+            nenhuma coleção. Valem depois de salvar; a prévia ao lado mostra como ficam.
+          </p>
+
+          <fieldset className="brand-error-group">
+            <legend>Fora do horário de acesso</legend>
+            <div className="brand-error-fields">
+              <ErrorTextField
+                id="brand-hours-title"
+                label="Título"
+                value={errorTexts.outside_hours_title}
+                placeholder={DEFAULT_NOTICE_TEXTS.outsideHours.title}
+                max={ERROR_TITLE_MAX}
+                onChange={(value) => handleErrorTextChange("outside_hours_title", value)}
+              />
+              <ErrorTextField
+                id="brand-hours-message"
+                label="Mensagem"
+                value={errorTexts.outside_hours_message}
+                placeholder={DEFAULT_NOTICE_TEXTS.outsideHours.message}
+                max={ERROR_MESSAGE_MAX}
+                multiline
+                onChange={(value) => handleErrorTextChange("outside_hours_message", value)}
+              />
+              <ErrorTextField
+                id="brand-hours-button"
+                label="Texto do botão"
+                value={errorTexts.outside_hours_button}
+                placeholder={DEFAULT_NOTICE_TEXTS.outsideHours.button}
+                max={ERROR_BUTTON_MAX}
+                onChange={(value) => handleErrorTextChange("outside_hours_button", value)}
+              />
+            </div>
+            <p className="field-hint">
+              Sem mensagem sua, a tela diz quando o acesso volta. Com mensagem sua, ela vem primeiro e a linha de quando o
+              acesso volta continua logo abaixo. O horário permitido e o pedido de mais tempo aparecem sempre.
             </p>
+          </fieldset>
+
+          <fieldset className="brand-error-group">
+            <legend>Sem acesso a nenhuma coleção</legend>
+            <div className="brand-error-fields">
+              <ErrorTextField
+                id="brand-noaccess-title"
+                label="Título"
+                value={errorTexts.no_access_title}
+                placeholder="Bem-vindo, e o nome da pessoa"
+                max={ERROR_TITLE_MAX}
+                onChange={(value) => handleErrorTextChange("no_access_title", value)}
+              />
+              <ErrorTextField
+                id="brand-noaccess-message"
+                label="Mensagem"
+                value={errorTexts.no_access_message}
+                placeholder={DEFAULT_NOTICE_TEXTS.noAccess.message}
+                max={ERROR_MESSAGE_MAX}
+                multiline
+                onChange={(value) => handleErrorTextChange("no_access_message", value)}
+              />
+              <ErrorTextField
+                id="brand-noaccess-button"
+                label="Texto do botão"
+                value={errorTexts.no_access_button}
+                placeholder={DEFAULT_NOTICE_TEXTS.noAccess.button}
+                max={ERROR_BUTTON_MAX}
+                onChange={(value) => handleErrorTextChange("no_access_button", value)}
+              />
+            </div>
+            <p className="field-hint">
+              A mensagem vale para quem não pode criar coleção. Quem pode criar vê o formulário de criar, que não muda. O
+              botão é o de sair da conta.
+            </p>
+          </fieldset>
+
+          <button type="button" className="btn btn-ghost btn-sm" onClick={handleResetNoticeTexts}>
+            Restaurar textos das telas de aviso
+          </button>
+        </div>
+
+        <div className="brand-card-preview">
+          <aside aria-label="Prévia da tela fora do horário">
+            <h3 className="brand-preview-title">Prévia de &quot;Fora do horário&quot;</h3>
+            <NoticeScreenPreview
+              kind="outsideHours"
+              texts={outsideHoursTexts}
+              logoUrl={logoUrl}
+              primaryColor={previewPrimary}
+              secondaryColor={previewSecondary}
+              openingLine={customText(errorTexts.outside_hours_message) !== null}
+              scale={PREVIEW_SCALE}
+            />
+            <p className="field-hint brand-preview-note">Usa o logo e as cores da marca.</p>
+          </aside>
+          <aside aria-label="Prévia da tela sem acesso a coleção">
+            <h3 className="brand-preview-title">Prévia de &quot;Sem acesso&quot;</h3>
+            <NoticeScreenPreview
+              kind="noAccess"
+              texts={noAccessTexts}
+              logoUrl={logoUrl}
+              primaryColor={previewPrimary}
+              secondaryColor={previewSecondary}
+              scale={PREVIEW_SCALE}
+            />
+            <p className="field-hint brand-preview-note">Mostra o texto de quem não pode criar coleção.</p>
           </aside>
         </div>
       </div>

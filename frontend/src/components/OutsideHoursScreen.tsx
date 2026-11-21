@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState } from "react";
+import { useContext, useEffect, useRef, useState } from "react";
 import * as extensionsApi from "../api/accessExtensions";
 import type { ExtensionRequest } from "../api/accessExtensions";
-import { extractErrorMessage } from "../api/client";
+import { assetUrl, extractErrorMessage } from "../api/client";
+import { BrandingContext } from "../context/brandingContextObject";
+import { customText, noticeScreenTexts } from "../utils/errorScreens";
+import BrandLogo from "./BrandLogo";
 import { formatNextOpen } from "../utils/outsideHours";
 import type { OutsideHoursInfo } from "../utils/outsideHours";
 import { formatPersonName } from "../utils/personName";
@@ -22,6 +25,12 @@ const MIN_REASON = 5;
  * momento, menos os de pedir mais tempo. Com um pedido aberto, pergunta de tempos em tempos e entra sozinha quando liberam. */
 export default function OutsideHoursScreen({ info, retrying = false, onRetry, onLeave, pollMs = 15000 }: Props) {
   const nextOpen = formatNextOpen(info);
+  // Logo e textos da marca. O contexto pode nao existir (esta tela nao exige nada do app): vale o padrao.
+  const settings = useContext(BrandingContext)?.settings;
+  const texts = noticeScreenTexts("outsideHours", settings);
+  const customMessage = customText(settings?.outside_hours_message);
+  const logo = settings?.logo_url ? assetUrl(settings.logo_url) : null;
+  const openingLine = nextOpen ? `O seu acesso volta em ${nextOpen}.` : null;
   const [request, setRequest] = useState<ExtensionRequest | null>(null);
   const [reason, setReason] = useState("");
   const [sending, setSending] = useState(false);
@@ -70,10 +79,11 @@ export default function OutsideHoursScreen({ info, retrying = false, onRetry, on
   return (
     <div className="auth-screen">
       <div className="auth-card" role="alert">
-        <h1 className="auth-title">Fora do horário de acesso</h1>
-        <p className="auth-subtitle">
-          {nextOpen ? `O seu acesso volta em ${nextOpen}.` : "Você não pode usar o sistema neste momento."}
-        </p>
+        <BrandLogo logoUrl={logo} className="auth-logo" />
+        <h1 className="auth-title">{texts.title}</h1>
+        {/* Sem mensagem personalizada, a linha de quando o acesso volta e a mensagem; com ela, a linha vem logo abaixo */}
+        <p className="auth-subtitle">{customMessage ?? openingLine ?? texts.message}</p>
+        {customMessage && openingLine && <p className="auth-subtitle">{openingLine}</p>}
 
         {info.windows.length > 0 && (
           <div className="field">
@@ -130,7 +140,7 @@ export default function OutsideHoursScreen({ info, retrying = false, onRetry, on
 
         <div style={{ display: "flex", gap: 8 }}>
           <button type="button" className="btn btn-primary" style={{ flex: 1 }} onClick={onRetry} disabled={retrying}>
-            {retrying ? "Verificando..." : "Tentar novamente"}
+            {retrying ? "Verificando..." : texts.button}
           </button>
           <button type="button" className="btn btn-ghost" onClick={onLeave}>
             Sair

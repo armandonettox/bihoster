@@ -1,5 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_ERROR_TEXTS, ERROR_BUTTON_MAX, ERROR_MESSAGE_MAX, ERROR_TITLE_MAX, errorScreenTexts } from "./errorScreens";
+import {
+  DEFAULT_ERROR_TEXTS,
+  DEFAULT_NOTICE_TEXTS,
+  ERROR_BUTTON_MAX,
+  ERROR_MESSAGE_MAX,
+  ERROR_TITLE_MAX,
+  customText,
+  errorScreenTexts,
+  noticeScreenTexts,
+} from "./errorScreens";
 
 describe("errorScreenTexts", () => {
   it("sem marca carregada devolve os textos padrão das duas telas", () => {
@@ -46,5 +55,47 @@ describe("errorScreenTexts", () => {
 
   it("os limites são os mesmos do servidor", () => {
     expect([ERROR_TITLE_MAX, ERROR_MESSAGE_MAX, ERROR_BUTTON_MAX]).toEqual([80, 300, 40]);
+  });
+});
+
+describe("noticeScreenTexts", () => {
+  it("sem marca carregada devolve os textos padrão das duas telas de aviso", () => {
+    expect(noticeScreenTexts("outsideHours", null)).toEqual(DEFAULT_NOTICE_TEXTS.outsideHours);
+    expect(noticeScreenTexts("noAccess", undefined)).toEqual(DEFAULT_NOTICE_TEXTS.noAccess);
+  });
+
+  it("os padrões são os que a interface sempre mostrou, agora com acento", () => {
+    expect(DEFAULT_NOTICE_TEXTS.outsideHours.title).toBe("Fora do horário de acesso");
+    expect(DEFAULT_NOTICE_TEXTS.outsideHours.button).toBe("Tentar novamente");
+    expect(DEFAULT_NOTICE_TEXTS.noAccess.button).toBe("Sair");
+    expect(DEFAULT_NOTICE_TEXTS.noAccess.message).toContain("Você ainda não tem acesso a nenhuma coleção.");
+  });
+
+  it("cada tela lê só os seus campos", () => {
+    const marca = { outside_hours_title: "Volte no seu horário", no_access_button: "Trocar de conta", error_title: "Outro" };
+
+    expect(noticeScreenTexts("outsideHours", marca).title).toBe("Volte no seu horário");
+    expect(noticeScreenTexts("outsideHours", marca).button).toBe(DEFAULT_NOTICE_TEXTS.outsideHours.button);
+    expect(noticeScreenTexts("noAccess", marca).title).toBe(DEFAULT_NOTICE_TEXTS.noAccess.title);
+    expect(noticeScreenTexts("noAccess", marca).button).toBe("Trocar de conta");
+  });
+
+  it("texto vazio ou só com espaços vale como não preenchido", () => {
+    const textos = noticeScreenTexts("outsideHours", { outside_hours_title: "   ", outside_hours_message: "", outside_hours_button: "  Verificar  " });
+
+    expect(textos.title).toBe(DEFAULT_NOTICE_TEXTS.outsideHours.title);
+    expect(textos.message).toBe(DEFAULT_NOTICE_TEXTS.outsideHours.message);
+    expect(textos.button).toBe("Verificar");
+  });
+});
+
+describe("customText", () => {
+  it("devolve o texto sem espaços nas pontas ou nulo quando não há texto", () => {
+    expect(customText("  oi  ")).toBe("oi");
+    expect(customText("   ")).toBeNull();
+    expect(customText("")).toBeNull();
+    expect(customText(null)).toBeNull();
+    expect(customText(undefined)).toBeNull();
+    expect(customText(5)).toBeNull();
   });
 });

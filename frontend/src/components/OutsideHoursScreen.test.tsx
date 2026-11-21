@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as authApi from "../api/auth";
 import * as extensionsApi from "../api/accessExtensions";
 import type { ExtensionRequest } from "../api/accessExtensions";
+import type { AppSettings } from "../api/settings";
+import { BrandingContext } from "../context/brandingContextObject";
 import OutsideHoursScreen from "./OutsideHoursScreen";
 import { AuthProvider, useAuth } from "../context/AuthContext";
 import { OUTSIDE_HOURS_EVENT, formatNextOpen, outsideHoursFrom } from "../utils/outsideHours";
@@ -190,5 +192,55 @@ describe("OutsideHoursScreen - pedir mais tempo", () => {
 
     expect(await screen.findByText("A liberação do seu último pedido terminou.")).toBeTruthy();
     expect(onRetry).not.toHaveBeenCalled();
+  });
+});
+
+describe("OutsideHoursScreen - marca e textos personalizados", () => {
+  function comMarca(settings: Partial<AppSettings> | null) {
+    return render(
+      <BrandingContext.Provider value={{ settings: settings as AppSettings | null, loaded: true, reload: async () => undefined }}>
+        <OutsideHoursScreen info={INFO} onRetry={vi.fn()} onLeave={vi.fn()} pollMs={20} />
+      </BrandingContext.Provider>,
+    );
+  }
+
+  it("sem personalização mostra os textos de sempre e a logo padrão", async () => {
+    const { container } = comMarca({});
+
+    expect(await screen.findByText("Fora do horário de acesso")).toBeTruthy();
+    expect(screen.getByText(/O seu acesso volta em segunda-feira/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tentar novamente" })).toBeTruthy();
+    expect(container.querySelector("img[src*='/static/uploads/']")).toBeNull();
+    expect(container.querySelector(".auth-logo")).not.toBeNull();
+  });
+
+  it("mostra a logo da marca", async () => {
+    const { container } = comMarca({ logo_url: "/static/uploads/minha-marca.png" });
+    await screen.findByText("Fora do horário de acesso");
+
+    const logo = container.querySelector("img.auth-logo") as HTMLImageElement;
+    expect(logo.getAttribute("src")).toContain("minha-marca.png");
+  });
+
+  it("título e botão personalizados trocam os de sempre", async () => {
+    comMarca({ outside_hours_title: "Volte no seu horário", outside_hours_button: "Verificar de novo" });
+
+    expect(await screen.findByText("Volte no seu horário")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Verificar de novo" })).toBeTruthy();
+    expect(screen.queryByText("Fora do horário de acesso")).toBeNull();
+  });
+
+  it("mensagem personalizada vem primeiro e a linha de quando o acesso volta continua abaixo", async () => {
+    comMarca({ outside_hours_message: "Seu acesso é só em horário comercial." });
+
+    expect(await screen.findByText("Seu acesso é só em horário comercial.")).toBeTruthy();
+    expect(screen.getByText(/O seu acesso volta em segunda-feira/i)).toBeTruthy();
+  });
+
+  it("o horário permitido e o pedido de mais tempo aparecem mesmo com tudo personalizado", async () => {
+    comMarca({ outside_hours_title: "T", outside_hours_message: "M", outside_hours_button: "B" });
+
+    expect(await screen.findByText("Seg a Sex, 08:00 às 18:00")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Pedir mais tempo" })).toBeTruthy();
   });
 });

@@ -79,11 +79,36 @@ describe("ErrorBoundary - textos da tela de erro", () => {
     expect(screen.queryByText("Essa página sumiu")).toBeNull();
   });
 
-  it("sempre usa o logo padrão, mesmo com uma logo da marca configurada", () => {
+  it("usa a logo da marca quando existe", () => {
     const { container } = comMarca(marca({ logo_url: "/static/uploads/minha-marca.png" }));
 
-    expect(container.querySelector("img[src*='/static/uploads/']")).toBeNull();
+    const logo = container.querySelector("img.error-page-logo") as HTMLImageElement;
+    expect(logo).not.toBeNull();
+    expect(logo.getAttribute("src")).toContain("minha-marca.png");
+  });
+
+  it("se a imagem da logo não carregar, cai para a logo padrão e a tela continua", () => {
+    const { container } = comMarca(marca({ logo_url: "/static/uploads/minha-marca.png" }));
+
+    fireEvent.error(container.querySelector("img.error-page-logo") as HTMLImageElement);
+
     expect(container.querySelector("img[src*='minha-marca']")).toBeNull();
+    expect(container.querySelector(".error-page-logo")).not.toBeNull();
+    expect(screen.getByRole("heading", { name: "Algo deu errado" })).toBeTruthy();
+  });
+
+  it("sem logo da marca, ou fora de qualquer provedor, usa a logo padrão", () => {
+    const semLogo = comMarca(marca({ logo_url: null }));
+    expect(semLogo.container.querySelector("img[src*='/static/uploads/']")).toBeNull();
+    expect(semLogo.container.querySelector(".error-page-logo")).not.toBeNull();
+    semLogo.unmount();
+
+    const { container } = render(
+      <ErrorBoundary>
+        <Quebrado />
+      </ErrorBoundary>,
+    );
+    expect(container.querySelector("img[src*='/static/uploads/']")).toBeNull();
     expect(container.querySelector(".error-page-logo")).not.toBeNull();
   });
 

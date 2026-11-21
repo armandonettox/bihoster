@@ -23,6 +23,13 @@ export interface AppSettings {
   error_title: string | null;
   error_message: string | null;
   error_button: string | null;
+  /** Textos das telas de aviso (fora do horário e sem acesso a coleção). Nulo = usar o texto padrão. */
+  outside_hours_title: string | null;
+  outside_hours_message: string | null;
+  outside_hours_button: string | null;
+  no_access_title: string | null;
+  no_access_message: string | null;
+  no_access_button: string | null;
   allow_registration: boolean;
   google_oauth_enabled: boolean;
   google_client_id: string | null;
