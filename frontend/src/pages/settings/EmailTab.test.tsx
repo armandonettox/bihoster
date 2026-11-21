@@ -70,7 +70,14 @@ async function abrir(dados: EmailSettings = VAZIO) {
 }
 
 // Por prefixo: alguns rotulos tem um texto de ajuda dentro, que entra no nome do rotulo
-const campo = (nome: string) => screen.getByLabelText(new RegExp(`^${nome}`)) as HTMLInputElement;
+// Dentro da janela aberta (o titulo dela tambem rotula a janela inteira, entao fora dela "Servidor" casaria duas vezes)
+const campo = (nome: string) =>
+  within(screen.queryByRole("dialog") ?? document.body).getByLabelText(new RegExp(`^${nome}`)) as HTMLInputElement;
+const abrirServidor = () => fireEvent.click(screen.getByRole("button", { name: "Editar Servidor de e-mail (SMTP)" }));
+const abrirLogo = () => fireEvent.click(screen.getByRole("button", { name: "Editar Logo dos e-mails" }));
+const abrirTeste = () => fireEvent.click(screen.getByRole("button", { name: "Enviar e-mail de teste" }));
+const salvarServidor = () => fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Salvar" }));
+const linha = (nome: string) => screen.getByText(nome, { selector: ".email-template-name" }).closest("li") as HTMLElement;
 
 beforeEach(() => {
   listTemplates.mockReset();
@@ -81,24 +88,30 @@ beforeEach(() => {
   update.mockImplementation(async () => CONFIGURADO);
 });
 
-describe("EmailTab - carregar", () => {
-  it("sem configuracao comeca com STARTTLS e porta 587", async () => {
-    await abrir();
-
-    expect(campo("Porta").value).toBe("587");
-    expect((screen.getByLabelText("Segurança") as HTMLSelectElement).value).toBe("starttls");
-    expect(campo("Servidor").value).toBe("");
-  });
-
-  it("mostra o que ja esta configurado, e a senha nunca aparece: so um aviso de que existe", async () => {
+describe("EmailTab - a lista", () => {
+  it("tem o servidor, o teste e o logo como linhas, e nada aberto", async () => {
     await abrir(CONFIGURADO);
 
-    expect(campo("Servidor").value).toBe("smtp.empresa.com");
-    expect(campo("Usuário").value).toBe("relatorios");
-    expect(campo("E-mail de origem").value).toBe("relatorios@empresa.com");
-    const senha = campo("Senha");
-    expect(senha.value).toBe("");
-    expect(senha.placeholder).toMatch(/Já configurada/);
+    for (const nome of ["Servidor de e-mail (SMTP)", "E-mail de teste", "Logo dos e-mails"]) {
+      expect(linha(nome)).toBeTruthy();
+    }
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("sem configuração o servidor aparece como Não configurado e o teste fica desligado", async () => {
+    await abrir();
+
+    expect(within(linha("Servidor de e-mail (SMTP)")).getByText("Não configurado")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Enviar e-mail de teste" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Salve o servidor e o e-mail de origem/)).toBeTruthy();
+  });
+
+  it("configurado mostra o servidor, a porta e o remetente", async () => {
+    await abrir(CONFIGURADO);
+
+    expect(within(linha("Servidor de e-mail (SMTP)")).getByText("Configurado")).toBeTruthy();
+    expect(screen.getByText("smtp.empresa.com:587 · de relatorios@empresa.com")).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Enviar e-mail de teste" }) as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("avisa quando nao consegue carregar", async () => {
@@ -109,15 +122,47 @@ describe("EmailTab - carregar", () => {
   });
 });
 
-describe("EmailTab - salvar", () => {
-  it("envia o que foi preenchido e avisa que salvou", async () => {
+describe("EmailTab - servidor", () => {
+  it("sem configuracao a janela comeca com STARTTLS, porta 587 e tudo vazio", async () => {
     await abrir();
+    abrirServidor();
+
+    expect(campo("Porta").value).toBe("587");
+    expect((screen.getByLabelText("Segurança") as HTMLSelectElement).value).toBe("starttls");
+    expect(campo("Servidor").value).toBe("");
+  });
+
+  it("mostra o que ja esta configurado, e a senha nunca aparece: so um aviso de que existe", async () => {
+    await abrir(CONFIGURADO);
+    abrirServidor();
+
+    expect(campo("Servidor").value).toBe("smtp.empresa.com");
+    expect(campo("Usuário").value).toBe("relatorios");
+    expect(campo("E-mail de origem").value).toBe("relatorios@empresa.com");
+    const senha = campo("Senha");
+    expect(senha.value).toBe("");
+    expect(senha.placeholder).toMatch(/Já configurada/);
+  });
+
+  it("o Salvar só liga quando algo muda", async () => {
+    await abrir(CONFIGURADO);
+    abrirServidor();
+
+    const botao = within(screen.getByRole("dialog")).getByRole("button", { name: "Salvar" }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+    fireEvent.change(campo("Nome do remetente"), { target: { value: "Outro nome" } });
+    expect(botao.disabled).toBe(false);
+  });
+
+  it("envia o que foi preenchido, avisa que salvou e fecha a janela", async () => {
+    await abrir();
+    abrirServidor();
     fireEvent.change(campo("Servidor"), { target: { value: " smtp.empresa.com " } });
     fireEvent.change(campo("Usuário"), { target: { value: "relatorios" } });
     fireEvent.change(campo("Senha"), { target: { value: "segredo" } });
     fireEvent.change(campo("E-mail de origem"), { target: { value: "relatorios@empresa.com" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    salvarServidor();
 
     await waitFor(() => expect(update).toHaveBeenCalledTimes(1));
     expect(update.mock.calls[0][0]).toMatchObject({
@@ -129,12 +174,16 @@ describe("EmailTab - salvar", () => {
       smtp_from_email: "relatorios@empresa.com",
     });
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Configurações de e-mail salvas."));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(within(linha("Servidor de e-mail (SMTP)")).getByText("Configurado")).toBeTruthy();
   });
 
   it("deixar a senha em branco mantem a atual: o campo nem vai no pedido", async () => {
     await abrir(CONFIGURADO);
+    abrirServidor();
 
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    fireEvent.change(campo("Nome do remetente"), { target: { value: "Outro nome" } });
+    salvarServidor();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][0]).not.toHaveProperty("smtp_password");
@@ -142,9 +191,10 @@ describe("EmailTab - salvar", () => {
 
   it("apagar a senha salva manda texto vazio", async () => {
     await abrir(CONFIGURADO);
+    abrirServidor();
 
     fireEvent.click(screen.getByLabelText("Apagar a senha salva"));
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    salvarServidor();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][0].smtp_password).toBe("");
@@ -152,27 +202,43 @@ describe("EmailTab - salvar", () => {
 
   it("campos vazios viram nulo, e nao texto vazio", async () => {
     await abrir(CONFIGURADO);
+    abrirServidor();
     fireEvent.change(campo("Usuário"), { target: { value: "" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    salvarServidor();
 
     await waitFor(() => expect(update).toHaveBeenCalled());
     expect(update.mock.calls[0][0].smtp_username).toBeNull();
   });
 
-  it("mostra o motivo quando o servidor recusa", async () => {
+  it("mostra o motivo quando o servidor recusa, dentro da janela", async () => {
     update.mockRejectedValue({ response: { data: { detail: "Para usar usuario e senha escolha STARTTLS ou SSL" } } });
     await abrir();
+    abrirServidor();
+    fireEvent.change(campo("Servidor"), { target: { value: "smtp.empresa.com" } });
 
-    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+    salvarServidor();
 
     expect(await screen.findByText("Para usar usuario e senha escolha STARTTLS ou SSL")).toBeTruthy();
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("Cancelar fecha sem gravar", async () => {
+    await abrir(CONFIGURADO);
+    abrirServidor();
+
+    fireEvent.change(campo("Nome do remetente"), { target: { value: "Outro nome" } });
+    fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(update).not.toHaveBeenCalled();
   });
 });
 
 describe("EmailTab - porta e seguranca", () => {
   it("trocar a seguranca sugere a porta do novo tipo", async () => {
     await abrir();
+    abrirServidor();
 
     fireEvent.change(screen.getByLabelText("Segurança"), { target: { value: "ssl" } });
 
@@ -181,6 +247,7 @@ describe("EmailTab - porta e seguranca", () => {
 
   it("uma porta digitada a mao nao e apagada ao trocar a seguranca", async () => {
     await abrir();
+    abrirServidor();
     fireEvent.change(campo("Porta"), { target: { value: "2525" } });
 
     fireEvent.change(screen.getByLabelText("Segurança"), { target: { value: "ssl" } });
@@ -190,17 +257,17 @@ describe("EmailTab - porta e seguranca", () => {
 });
 
 describe("EmailTab - e-mail de teste", () => {
-  it("comeca com o e-mail de quem esta logado, mas so envia depois de configurado", async () => {
-    await abrir();
+  it("a janela comeca com o e-mail de quem esta logado", async () => {
+    await abrir(CONFIGURADO);
+    abrirTeste();
 
     expect(campo("Enviar para").value).toBe("admin@empresa.com");
-    expect((screen.getByRole("button", { name: "Enviar teste" }) as HTMLButtonElement).disabled).toBe(true);
-    expect(screen.getByText(/Salve o servidor e o e-mail de origem/)).toBeTruthy();
   });
 
   it("envia o teste e confirma", async () => {
     sendTest.mockResolvedValue(undefined);
     await abrir(CONFIGURADO);
+    abrirTeste();
     fireEvent.change(campo("Enviar para"), { target: { value: "outra@empresa.com" } });
 
     fireEvent.click(screen.getByRole("button", { name: "Enviar teste" }));
@@ -212,10 +279,20 @@ describe("EmailTab - e-mail de teste", () => {
   it("mostra o motivo da falha (senha errada, servidor fora do ar...)", async () => {
     sendTest.mockRejectedValue({ response: { data: { detail: "O servidor recusou o usuario ou a senha do SMTP." } } });
     await abrir(CONFIGURADO);
+    abrirTeste();
 
     fireEvent.click(screen.getByRole("button", { name: "Enviar teste" }));
 
     expect(await screen.findByText("O servidor recusou o usuario ou a senha do SMTP.")).toBeTruthy();
+  });
+
+  it("sem endereço o botão de enviar fica desligado", async () => {
+    await abrir(CONFIGURADO);
+    abrirTeste();
+
+    fireEvent.change(campo("Enviar para"), { target: { value: "" } });
+
+    expect((screen.getByRole("button", { name: "Enviar teste" }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -230,8 +307,8 @@ describe("EmailTab - e-mails enviados pelo sistema", () => {
     expect(await screen.findByText("Redefinição de senha")).toBeTruthy();
     expect(screen.getByText("Adicionado ao sistema")).toBeTruthy();
     expect(screen.getByText("Enviado quando alguém pede o link.")).toBeTruthy();
-    expect(screen.getByText("Padrão")).toBeTruthy();
-    expect(screen.getByText("Personalizado")).toBeTruthy();
+    expect(within(linha("Redefinição de senha")).getByText("Padrão")).toBeTruthy();
+    expect(within(linha("Adicionado ao sistema")).getByText("Personalizado")).toBeTruthy();
   });
 
   it("Editar abre o editor daquele e-mail", async () => {
@@ -249,7 +326,7 @@ describe("EmailTab - e-mails enviados pelo sistema", () => {
     await abrir(CONFIGURADO);
 
     expect(await screen.findByText("Não foi possível carregar os e-mails.")).toBeTruthy();
-    expect(campo("Servidor").value).toBe("smtp.empresa.com");
+    expect(within(linha("Servidor de e-mail (SMTP)")).getByText("Configurado")).toBeTruthy();
   });
 
   it("depois de salvar no editor a linha vira Personalizado", async () => {
@@ -262,13 +339,29 @@ describe("EmailTab - e-mails enviados pelo sistema", () => {
     fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Salvar" }));
 
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    expect(screen.getByText("Personalizado")).toBeTruthy();
+    expect(within(linha("Redefinição de senha")).getByText("Personalizado")).toBeTruthy();
   });
 });
 
 describe("EmailTab - logo dos e-mails", () => {
-  it("envia a imagem escolhida e mostra o logo novo", async () => {
+  it("sem logo próprio a linha diz Padrão, e a janela abre sem opção de remover", async () => {
     await abrir(CONFIGURADO);
+
+    expect(within(linha("Logo dos e-mails")).getByText("Padrão")).toBeTruthy();
+    abrirLogo();
+    expect(document.querySelector(".kebab-menu-item-danger")).toBeNull();
+    expect(removeLogo).not.toHaveBeenCalled();
+  });
+
+  it("com logo próprio a linha diz Personalizado", async () => {
+    await abrir({ ...CONFIGURADO, email_logo_url: "/static/uploads/meu.png" });
+
+    expect(within(linha("Logo dos e-mails")).getByText("Personalizado")).toBeTruthy();
+  });
+
+  it("envia a imagem escolhida, mostra o logo novo e a linha vira Personalizado", async () => {
+    await abrir(CONFIGURADO);
+    abrirLogo();
     uploadLogo.mockResolvedValue({ ...CONFIGURADO, email_logo_url: "/static/uploads/novo.png" });
 
     const arquivo = new File(["x"], "logo.png", { type: "image/png" });
@@ -278,16 +371,12 @@ describe("EmailTab - logo dos e-mails", () => {
     await waitFor(() => expect(uploadLogo).toHaveBeenCalledWith(arquivo));
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Logo dos e-mails atualizado."));
     expect(document.querySelector('img[src$="/static/uploads/novo.png"]')).toBeTruthy();
-  });
-
-  it("sem logo proprio nao mostra a opcao de remover", async () => {
-    await abrir(CONFIGURADO);
-    expect(removeLogo).not.toHaveBeenCalled();
-    expect(document.querySelector(".kebab-menu-item-danger")).toBeNull();
+    expect(within(linha("Logo dos e-mails")).getByText("Personalizado")).toBeTruthy();
   });
 
   it("avisa quando o envio falha", async () => {
     await abrir(CONFIGURADO);
+    abrirLogo();
     uploadLogo.mockRejectedValue(new Error("400"));
 
     const entrada = document.querySelector('input[type="file"]') as HTMLInputElement;
