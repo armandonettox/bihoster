@@ -28,6 +28,11 @@
 
 ![Demonstração do BIHoster](docs/demo.gif)
 
+<p align="center">
+  <sub>Os relatórios, os nomes e os números do GIF são fictícios: foram gerados por um Power BI de mentira
+  (veja <a href="docs/demo/README.md"><code>docs/demo/</code></a> para regravar o GIF).</sub>
+</p>
+
 O BIHoster hospeda e organiza os relatórios do Power BI da sua empresa em coleções, com
 controle de acesso por grupo e por pessoa. Os relatórios são embutidos pelo modelo
 "app owns the data" (um Service Principal do Azure AD faz a ponte), então ninguém precisa de
