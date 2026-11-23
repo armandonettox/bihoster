@@ -12,6 +12,10 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.40.0 - 2026-11-23 - Imagens do histórico pequenas e padronizadas
+- As imagens e GIFs do histórico de versões agora aparecem todas no mesmo tamanho pequeno, alinhadas à esquerda, em vez de cada uma com um tamanho diferente.
+- Clique numa imagem para ampliar numa janela, com os botões **Abrir em outra aba** e **Fechar** (o Esc e o clique fora também fecham).
+
 ## 1.39.0 - 2026-11-23 - Ações de alertas e assinaturas no menu dos 3 pontinhos
 - Nas páginas **Alertas** e **Assinaturas**, as ações de cada linha (Enviar agora, Pausar ou Reativar, Editar e Excluir) ficam agora numa janela suspensa dos 3 pontinhos, cada opção com seu ícone. A tabela fica mais limpa e igual ao resto do sistema.
 - O botão dos 3 pontinhos só aparece quando a pessoa pode usar alguma ação daquela linha, e a janela abre solta da tela, sem ser cortada nas últimas linhas.
