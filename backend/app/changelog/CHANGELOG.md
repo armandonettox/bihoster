@@ -11,6 +11,10 @@ Imagens ficam em backend/app/changelog/img/ e entram assim: ![descrição](img/n
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.35.0 - 2026-11-23 - Janela da tela de login e de cores e logos mais legíveis
+- Na janela da tela de login, as duas opções de layout agora ficam uma embaixo da outra, com o texto inteiro. Antes ficavam lado a lado e o texto quebrava uma palavra por linha e saía do cartão.
+- Na janela de cores e logos, o logo e o favicon ficam um por linha, e o botão de enviar imagem não quebra mais em duas linhas.
+
 ## 1.34.0 - 2026-11-23 - Cópia do banco antes de atualizar
 - Ao atualizar pelo botão **Atualizar agora**, o sistema copia o banco (e o `.env`) para a pasta de backups do servidor antes de começar. Ficam guardadas as 5 cópias mais novas.
 - Se a cópia falhar, a atualização nem começa, e a mensagem diz o motivo.
