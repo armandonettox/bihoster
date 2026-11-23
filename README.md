@@ -5,12 +5,75 @@
   </picture>
 </h1>
 
-Portal self-hosted para hospedar e gerenciar relatórios do Power BI, com autenticação de
-usuários, controle de acesso por grupo e por pessoa, com permissões separadas, e embedding via "app owns the data" (Service Principal
-do Azure AD) — os usuários acessam os relatórios sem precisar de licença/conta própria no
-Power BI.
+<p align="center">
+  <strong>O portal de relatórios Power BI da sua empresa, na sua própria infraestrutura.</strong><br>
+  Quem precisa ver o relatório entra com login e senha, sem conta nem licença do Power BI.
+</p>
+
+<p align="center">
+  <a href="https://github.com/armandonettox/bihoster/actions/workflows/ci.yml"><img src="https://github.com/armandonettox/bihoster/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://github.com/armandonettox/bihoster/releases"><img src="https://img.shields.io/github/v/release/armandonettox/bihoster" alt="Última versão"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licença-AGPL%20v3-blue" alt="Licença AGPL v3"></a>
+  <a href="https://github.com/armandonettox/bihoster/pkgs/container/bihoster-backend"><img src="https://img.shields.io/badge/imagem-ghcr.io-2496ED?logo=docker&logoColor=white" alt="Imagem Docker"></a>
+</p>
+
+<p align="center">
+  <a href="#instalação-docker">Instalação</a> ·
+  <a href="#o-que-ele-faz">Recursos</a> ·
+  <a href="#como-funciona">Como funciona</a> ·
+  <a href="#atualizações">Atualizações</a> ·
+  <a href="#desenvolvimento-local-sem-docker">Desenvolvimento</a> ·
+  <a href="#licença">Licença</a>
+</p>
 
 ![Demonstração do BIHoster](docs/demo.gif)
+
+O BIHoster hospeda e organiza os relatórios do Power BI da sua empresa em coleções, com
+controle de acesso por grupo e por pessoa. Os relatórios são embutidos pelo modelo
+"app owns the data" (um Service Principal do Azure AD faz a ponte), então ninguém precisa de
+licença nem de conta própria no Power BI para ver o que tem permissão. Sobe com um único
+`docker compose up -d`, e os dados ficam com você.
+
+## O que ele faz
+
+| | |
+|---|---|
+| **Relatórios** | Coleções de relatórios do Power BI embutidos, com busca, favoritos, miniaturas, tela cheia com zoom, escolha das páginas que aparecem e exportação de dados em CSV. O **Modo TV** passa os relatórios sozinho numa tela, com pausa e barra de progresso. |
+| **Acesso e segurança** | Permissões separadas por grupo e por pessoa, no sistema todo ou por coleção. Horário de acesso por grupo, bloqueio de contas, login com Google, trilha de **auditoria** com reversão de ações, defesas contra escalada de permissão e chaves cifradas no servidor. |
+| **Entrega por e-mail** | Envio de relatórios em PDF ou imagem, **assinaturas** recorrentes em dias e horários escolhidos e **alertas** que avisam quando uma medida passa de um limite. Todos os e-mails saem em HTML com a sua marca. |
+| **Chat de IA** | Pergunte aos relatórios em linguagem natural. Funciona com OpenAI, Anthropic, Gemini, OpenRouter e NVIDIA, com colunas bloqueáveis por relatório, limite de uso e orçamento. |
+| **A sua marca** | Cores, logo, tela de login e telas de erro e de aviso personalizáveis, cada uma com prévia, e o texto de cada e-mail editável. |
+| **Operação** | Atualização pelo botão da própria Administração, com **cópia do banco antes**, histórico completo de versões, cache dos tokens de embed e imagens publicadas no GitHub Container Registry. |
+
+## Como funciona
+
+```mermaid
+flowchart LR
+    pessoa["Pessoa<br/>(navegador)"] --> frontend["Frontend<br/>React + Nginx"]
+    frontend --> backend["Backend<br/>FastAPI"]
+    backend --> banco[("SQLite<br/>no volume do Docker")]
+    backend --> powerbi["API do Power BI<br/>(Service Principal)"]
+    backend --> smtp["Servidor de e-mail<br/>(SMTP)"]
+```
+
+A pessoa só conversa com o frontend. O backend confere quem ela é e o que ela pode ver, pede ao
+Power BI o acesso ao relatório e devolve para o navegador exibir. A senha do Service Principal
+e as chaves de IA ficam cifradas no servidor e nunca voltam para o navegador.
+
+**Stack:** Python (FastAPI, SQLAlchemy, SQLite) no backend, React com TypeScript e Vite no
+frontend, tudo em Docker.
+
+## Início rápido
+
+```bash
+git clone https://github.com/armandonettox/bihoster.git
+cd bihoster
+docker compose up -d
+```
+
+Abra `http://localhost:5173`. **A primeira pessoa a se cadastrar vira administradora**, e o
+Power BI se configura dentro do próprio app, em Administração. Os detalhes (HTTPS, sessão,
+atualizações) estão logo abaixo.
 
 ## Instalação (Docker)
 
