@@ -5,11 +5,21 @@ para criar a Release no GitHub.
 Formato de cada versão (a mais recente primeiro):
 
 ## 1.2.3 - 2026-01-31 - Título curto da versão
-Texto em Markdown simples: listas com "- ", títulos com "### ", **negrito**, `código`, links http(s) e imagens.
-Imagens ficam em backend/app/changelog/img/ e entram assim: ![descrição](img/nome-do-arquivo.png)
+Texto em Markdown simples: listas com "- ", títulos com "### ", **negrito**, `código`, links http(s), imagens e GIFs.
+Imagens e GIFs ficam em backend/app/changelog/img/ e entram do mesmo jeito: ![descrição](img/nome-do-arquivo.png)
+Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de uns 2 MB: eles vão dentro da imagem do sistema.
 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
+
+## 1.37.0 - 2026-11-23 - Imagens e GIFs no histórico de versões
+- O histórico passou a mostrar imagens das telas em várias versões (Marca, E-mail, Geral, miniaturas das coleções e a própria aba Atualizações). Clique numa imagem para vê-la ampliada.
+- Também aceita GIFs animados, como o passeio pelo sistema abaixo.
+- A imagem da aba Atualizações, que já estava prevista na versão 1.33.0, só chegava ao sistema agora.
+
+![Um passeio pelo sistema: coleções com miniaturas, relatórios, a Administração com as paletas de cores, a tela de login e as abas E-mail e Atualizações (dados fictícios)](img/passeio-pelo-sistema.gif)
+
+![O histórico de versões com as imagens das telas](img/aba-atualizacoes.jpg)
 
 ## 1.36.0 - 2026-11-23 - Fim do pedido para traduzir a página
 - O navegador não oferece mais traduzir o sistema. A página dizia ser em inglês (`lang="en"`), mesmo toda em português, e por isso o navegador perguntava se queria traduzir.
@@ -18,6 +28,8 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 ## 1.35.0 - 2026-11-23 - Janela da tela de login e de cores e logos mais legíveis
 - Na janela da tela de login, as duas opções de layout agora ficam uma embaixo da outra, com o texto inteiro. Antes ficavam lado a lado e o texto quebrava uma palavra por linha e saía do cartão.
 - Na janela de cores e logos, o logo e o favicon ficam um por linha, e o botão de enviar imagem não quebra mais em duas linhas.
+
+![A janela da tela de login, com as duas opções de layout uma embaixo da outra e a prévia ao lado](img/marca-tela-de-login.jpg)
 
 ## 1.34.0 - 2026-11-23 - Cópia do banco antes de atualizar
 - Ao atualizar pelo botão **Atualizar agora**, o sistema copia o banco (e o `.env`) para a pasta de backups do servidor antes de começar. Ficam guardadas as 5 cópias mais novas.
@@ -38,6 +50,8 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - Na aba E-mail, o servidor (SMTP), o envio de teste e o logo dos e-mails viraram linhas com o estado atual e um botão que abre a janela de edição.
 - A janela do servidor só liga o Salvar quando algo muda e mostra o erro do servidor de e-mail dentro dela, sem perder o que foi digitado.
 
+![A aba E-mail, com o servidor, o e-mail de teste e o logo dos e-mails em linhas](img/aba-email.jpg)
+
 ## 1.31.0 - 2026-11-21 - Cache e IA em lista com janela
 - As abas Cache (aquecimento, status e reset) e IA (provedor, registro, relatórios, opções do chat e consumo) passaram para o estilo de lista com janela de edição.
 - Os blocos da IA mantêm os próprios botões de salvar dentro da janela.
@@ -46,9 +60,15 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - As abas Geral (dados do aplicativo, HTTPS e homepage) e Autenticação (criação de conta e login com Google) agora mostram o estado de cada parte e abrem uma janela para editar.
 - Desligar a criação de conta passou a valer depois de salvar, e não mais no clique.
 
+![A aba Geral, com os dados do aplicativo, o acesso seguro e a homepage em linhas](img/administracao-geral.jpg)
+
 ## 1.29.0 - 2026-11-21 - Marca em lista com janela e prévia
 - A aba Marca virou uma lista com uma linha por tela: cores e logos, tela de login, página não encontrada, "Algo deu errado", fora do horário e sem acesso a nenhuma coleção.
 - Cada janela mostra a prévia da tela ao lado dos campos e salva só o que é dela. Cada linha indica se está no padrão ou personalizada.
+
+![A aba Marca, com uma linha para cada tela](img/marca-lista.jpg)
+
+![A janela de cores e logos, com a prévia do sistema ao lado das paletas](img/marca-cores-e-logos.jpg)
 
 ## 1.28.0 - 2026-11-21 - Logo próprio para os e-mails
 - Dá para enviar um logo só para os e-mails, na aba E-mail. Sem ele, os e-mails usam o logo da marca.
@@ -218,6 +238,8 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 
 ## 1.6.33 - 2026-11-06 - Miniaturas dos relatórios
 - Miniaturas estáticas dos relatórios.
+
+![Uma coleção com a miniatura de cada relatório](img/colecao-com-capas.jpg)
 
 ## 1.6.32 - 2026-11-06 - Seta da barra superior
 - Seta de ocultar a barra superior maior.

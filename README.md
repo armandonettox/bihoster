@@ -129,7 +129,8 @@ O histórico não depende do GitHub: ele vem junto com o sistema, do arquivo
 `backend/app/changelog/CHANGELOG.md`, então sempre bate com a versão instalada. Cada versão é
 uma seção `## 1.2.3 - 2026-01-31 - Título curto`, da mais recente para a mais antiga, com texto
 em Markdown simples (listas, títulos com `###`, **negrito**, `código`, links e imagens). Para
-mostrar uma imagem, coloque o arquivo em `backend/app/changelog/img/` e cite na seção com
+mostrar uma imagem ou um GIF animado, coloque o arquivo (`.png`, `.jpg` ou `.gif`, de preferência
+abaixo de 2 MB) em `backend/app/changelog/img/` e cite na seção com
 `![descrição](img/nome-do-arquivo.png)`; só imagens dessa pasta são carregadas. **Toda tag nova
 precisa da sua seção nesse arquivo antes de ser criada**: a CI usa a mesma seção para criar a
 Release no GitHub (sem ela, cai para as notas automáticas do GitHub).
