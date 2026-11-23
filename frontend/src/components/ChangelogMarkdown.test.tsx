@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import ChangelogMarkdown from "./ChangelogMarkdown";
 
@@ -48,16 +48,46 @@ describe("ChangelogMarkdown", () => {
     expect(container.textContent).toContain("<script>alert(1)</script>");
   });
 
-  it("imagem do histórico carrega do próprio sistema e abre ampliada em outra aba", () => {
+  it("imagem do histórico carrega do próprio sistema como miniatura e abre ampliada ao clicar", () => {
     const { container } = render(<ChangelogMarkdown text={"![Aba E-mail](img/aba-email.png)"} />);
 
     const img = container.querySelector("img") as HTMLImageElement;
     expect(img.getAttribute("src")).toMatch(/\/static\/changelog\/aba-email\.png$/);
     expect(img.getAttribute("alt")).toBe("Aba E-mail");
     expect(img.getAttribute("loading")).toBe("lazy");
-    const link = img.closest("a") as HTMLAnchorElement;
-    expect(link.getAttribute("href")).toBe(img.getAttribute("src"));
-    expect(link.getAttribute("target")).toBe("_blank");
+    expect(img.className).toBe("changelog-image");
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Ampliar imagem: Aba E-mail" }));
+
+    const janela = screen.getByRole("dialog");
+    const ampliada = janela.querySelector("img") as HTMLImageElement;
+    expect(ampliada.getAttribute("src")).toBe(img.getAttribute("src"));
+    const abrir = screen.getByRole("link", { name: "Abrir em outra aba" });
+    expect(abrir.getAttribute("href")).toBe(img.getAttribute("src"));
+    expect(abrir.getAttribute("target")).toBe("_blank");
+  });
+
+  it("a janela ampliada fecha pelo botão, pelo Esc e pelo clique fora da imagem", () => {
+    render(<ChangelogMarkdown text={"![Tela](img/tela.png)"} />);
+    const abrir = () => fireEvent.click(screen.getByRole("button", { name: "Ampliar imagem: Tela" }));
+
+    abrir();
+    fireEvent.click(screen.getByRole("button", { name: "Fechar" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    abrir();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    abrir();
+    fireEvent.click(screen.getByRole("dialog"));
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Clicar na própria imagem ampliada não fecha
+    abrir();
+    fireEvent.click(screen.getByRole("dialog").querySelector("img") as HTMLImageElement);
+    expect(screen.queryByRole("dialog")).not.toBeNull();
   });
 
   it.each([
@@ -69,7 +99,7 @@ describe("ChangelogMarkdown", () => {
     const img = container.querySelector("img") as HTMLImageElement;
     expect(img.getAttribute("src")).toMatch(new RegExp(`/static/changelog/${arquivo.replace(".", "\\.")}$`));
     expect(img.getAttribute("alt")).toBe(descricao);
-    expect((img.closest("a") as HTMLAnchorElement).getAttribute("target")).toBe("_blank");
+    expect(img.closest("button")).not.toBeNull();
   });
 
   it.each([

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { assetUrl } from "../api/client";
+import ChangelogImage from "./ChangelogImage";
 
 /** O texto de uma versão do histórico (Markdown simples): parágrafos, listas com "- ", títulos "### ", **negrito**,
  * `código`, links http(s) e imagens do próprio histórico (`![descrição](img/arquivo.png)`).
@@ -17,11 +18,7 @@ function imageFor(alt: string, src: string, key: string): ReactNode {
   const match = SAFE_IMAGE.exec(src);
   if (!match) return alt || null;
   const url = assetUrl(`/static/changelog/${match[1]}`);
-  return (
-    <a key={key} className="changelog-image-link" href={url} target="_blank" rel="noopener noreferrer">
-      <img className="changelog-image" src={url} alt={alt} loading="lazy" />
-    </a>
-  );
+  return <ChangelogImage key={key} url={url} alt={alt} />;
 }
 
 function renderInline(text: string, keyPrefix: string): ReactNode[] {
