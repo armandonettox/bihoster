@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.core import powerbi
 from app.core.audit import log_action
 from app.core.database import get_db
-from app.core.access_deps import require_workspace_permission
+from app.core.access_deps import require_global_permission, require_workspace_permission
 from app.core.access_engine import can_in_workspace
 from app.core.access_ownership import can_act, require_can_act
 from app.models.alert import ALERT_CONDITIONS, ReportAlert
@@ -17,6 +17,9 @@ from app.routers import powerbi as embed_router
 from app.schemas.alert import AlertCreate, AlertOut, AlertUpdate, MeasureOut
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["alerts"])
+# O módulo Alertas: a visão de todas as coleções. Criar, editar e excluir seguem pelas rotas de cada coleção, onde as
+# permissões de alerta da coleção (e a regra do que é da própria pessoa) são conferidas.
+admin_router = APIRouter(prefix="/alerts", tags=["alerts"])
 
 MAX_PER_REPORT = 20
 
@@ -179,3 +182,44 @@ def delete_alert(
     log_action(db, action="alert_deleted", entity="alert", user_id=current_user.id,
                workspace_id=workspace_id, entity_id=str(alert_id))
     return Response(status_code=204)
+
+
+@admin_router.get("/", response_model=list[AlertOut])
+def list_all_alerts(db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("alerta.todas"))):
+    """Todos os alertas do portal, de todas as coleções. `can_edit` e `can_delete` dizem o que quem olha pode fazer com
+    cada um (o servidor confere de novo ao editar ou excluir)."""
+    alerts = (
+        db.query(ReportAlert)
+        .join(Report, Report.id == ReportAlert.report_id)
+        .order_by(Report.collection_id, ReportAlert.report_id, ReportAlert.id)
+        .all()
+    )
+    return [_out(db, a, current_user) for a in alerts]
+
+
+@admin_router.get("/reports")
+def list_reports_for_new_alert(
+    db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("alerta.todas"))
+):
+    """Os relatórios em que quem olha pode criar um alerta (tem `alerta.criar` na coleção), para escolher onde criar o novo."""
+    rows = (
+        db.query(Report, Workspace)
+        .join(Workspace, Workspace.id == Report.collection_id)
+        .order_by(Workspace.name, Report.name)
+        .all()
+    )
+    allowed: dict[int, bool] = {}
+    result = []
+    for report, workspace in rows:
+        if workspace.id not in allowed:
+            allowed[workspace.id] = can_in_workspace(db, current_user.id, "alerta.criar", workspace.id)
+        if allowed[workspace.id]:
+            result.append(
+                {
+                    "report_id": report.id,
+                    "report_name": report.name,
+                    "collection_id": workspace.id,
+                    "collection_name": workspace.name,
+                }
+            )
+    return result

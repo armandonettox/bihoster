@@ -319,12 +319,44 @@ def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get
 
 
 @admin_router.get("/", response_model=list[SubscriptionOut])
-def list_all_subscriptions(db: Session = Depends(get_db), _: User = Depends(require_global_permission("assinatura.todas"))):
-    """Visao do administrador: todas as assinaturas do sistema, de todas as colecoes."""
+def list_all_subscriptions(
+    db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("assinatura.todas"))
+):
+    """Visao do administrador: todas as assinaturas do sistema, de todas as colecoes. `can_edit`, `can_delete` e `can_run`
+    dizem o que quem olha pode fazer com cada uma (o servidor confere de novo ao editar, excluir ou enviar)."""
     return [
-        _out(db, s)
+        _out(db, s, current_user)
         for s in db.query(ReportSubscription)
         .join(Report, Report.id == ReportSubscription.report_id)
         .order_by(Report.collection_id, ReportSubscription.report_id, ReportSubscription.id)
         .all()
     ]
+
+
+@admin_router.get("/reports")
+def list_reports_for_new_subscription(
+    db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("assinatura.todas"))
+):
+    """Os relatorios em que quem olha pode criar uma assinatura (tem `assinatura.criar` na colecao), para escolher onde
+    criar a nova."""
+    rows = (
+        db.query(Report, Workspace)
+        .join(Workspace, Workspace.id == Report.collection_id)
+        .order_by(Workspace.name, Report.name)
+        .all()
+    )
+    allowed: dict[int, bool] = {}
+    result = []
+    for report, workspace in rows:
+        if workspace.id not in allowed:
+            allowed[workspace.id] = can_in_workspace(db, current_user.id, "assinatura.criar", workspace.id)
+        if allowed[workspace.id]:
+            result.append(
+                {
+                    "report_id": report.id,
+                    "report_name": report.name,
+                    "collection_id": workspace.id,
+                    "collection_name": workspace.name,
+                }
+            )
+    return result

@@ -19,7 +19,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - assinatura.*: rotas de /subscriptions;  alerta.*: rotas de /alerts
 - relatorio.exportar: /reports/{id}/export-email;  colecao.criar: POST /workspaces;  colecao.todas: GET /workspaces/all
 - assinatura.*-outras e alerta.*-outras: as mesmas rotas, quando o item foi criado por outra pessoa;
-- assinatura.todas: GET /subscriptions (visão do portal todo);  sistema.versao: GET /system/version, /history e /logs
+- assinatura.todas: GET /subscriptions (visão do portal todo);  alerta.todas: GET /alerts e /alerts/reports (módulo Alertas);  sistema.versao: GET /system/version, /history e /logs
 - membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.liberar-horario: /access-extensions; membros.adicionar: /users/welcome-email)
 - grupos.*: rotas de /groups (grupos.participantes: /groups/{id}/members);  permissoes.editar: PUT de /access/*
 - conexao.*: /powerbi-connections;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
@@ -151,6 +151,12 @@ CATALOG: tuple[Permission, ...] = (
     _global("colecao.todas", "Ver todas as coleções", "Abrir a aba Coleções e ver todas, mesmo as que a pessoa não acessa.", "Administração: coleções"),
     _global("colecao.criar", "Criar coleções", "Cadastrar uma coleção nova no portal.", "Administração: coleções", requires=("colecao.todas",)),
     _global("assinatura.todas", "Ver as assinaturas de todo o portal", "Abrir a aba Assinaturas e ver os envios de todas as coleções.", "Administração: coleções"),
+    _global(
+        "alerta.todas",
+        "Ver os alertas de todo o portal",
+        "Abrir o módulo Alertas e ver os alertas de todas as coleções. Criar, editar e excluir continuam dependendo das permissões de alerta de cada coleção.",
+        "Administração: coleções",
+    ),
     _global("conexao.ver", "Ver as conexões do Power BI", "Ver as conexões cadastradas, sem os segredos.", "Administração: Power BI", feature=_CONNECTIONS),
     _global("conexao.criar", "Cadastrar conexões", "Adicionar uma conexão nova com o Power BI.", "Administração: Power BI", feature=_CONNECTIONS, requires=("conexao.ver",)),
     _global("conexao.editar", "Editar conexões", "Mudar os dados de uma conexão.", "Administração: Power BI", feature=_CONNECTIONS, requires=("conexao.ver",)),
