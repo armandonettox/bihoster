@@ -21,6 +21,8 @@ export interface ApplyUpdateResult {
   status: string;
   target_version: string;
   log_file: string;
+  /** Nome da cópia do banco feita antes de atualizar (null quando o banco não é um arquivo) */
+  backup_file: string | null;
   message: string;
 }
 

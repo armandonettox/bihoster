@@ -162,8 +162,35 @@ describe("UpdatesTab - verificar e atualizar", () => {
     expect(apply).not.toHaveBeenCalled();
   });
 
+  it("a confirmação avisa que o banco é copiado antes e que a atualização só segue se a cópia der certo", async () => {
+    await abrir(status({ has_update: true, latest: NOVA, auto_update_enabled: true }));
+
+    fireEvent.click(botao("Atualizar agora"));
+
+    expect(screen.getByText(/o banco é copiado para a pasta de backups do servidor/)).toBeTruthy();
+    expect(screen.getByText(/só segue se a cópia der certo/)).toBeTruthy();
+  });
+
+  it("quando a cópia do banco falha, mostra o motivo e não deixa o botão preso em Atualizando", async () => {
+    apply.mockRejectedValue({ response: { data: { detail: "A atualizacao nao foi iniciada porque nao foi possivel copiar o banco antes: disco cheio" } } });
+    await abrir(status({ has_update: true, latest: NOVA, auto_update_enabled: true }));
+
+    fireEvent.click(botao("Atualizar agora"));
+    const dialogo = screen.getByText(/de v1\.2\.0 para v1\.3\.0/).closest("div") as HTMLElement;
+    fireEvent.click(within(dialogo.parentElement as HTMLElement).getByRole("button", { name: "Atualizar agora" }));
+
+    await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith(expect.stringContaining("disco cheio"), "error"));
+    expect(botao("Atualizar agora").disabled).toBe(false);
+  });
+
   it("confirmar manda atualizar e avisa", async () => {
-    apply.mockResolvedValue({ status: "started", target_version: "1.3.0", log_file: "x.log", message: "Atualização iniciada." });
+    apply.mockResolvedValue({
+      status: "started",
+      target_version: "1.3.0",
+      log_file: "x.log",
+      backup_file: "db-antes-v1.2.0-para-v1.3.0-x.db",
+      message: "Atualização iniciada.",
+    });
     await abrir(status({ has_update: true, latest: NOVA, auto_update_enabled: true }));
 
     fireEvent.click(botao("Atualizar agora"));

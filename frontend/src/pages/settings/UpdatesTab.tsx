@@ -251,7 +251,7 @@ export default function UpdatesTab() {
       {confirmOpen && status?.latest && (
         <ConfirmDialog
           title="Atualizar o sistema"
-          message={`Isso vai atualizar de v${status.current_version} para v${status.latest.version} e reiniciar os containers. Banco de dados, uploads e segredos continuam intactos. O sistema pode ficar indisponível por alguns instantes.`}
+          message={`Isso vai atualizar de v${status.current_version} para v${status.latest.version} e reiniciar os containers. Antes de começar, o banco é copiado para a pasta de backups do servidor, e a atualização só segue se a cópia der certo. Banco de dados, uploads e segredos continuam intactos. O sistema pode ficar indisponível por alguns instantes.`}
           confirmLabel="Atualizar agora"
           onConfirm={handleApply}
           onCancel={() => setConfirmOpen(false)}
