@@ -12,6 +12,12 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.38.0 - 2026-11-23 - Módulo Alertas e assinaturas editáveis
+- Novo módulo **Alertas** (menu de módulos, para quem tem a permissão "Ver os alertas de todo o portal"): lista os alertas de todas as coleções, com filtro e resumo de quantos estão ativos ou com erro.
+- Dá para **criar** um alerta novo escolhendo o relatório, **editar**, **pausar** ou **reativar** e **excluir**, tudo na própria página. Se o sistema não conseguir listar as medidas do relatório, basta digitar o nome da medida.
+- A página **Assinaturas** deixou de ser só de consulta: agora também cria assinaturas (escolhendo o relatório), edita, pausa, envia na hora e exclui.
+- Cada botão só aparece quando a pessoa pode usá-lo naquela coleção, e o servidor confere de novo. Quem só é editor de uma coleção continua mexendo apenas no que criou, a não ser que tenha a permissão de mexer no de outras pessoas.
+
 ## 1.37.0 - 2026-11-23 - Imagens e GIFs no histórico de versões
 - O histórico passou a mostrar imagens das telas em várias versões (Marca, E-mail, Geral, miniaturas das coleções e a própria aba Atualizações). Clique numa imagem para vê-la ampliada.
 - Também aceita GIFs animados, como o passeio pelo sistema abaixo.

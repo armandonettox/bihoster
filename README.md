@@ -201,6 +201,10 @@ as pessoas, os grupos e o que cada um pode fazer, numa tela só, com as visões 
   cuja pessoa criadora foi removida conta como de outra pessoa. Exportar por e-mail continua uma permissão só. Quem
   atualiza de uma versão anterior não perde nada: no primeiro boot, quem já tinha cada permissão ganha a equivalente
   "de outras pessoas".
+- **Módulos Alertas e Assinaturas.** Duas páginas no menu de módulos mostram todos os alertas e todas as assinaturas do
+  portal (permissões "Ver os alertas de todo o portal" e "Ver as assinaturas de todo o portal"). Dali dá para criar
+  (escolhendo o relatório), editar, pausar e excluir, e enviar uma assinatura na hora. Cada botão segue as permissões da
+  coleção do relatório; a visão geral só mostra, não dá acesso a mais nada.
 - **E-mails de conta.** Com o servidor de e-mail e o endereço do site configurados (Administração), ao adicionar um
   membro dá para ligar o aviso por e-mail com o link para entrar (desligado por padrão). O mesmo envio, e o do link de
   nova senha, estão no menu dos 3 pontinhos de cada pessoa. O link de nova senha vai só para o e-mail da pessoa.
