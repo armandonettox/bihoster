@@ -103,8 +103,10 @@ describe("ReportFullscreen - abrir", () => {
     await screen.findByTestId("embed");
 
     expect(screen.queryByText("Vendas e Inclusoes")).toBeNull();
+    // O titulo da aba e posto por um efeito, depois de o relatorio carregar: espera em vez de conferir na hora, senao o
+    // teste falha de vez em quando quando a maquina esta carregada
+    await waitFor(() => expect(document.title).toBe("Vendas e Inclusoes - BIHoster"));
     expect(container.querySelector(".fullscreen-header-brand")?.getAttribute("title")).toBe("Vendas e Inclusoes");
-    expect(document.title).toBe("Vendas e Inclusoes - BIHoster");
 
     unmount();
     expect(document.title).toBe("BIHoster");

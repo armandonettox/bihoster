@@ -103,7 +103,9 @@ describe("ReportSubscriptionsModal - lista", () => {
   });
 });
 
-describe("ReportSubscriptionsModal - criar", () => {
+// Estes testes mexem em muitos campos em sequencia: com a maquina carregada passam dos 5 s padrao (visto rodando varias
+// copias ao mesmo tempo), entao o grupo ganha um limite maior
+describe("ReportSubscriptionsModal - criar", { timeout: 20_000 }, () => {
   async function abrirFormulario(domains: string[] = []) {
     await abrir(domains);
     fireEvent.click(await screen.findByRole("button", { name: "Nova assinatura" }));
