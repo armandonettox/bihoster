@@ -58,7 +58,7 @@ export default function BrandLoginModal({ settings, onClose }: { settings: AppSe
 
       <div className="email-editor">
         <div className="email-editor-form">
-          <div className="settings-grid settings-grid-two brand-layout-options" role="radiogroup" aria-label="Layout da tela de login">
+          <div className="brand-layout-options-stack" role="radiogroup" aria-label="Layout da tela de login">
             <LayoutOption
               checked={layout === "centered"}
               onChange={() => setLayout("centered")}

@@ -1675,6 +1675,20 @@ table.table tr:last-child td {
 
 .brand-layout-option input {
   margin-top: 3px;
+  flex-shrink: 0;
+}
+
+/* O texto da opcao usa o resto da largura e quebra no proprio espaco, sem empurrar o cartao */
+.brand-layout-option > div:last-child {
+  flex: 1;
+  min-width: 0;
+}
+
+/* As opcoes de layout dentro da janela de edicao: uma por linha, para o texto nao ficar espremido numa coluna estreita */
+.brand-layout-options-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .brand-layout-option-title {

@@ -160,7 +160,7 @@ export default function BrandIdentityModal({ settings, onClose }: { settings: Ap
               O favicon aparece na aba do navegador; o logo, no menu superior, na tela de login e nos e-mails (a menos que os
               e-mails tenham um logo próprio).
             </p>
-            <div className="settings-grid settings-grid-two">
+            <div className="settings-stack">
               <ImageUploadField
                 label="Logo"
                 hint="PNG, JPG ou SVG. Fundo transparente funciona melhor."
