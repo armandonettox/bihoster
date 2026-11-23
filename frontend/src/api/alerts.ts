@@ -84,3 +84,23 @@ export async function updateAlert(workspaceId: number, alertId: number, input: P
 export async function deleteAlert(workspaceId: number, alertId: number): Promise<void> {
   await api.delete(`/workspaces/${workspaceId}/alerts/${alertId}`);
 }
+
+/** Um relatorio onde a pessoa pode criar um alerta ou uma assinatura (para escolher onde criar o novo). */
+export interface ReportChoice {
+  report_id: number;
+  report_name: string;
+  collection_id: number;
+  collection_name: string;
+}
+
+/** Visao do modulo Alertas: todos os alertas de todas as colecoes. */
+export async function listAllAlerts(): Promise<Alert[]> {
+  const { data } = await api.get("/alerts/");
+  return data;
+}
+
+/** Os relatorios em que a pessoa pode criar um alerta. */
+export async function listReportsForNewAlert(): Promise<ReportChoice[]> {
+  const { data } = await api.get("/alerts/reports");
+  return data;
+}

@@ -3,7 +3,7 @@ import { useAccess } from "../context/AccessContext";
 import { useChat } from "../context/ChatContext";
 import { useAnalyticsAccess } from "../hooks/useAnalyticsAccess";
 import { useDropdownMenu } from "../hooks/useDropdownMenu";
-import { ADMIN_AREA_KEYS, COLLECTIONS_AREA_KEYS, SUBSCRIPTIONS_AREA_KEYS, USERS_AREA_KEYS } from "../utils/adminTabs";
+import { ADMIN_AREA_KEYS, ALERTS_AREA_KEYS, COLLECTIONS_AREA_KEYS, SUBSCRIPTIONS_AREA_KEYS, USERS_AREA_KEYS } from "../utils/adminTabs";
 
 /** Quadradinho da barra do topo: janela suspensa com os modulos do sistema (Administracao, Auditoria e Chat de IA).
  * Cada modulo so aparece para quem tem permissao; sem nenhum, o botao nem e mostrado. */
@@ -20,12 +20,13 @@ export default function AppsMenu() {
   // Colecoes e Assinaturas tem pagina propria, cada uma aparece para quem tem o item que mostra a lista
   const canSeeCollections = access.canAny(...COLLECTIONS_AREA_KEYS);
   const canSeeSubscriptions = access.canAny(...SUBSCRIPTIONS_AREA_KEYS);
+  const canSeeAlerts = access.canAny(...ALERTS_AREA_KEYS);
   // O log geral da auditoria tem permissao propria
   const canSeeAudit = access.can("auditoria.ver");
   // Quem so tem a permissao de ver os analiticos entra direto no painel, sem a tabela de registros
   const { canView: canViewAnalytics } = useAnalyticsAccess();
   const canSeeAnalytics = canViewAnalytics && !canSeeAudit;
-  if (!isAnyAdmin && !canManageUsers && !canSeeCollections && !canSeeSubscriptions && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
+  if (!isAnyAdmin && !canManageUsers && !canSeeCollections && !canSeeSubscriptions && !canSeeAlerts && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
 
   return (
     <div ref={containerRef} className="topbar-menu">
@@ -82,6 +83,18 @@ export default function AppsMenu() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">forward_to_inbox</span>
               Assinaturas
+            </button>
+          )}
+          {canSeeAlerts && (
+            <button
+              className="topbar-menu-item"
+              onClick={() => {
+                setOpen(false);
+                navigate("/alerts");
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">notifications_active</span>
+              Alertas
             </button>
           )}
           {isAnyAdmin && (

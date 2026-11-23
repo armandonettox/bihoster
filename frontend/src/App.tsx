@@ -27,6 +27,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const ManageUsers = lazy(() => import("./pages/ManageUsers"));
 const Collections = lazy(() => import("./pages/Collections"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
+const Alerts = lazy(() => import("./pages/Alerts"));
 const Account = lazy(() => import("./pages/Account"));
 const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
@@ -114,6 +115,7 @@ function RoutedContent() {
             <Route path="settings" element={<Settings />} />
             <Route path="collections" element={<Collections />} />
             <Route path="subscriptions" element={<Subscriptions />} />
+            <Route path="alerts" element={<Alerts />} />
             <Route path="users" element={<ManageUsers />} />
             <Route path="account" element={<Account />} />
             <Route path="audit" element={<Audit />} />

@@ -84,9 +84,27 @@ export default function AlertForm({
         {loadingMeasures ? (
           <p style={{ margin: "4px 0", fontSize: 13, color: "var(--color-text-muted)" }}>Carregando medidas...</p>
         ) : measures.length === 0 ? (
-          <p style={{ margin: "4px 0", fontSize: 13, color: "var(--color-danger)" }}>
-            Nenhuma medida encontrada. Verifique a conexao com o Power BI.
-          </p>
+          <>
+            <p style={{ margin: "4px 0", fontSize: 13, color: "var(--color-text-muted)" }}>
+              Nao foi possivel listar as medidas do relatorio. Digite o nome exato da medida.
+            </p>
+            <input
+              className="input"
+              aria-label="Nome da medida"
+              value={measureName}
+              maxLength={200}
+              onChange={(e) => setMeasureName(e.target.value)}
+            />
+            <input
+              className="input"
+              aria-label="Tabela da medida (opcional)"
+              placeholder="Tabela da medida (opcional)"
+              style={{ marginTop: 6 }}
+              value={tableName}
+              maxLength={200}
+              onChange={(e) => setTableName(e.target.value)}
+            />
+          </>
         ) : (
           <select className="input" value={measureName} onChange={(e) => handleMeasureChange(e.target.value)}>
             {measures.map((m) => (

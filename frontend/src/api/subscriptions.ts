@@ -109,3 +109,9 @@ export async function listAllSubscriptions(): Promise<Subscription[]> {
   const { data } = await api.get("/subscriptions/");
   return data;
 }
+
+/** Os relatorios em que a pessoa pode criar uma assinatura (para escolher onde criar a nova). */
+export async function listReportsForNewSubscription(): Promise<import("./alerts").ReportChoice[]> {
+  const { data } = await api.get("/subscriptions/reports");
+  return data;
+}

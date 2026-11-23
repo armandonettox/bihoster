@@ -89,6 +89,17 @@ describe("AppsMenu", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/subscriptions");
   });
 
+  it("quem pode ver todos os alertas ve Alertas, que abre a pagina propria e nao a Administracao", () => {
+    renderMenu(["alerta.todas"]);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Assinaturas" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Alertas" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/alerts");
+  });
+
   it("quem pode ver os membros ve Gerenciar usuarios, que abre a pagina propria e nao as Configuracoes", () => {
     renderMenu(["membros.ver"]);
     openMenu();
