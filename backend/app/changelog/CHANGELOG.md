@@ -30,6 +30,8 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - Novo botão **Verificar atualizações**, que consulta o GitHub na hora. O botão **Atualizar agora** aparece sempre para o administrador e explica por que está desligado quando não há versão nova ou a atualização automática está desligada.
 - A versão mais nova passou a ser descoberta pelas tags do GitHub, e a CI agora cria a Release de cada versão a partir do mesmo histórico.
 - Mostra as 10 versões mais recentes, com um botão para ver as anteriores.
+
+![A aba Atualizações, com a versão instalada, os botões de verificar e atualizar e o histórico de versões](img/aba-atualizacoes.jpg)
 - A atualização pelo botão ficou mais segura: ela passou a rodar num container auxiliar, que sobrevive à troca do backend, e usa o nome do projeto e os arquivos do compose (inclusive o override) da pilha que já está rodando, em vez de criar uma pilha paralela.
 
 ## 1.32.0 - 2026-11-21 - Servidor, teste e logo do e-mail em janelas
