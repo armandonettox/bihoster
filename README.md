@@ -96,6 +96,14 @@ de volumes (`volumes: !override`), repita esses dois itens nele. O botão **não
 antiga, então ajuste-o antes de rodar `docker compose up -d` à mão. O log de cada atualização fica
 em `update_logs/` no volume de dados.
 
+**Antes de atualizar, o sistema copia o banco** para `backups/` no volume de dados (com a API de
+cópia do SQLite, que é consistente com o sistema em uso; o `.env` também é copiado, se a pasta do
+projeto estiver montada). Ficam guardadas as 5 cópias mais novas, e **se a cópia falhar a
+atualização nem começa**. Para restaurar uma cópia: `docker compose cp backend:/app/data/backups/<arquivo>.db .`
+traz o arquivo para a sua máquina; com o sistema parado (`docker compose stop backend`),
+`docker compose cp ./<arquivo>.db backend:/app/data/bihoster.db` coloca a cópia no lugar e
+`docker compose start backend` volta a subir.
+
 ## Usuários, grupos e permissões
 
 Tudo isso fica em **Gerenciar usuários** (menu de módulos, no canto superior), separado da Administração:

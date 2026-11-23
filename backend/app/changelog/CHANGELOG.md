@@ -11,6 +11,11 @@ Imagens ficam em backend/app/changelog/img/ e entram assim: ![descrição](img/n
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.34.0 - 2026-11-23 - Cópia do banco antes de atualizar
+- Ao atualizar pelo botão **Atualizar agora**, o sistema copia o banco (e o `.env`) para a pasta de backups do servidor antes de começar. Ficam guardadas as 5 cópias mais novas.
+- Se a cópia falhar, a atualização nem começa, e a mensagem diz o motivo.
+- A confirmação da atualização avisa sobre a cópia, e a auditoria registra o nome do arquivo.
+
 ## 1.33.0 - 2026-11-21 - Histórico de versões completo e botões de atualização
 - O histórico da aba Atualizações agora traz todas as versões, de 1.0.0 até a atual, e bate sempre com a versão instalada. Antes ele vinha das Releases do GitHub, que pararam na 1.7.0.
 - O texto de cada versão aceita imagens, que abrem ampliadas ao clicar.
