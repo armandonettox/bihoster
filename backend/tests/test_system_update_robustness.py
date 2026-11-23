@@ -16,6 +16,14 @@ def _limpa_cache():
     system_update.clear_release_cache()
 
 
+@pytest.fixture(autouse=True)
+def _sem_copia_real_do_banco(monkeypatch, tmp_path):
+    """A rota copia o banco antes de atualizar; aqui isso nao pode tocar no banco de desenvolvimento nem escrever fora da
+    pasta temporaria (a copia de verdade tem testes proprios em test_system_update_backup.py)."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data_isolada"))
+    monkeypatch.setattr(system_update, "backup_database", lambda *args, **kwargs: None)
+
+
 def _release_payload(tag: str = "v1.2.0") -> dict:
     return {"tag_name": tag, "name": tag, "body": "notas", "published_at": "2026-09-29T12:00:00Z"}
 

@@ -74,6 +74,15 @@ def apply_update(
     if not latest or not system_update.is_newer(latest.version, settings.app_version):
         raise HTTPException(status_code=400, detail="Nao ha nenhuma versao mais nova disponivel.")
 
+    # Copia o banco antes de mexer em qualquer coisa; se nao conseguir, nao atualiza
+    try:
+        backup = system_update.backup_database(settings.app_version, latest.version)
+    except system_update.UpdateCouldNotStart as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=f"A atualizacao nao foi iniciada porque nao foi possivel copiar o banco antes: {exc}",
+        )
+
     try:
         log_path = system_update.apply_update(latest.version)
     except system_update.UpdateAlreadyRunning as exc:
@@ -91,14 +100,18 @@ def apply_update(
         action="apply_update",
         entity="system",
         user_id=current_user.id,
-        details=f"{settings.app_version} -> {latest.version}",
+        details=f"{settings.app_version} -> {latest.version}" + (f", copia do banco: {backup.name}" if backup else ""),
     )
 
     return {
         "status": "started",
         "target_version": latest.version,
         "log_file": log_path.name,
-        "message": "Atualizacao iniciada -- o sistema pode ficar indisponivel por alguns instantes.",
+        "backup_file": backup.name if backup else None,
+        "message": (
+            "Atualizacao iniciada -- o sistema pode ficar indisponivel por alguns instantes."
+            + (" O banco foi copiado antes, para a pasta de backups do servidor." if backup else "")
+        ),
     }
 
 

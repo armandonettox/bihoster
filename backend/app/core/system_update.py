@@ -2,6 +2,8 @@ import json
 import os
 import re
 import shlex
+import shutil
+import sqlite3
 import subprocess
 import time
 from datetime import datetime, timezone
@@ -10,6 +12,7 @@ from typing import Callable, Optional, TypeVar
 
 import httpx
 from pydantic import BaseModel
+from sqlalchemy.engine import make_url
 
 from app.core import changelog
 from app.core.config import settings
@@ -30,6 +33,8 @@ APPLY_LOCK_STALE_SECONDS = 600
 # A aba mostra os logs completos de cada atualizacao; sem limite a resposta cresce para sempre
 MAX_UPDATE_LOGS = 10
 MAX_LOG_CHARS = 20_000
+# Quantas copias do banco feitas antes de atualizar ficam guardadas (as mais velhas sao apagadas)
+MAX_UPDATE_BACKUPS = 5
 
 _T = TypeVar("_T")
 
@@ -75,6 +80,75 @@ def _update_log_dir() -> Path:
     log_dir = Path(os.environ.get("DATA_DIR", "/app/data")) / "update_logs"
     log_dir.mkdir(parents=True, exist_ok=True)
     return log_dir
+
+
+def _backup_dir() -> Path:
+    backup_dir = Path(os.environ.get("DATA_DIR", "/app/data")) / "backups"
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    return backup_dir
+
+
+def _database_file() -> Optional[Path]:
+    """O arquivo do banco SQLite em uso, ou None quando o banco nao e um arquivo (em memoria)."""
+    url = make_url(settings.database_url)
+    if url.get_backend_name() != "sqlite":
+        raise UpdateCouldNotStart("o banco nao e SQLite, e so SQLite sabe ser copiado por aqui")
+    if not url.database or url.database == ":memory:":
+        return None
+    return Path(url.database)
+
+
+def backup_database(from_version: str, target_version: str, database_file: Optional[Path] = None) -> Optional[Path]:
+    """Copia o banco (e o .env, se a pasta do projeto estiver montada) para a pasta de backups do volume de dados, antes
+    de atualizar. Usa a API de copia do SQLite, que e consistente mesmo com o banco em uso. Devolve o caminho da copia do
+    banco, ou None se o banco nao e um arquivo (nada a copiar).
+
+    Se nao conseguir copiar, levanta UpdateCouldNotStart: atualizar sem a copia nao pode acontecer. Guarda so as
+    MAX_UPDATE_BACKUPS copias mais novas."""
+    source = database_file if database_file is not None else _database_file()
+    if source is None:
+        return None
+    if not source.is_file():
+        raise UpdateCouldNotStart(f"o arquivo do banco nao foi encontrado em {source}")
+
+    backup_dir = _backup_dir()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    suffix = f"v{from_version}-para-v{target_version}-{stamp}"
+    destination = backup_dir / f"db-antes-{suffix}.db"
+    try:
+        origin = sqlite3.connect(f"file:{source.as_posix()}?mode=ro", uri=True)
+        copy = sqlite3.connect(destination)
+        try:
+            origin.backup(copy)
+            integrity = copy.execute("pragma integrity_check").fetchone()[0]
+        finally:
+            copy.close()
+            origin.close()
+        if integrity != "ok":
+            raise UpdateCouldNotStart(f"a copia do banco falhou na verificacao de integridade ({integrity})")
+        destination.chmod(0o600)
+        env_file = _deploy_dir() / ".env"
+        if env_file.is_file():
+            env_copy = backup_dir / f"env-antes-{suffix}"
+            shutil.copyfile(env_file, env_copy)
+            env_copy.chmod(0o600)
+    except UpdateCouldNotStart:
+        destination.unlink(missing_ok=True)
+        raise
+    except (OSError, sqlite3.Error) as exc:
+        destination.unlink(missing_ok=True)
+        raise UpdateCouldNotStart(f"nao foi possivel copiar o banco: {exc}") from exc
+
+    _prune_backups(backup_dir)
+    return destination
+
+
+def _prune_backups(backup_dir: Path) -> None:
+    """Apaga as copias mais velhas alem do limite (so os arquivos que este modulo cria), junto com o .env de cada uma."""
+    copies = sorted(backup_dir.glob("db-antes-*.db"), key=lambda path: path.stat().st_mtime, reverse=True)
+    for old in copies[MAX_UPDATE_BACKUPS:]:
+        old.unlink(missing_ok=True)
+        (backup_dir / old.name.replace("db-antes-", "env-antes-").removesuffix(".db")).unlink(missing_ok=True)
 
 
 def is_auto_update_enabled() -> bool:

@@ -4,6 +4,8 @@ bater na rede nem chamar subprocess de verdade num teste)."""
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from app.core import system_update
 from app.core.system_update import ReleaseInfo
 
@@ -114,6 +116,14 @@ def test_apply_update_rejeita_sem_versao_mais_nova(client, monkeypatch):
         resp = client.post("/system/version/apply", headers=headers)
 
     assert resp.status_code == 400
+
+
+@pytest.fixture(autouse=True)
+def _sem_copia_real_do_banco(monkeypatch, tmp_path):
+    """A rota copia o banco antes de atualizar; nestes testes isso nao pode tocar no banco de desenvolvimento nem escrever
+    fora da pasta temporaria (a copia de verdade tem testes proprios em test_system_update_backup.py)."""
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(system_update, "backup_database", lambda *args, **kwargs: None)
 
 
 def test_apply_update_dispara_quando_ha_versao_nova_e_auditoria_registrada(client, monkeypatch):

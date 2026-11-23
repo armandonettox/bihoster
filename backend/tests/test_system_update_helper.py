@@ -206,7 +206,9 @@ class TestApplyComAuxiliar:
         assert "pull" in popen.call_args.args[0][-1]
 
 
-def test_rota_responde_500_com_o_motivo_quando_o_docker_recusa(client, monkeypatch):
+def test_rota_responde_500_com_o_motivo_quando_o_docker_recusa(client, monkeypatch, tmp_path):
+    monkeypatch.setenv("DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setattr(system_update, "backup_database", lambda *args, **kwargs: None)
     client.post("/auth/register", json={"name": "Admin", "email": "admin@example.com", "password": "SenhaForte123"})
     token = client.post("/auth/login", json={"email": "admin@example.com", "password": "SenhaForte123"}).json()["access_token"]
     monkeypatch.setattr(system_update, "is_auto_update_enabled", lambda: True)
