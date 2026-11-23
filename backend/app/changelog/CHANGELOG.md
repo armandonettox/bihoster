@@ -11,6 +11,10 @@ Imagens ficam em backend/app/changelog/img/ e entram assim: ![descrição](img/n
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.36.0 - 2026-11-23 - Fim do pedido para traduzir a página
+- O navegador não oferece mais traduzir o sistema. A página dizia ser em inglês (`lang="en"`), mesmo toda em português, e por isso o navegador perguntava se queria traduzir.
+- Traduzir quebrava a tela, principalmente os ícones, que são texto em inglês trocado por uma fonte de ícones. Agora a página se declara em português do Brasil e pede ao navegador para não traduzir.
+
 ## 1.35.0 - 2026-11-23 - Janela da tela de login e de cores e logos mais legíveis
 - Na janela da tela de login, as duas opções de layout agora ficam uma embaixo da outra, com o texto inteiro. Antes ficavam lado a lado e o texto quebrava uma palavra por linha e saía do cartão.
 - Na janela de cores e logos, o logo e o favicon ficam um por linha, e o botão de enviar imagem não quebra mais em duas linhas.
