@@ -1,0 +1,84 @@
+{
+  "colors": {
+    "bg": "#FFFFFF",
+    "ink": "#1F2937",
+    "muted": "#6B7280",
+    "line": "#E5E7EB",
+    "card": "#F3F4F6",
+    "positive": "#0E9F6E",
+    "negative": "#DC2626"
+  },
+  "collections": [
+    { "name": "Comercial", "reports": ["vendas-regiao", "funil-comercial"] },
+    { "name": "Financeiro", "reports": ["resultado-mensal", "fluxo-de-caixa"] },
+    { "name": "Operações", "reports": ["atendimento", "logistica"] }
+  ],
+  "reports": {
+    "vendas-regiao": {
+      "name": "Vendas por região",
+      "accent": "#1E3A6B",
+      "kpis": [["Receita", "R$ 4,82 mi", "+8,4%"], ["Pedidos", "12.940", "+3,1%"], ["Ticket médio", "R$ 372", "+5,2%"]],
+      "bars_title": "Receita por região (R$ mil)",
+      "bars": [["Sudeste", 1980], ["Sul", 1210], ["Nordeste", 880], ["Centro-Oeste", 490], ["Norte", 260]],
+      "line_title": "Receita por mês (R$ mil)",
+      "line": [310, 335, 322, 360, 391, 402, 388, 415, 440, 431, 462, 489],
+      "table_title": "Maiores clientes",
+      "rows": [["Alfa Distribuidora", "R$ 612 mil", "+12%"], ["Grupo Bravo", "R$ 540 mil", "+4%"], ["Casa Delta", "R$ 497 mil", "-2%"], ["Eco Mercado", "R$ 433 mil", "+9%"]]
+    },
+    "funil-comercial": {
+      "name": "Funil comercial",
+      "accent": "#16A2A4",
+      "kpis": [["Oportunidades", "1.284", "+6,0%"], ["Conversão", "23,4%", "+1,8 pp"], ["Ciclo médio", "18 dias", "-2 dias"]],
+      "bars_title": "Oportunidades por etapa",
+      "bars": [["Prospecção", 1284], ["Qualificação", 902], ["Proposta", 540], ["Negociação", 361], ["Fechamento", 301]],
+      "line_title": "Novas oportunidades por semana",
+      "line": [58, 61, 64, 60, 69, 72, 70, 76, 81, 79, 84, 90],
+      "table_title": "Equipes",
+      "rows": [["Equipe Norte", "92 propostas", "+11%"], ["Equipe Sul", "88 propostas", "+7%"], ["Equipe Leste", "79 propostas", "+2%"], ["Equipe Oeste", "71 propostas", "-3%"]]
+    },
+    "resultado-mensal": {
+      "name": "Resultado mensal",
+      "accent": "#7C3AED",
+      "kpis": [["Receita líquida", "R$ 6,10 mi", "+5,5%"], ["Margem", "31,2%", "+0,9 pp"], ["Resultado", "R$ 1,24 mi", "+9,7%"]],
+      "bars_title": "Resultado por unidade (R$ mil)",
+      "bars": [["Unidade A", 520], ["Unidade B", 340], ["Unidade C", 255], ["Unidade D", 125]],
+      "line_title": "Resultado acumulado (R$ mil)",
+      "line": [90, 205, 330, 440, 560, 690, 800, 930, 1040, 1130, 1190, 1240],
+      "table_title": "Despesas principais",
+      "rows": [["Pessoal", "R$ 2,10 mi", "+1%"], ["Tecnologia", "R$ 640 mil", "+8%"], ["Marketing", "R$ 410 mil", "-4%"], ["Logística", "R$ 380 mil", "+2%"]]
+    },
+    "fluxo-de-caixa": {
+      "name": "Fluxo de caixa",
+      "accent": "#0E9F6E",
+      "kpis": [["Saldo atual", "R$ 2,31 mi", "+4,2%"], ["A receber", "R$ 1,05 mi", "-1,1%"], ["A pagar", "R$ 0,87 mi", "+2,3%"]],
+      "bars_title": "Entradas por semana (R$ mil)",
+      "bars": [["Semana 1", 410], ["Semana 2", 455], ["Semana 3", 380], ["Semana 4", 520]],
+      "line_title": "Saldo diário (R$ mil)",
+      "line": [1900, 1950, 2010, 1980, 2050, 2120, 2090, 2160, 2210, 2190, 2260, 2310],
+      "table_title": "Vencimentos próximos",
+      "rows": [["Fornecedor Gama", "R$ 120 mil", "em 2 dias"], ["Folha de pagamento", "R$ 310 mil", "em 5 dias"], ["Tributos", "R$ 98 mil", "em 7 dias"], ["Aluguéis", "R$ 64 mil", "em 9 dias"]]
+    },
+    "atendimento": {
+      "name": "Indicadores de atendimento",
+      "accent": "#D97706",
+      "kpis": [["Chamados", "8.412", "+2,7%"], ["Resolvidos no 1º contato", "74%", "+3 pp"], ["Satisfação", "4,6 / 5", "+0,1"]],
+      "bars_title": "Chamados por canal",
+      "bars": [["Telefone", 3100], ["Chat", 2650], ["E-mail", 1730], ["Aplicativo", 932]],
+      "line_title": "Tempo médio de resposta (min)",
+      "line": [14, 13, 13, 12, 12, 11, 12, 11, 10, 10, 9, 9],
+      "table_title": "Motivos mais comuns",
+      "rows": [["Segunda via", "1.920", "+5%"], ["Dúvida de cobrança", "1.410", "-2%"], ["Alteração cadastral", "1.080", "+1%"], ["Cancelamento", "640", "-8%"]]
+    },
+    "logistica": {
+      "name": "SLA e logística",
+      "accent": "#0369A1",
+      "kpis": [["Entregas no prazo", "96,1%", "+0,8 pp"], ["Pedidos em rota", "1.870", "+4,0%"], ["Custo por entrega", "R$ 18,40", "-3,2%"]],
+      "bars_title": "Entregas por centro de distribuição",
+      "bars": [["CD Campinas", 4200], ["CD Recife", 3100], ["CD Curitiba", 2650], ["CD Goiânia", 1900]],
+      "line_title": "Entregas no prazo (%)",
+      "line": [94, 94.5, 95, 94.8, 95.2, 95.6, 95.4, 95.9, 96, 95.8, 96.2, 96.1],
+      "table_title": "Atrasos por motivo",
+      "rows": [["Trânsito", "212", "-6%"], ["Endereço incorreto", "148", "+2%"], ["Falta de estoque", "97", "-11%"], ["Clima", "55", "+9%"]]
+    }
+  }
+}

@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt-BR" translate="no">
+<head>
+<meta charset="utf-8">
+<title>{{TITLE}}</title>
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px 22px; font-family: "Segoe UI", Arial, sans-serif; color: {{INK}}; background: {{BG}}; }
+  h1 { margin: 0 0 14px; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+  h1::before { content: ""; width: 6px; height: 22px; border-radius: 3px; background: {{ACCENT}}; }
+  .kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px; }
+  .kpi { background: {{CARD}}; border-radius: 8px; padding: 12px 16px; display: flex; flex-direction: column; gap: 2px; border-top: 3px solid {{ACCENT}}; }
+  .kpi span { font-size: 12px; color: {{MUTED}}; }
+  .kpi b { font-size: 26px; font-weight: 600; }
+  .kpi i { font-style: normal; font-size: 12px; }
+  .up { color: {{POSITIVE}}; } .down { color: {{NEGATIVE}}; }
+  .grid { display: grid; grid-template-columns: 1.1fr 1fr; gap: 14px; }
+  .card { background: {{BG}}; border: 1px solid {{LINE}}; border-radius: 8px; padding: 12px 16px; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; font-weight: 600; }
+  .bar { display: grid; grid-template-columns: 110px 1fr 56px; align-items: center; gap: 8px; margin: 7px 0; font-size: 12px; }
+  .bar div { height: 16px; background: {{CARD}}; border-radius: 3px; overflow: hidden; }
+  .bar div u { display: block; height: 100%; background: {{ACCENT}}; border-radius: 3px; text-decoration: none; }
+  .bar em { font-style: normal; text-align: right; color: {{MUTED}}; }
+  svg { width: 100%; height: 150px; display: block; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  td { padding: 7px 0; border-bottom: 1px solid {{LINE}}; } td:last-child { text-align: right; }
+  tr:last-child td { border-bottom: 0; }
+</style>
+</head>
+<body>
+  <h1>{{TITLE}}</h1>
+  <div class="kpis">{{KPIS}}</div>
+  <div class="grid">
+    <div class="card"><h2>{{BARS_TITLE}}</h2>{{BARS}}</div>
+    <div class="card"><h2>{{LINE_TITLE}}</h2>{{LINE}}</div>
+  </div>
+  <div class="card" style="margin-top:14px"><h2>{{TABLE_TITLE}}</h2><table>{{ROWS}}</table></div>
+</body>
+</html>
