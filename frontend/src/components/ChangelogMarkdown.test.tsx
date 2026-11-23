@@ -61,6 +61,18 @@ describe("ChangelogMarkdown", () => {
   });
 
   it.each([
+    ["passeio-pelo-sistema.gif", "Passeio pelo sistema"],
+    ["tela.jpg", "Tela"],
+  ])("GIF e JPG do histórico (%s) carregam do próprio sistema como qualquer imagem", (arquivo, descricao) => {
+    const { container } = render(<ChangelogMarkdown text={`![${descricao}](img/${arquivo})`} />);
+
+    const img = container.querySelector("img") as HTMLImageElement;
+    expect(img.getAttribute("src")).toMatch(new RegExp(`/static/changelog/${arquivo.replace(".", "\\.")}$`));
+    expect(img.getAttribute("alt")).toBe(descricao);
+    expect((img.closest("a") as HTMLAnchorElement).getAttribute("target")).toBe("_blank");
+  });
+
+  it.each([
     "![x](https://exemplo.com/foto.png)",
     "![x](//exemplo.com/foto.png)",
     "![x](img/../segredo.png)",

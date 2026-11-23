@@ -131,6 +131,30 @@ class TestRotas:
         assert resp.status_code == 200
         assert resp.headers["content-type"] == "image/png"
 
+    @pytest.mark.parametrize(
+        ("nome", "conteudo", "tipo"),
+        [
+            ("teste-servir.gif", b"GIF89a" + b"0" * 16, "image/gif"),
+            ("teste-servir.jpg", b"\xff\xd8\xff\xe0" + b"0" * 16, "image/jpeg"),
+        ],
+    )
+    def test_gif_e_jpg_do_historico_tambem_sao_servidos_com_o_tipo_certo(self, client, nome, conteudo, tipo):
+        arquivo = changelog.IMAGES_DIR / nome
+        arquivo.write_bytes(conteudo)
+        try:
+            resp = client.get(f"/static/changelog/{nome}")
+        finally:
+            arquivo.unlink(missing_ok=True)
+
+        assert resp.status_code == 200
+        assert resp.headers["content-type"] == tipo
+
+    def test_o_gif_do_passeio_existe_e_e_um_gif_de_verdade(self):
+        gif = changelog.IMAGES_DIR / "passeio-pelo-sistema.gif"
+
+        assert gif.read_bytes()[:6] in (b"GIF87a", b"GIF89a")
+        assert gif.stat().st_size < 2 * 1024 * 1024  # a regra do historico: arquivos abaixo de 2 MB
+
     def test_imagem_inexistente_da_404(self, client):
         assert client.get("/static/changelog/nao-existe.png").status_code == 404
 
