@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../../api/alerts";
 import type { Alert } from "../../api/alerts";
@@ -53,6 +53,12 @@ function alerta(extra: Partial<Alert> = {}): Alert {
   };
 }
 
+/** Abre o menu dos 3 pontinhos da linha que traz o texto dado */
+function abrirMenu(textoDaLinha: string) {
+  const linha = screen.getByText(textoDaLinha).closest("tr") as HTMLElement;
+  fireEvent.click(within(linha).getByRole("button", { name: "Mais opcoes" }));
+}
+
 const ESCOLHA = { report_id: 34, report_name: "Vendas Mensal", collection_id: 3, collection_name: "Comercial" };
 
 beforeEach(() => {
@@ -88,9 +94,7 @@ describe("modulo Alertas", () => {
     render(<AlertsTab />);
     await screen.findByText("Meta batida");
 
-    expect(screen.queryByRole("button", { name: /Editar/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Excluir/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Pausar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mais opcoes" })).toBeNull();
   });
 
   it("pausa um alerta pela colecao dele e recarrega a lista", async () => {
@@ -98,7 +102,8 @@ describe("modulo Alertas", () => {
     render(<AlertsTab />);
     await screen.findByText("Meta batida");
 
-    fireEvent.click(screen.getByRole("button", { name: "Pausar Meta batida" }));
+    abrirMenu("Meta batida");
+    fireEvent.click(screen.getByRole("button", { name: "Pausar" }));
 
     await waitFor(() => expect(atualizar).toHaveBeenCalledWith(3, 5, { enabled: false }));
     await waitFor(() => expect(listar).toHaveBeenCalledTimes(2));
@@ -109,7 +114,8 @@ describe("modulo Alertas", () => {
     render(<AlertsTab />);
     await screen.findByText("Meta batida");
 
-    fireEvent.click(screen.getByRole("button", { name: "Excluir Meta batida" }));
+    abrirMenu("Meta batida");
+    fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
     expect(excluir).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -121,7 +127,8 @@ describe("modulo Alertas", () => {
     render(<AlertsTab />);
     await screen.findByText("Meta batida");
 
-    fireEvent.click(screen.getByRole("button", { name: "Editar Meta batida" }));
+    abrirMenu("Meta batida");
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     await screen.findByText("Editar alerta");
     fireEvent.change(screen.getByLabelText(/Valor limite/), { target: { value: "99" } });
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));

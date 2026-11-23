@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as emailApi from "../../api/emailSettings";
 import * as powerbiApi from "../../api/powerbi";
@@ -56,6 +56,12 @@ function assinatura(extra: Partial<Subscription> = {}): Subscription {
   };
 }
 
+/** Abre o menu dos 3 pontinhos da linha que traz o texto dado */
+function abrirMenu(textoDaLinha: string) {
+  const linha = screen.getByText(textoDaLinha).closest("tr") as HTMLElement;
+  fireEvent.click(within(linha).getByRole("button", { name: "Mais opcoes" }));
+}
+
 const ESCOLHA = { report_id: 34, report_name: "Vendas Mensal", collection_id: 3, collection_name: "Comercial" };
 
 beforeEach(() => {
@@ -82,10 +88,7 @@ describe("modulo Assinaturas", () => {
     render(<SubscriptionsTab />);
     await screen.findByText("Comercial");
 
-    expect(screen.queryByRole("button", { name: /Editar/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Excluir/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Enviar agora/ })).toBeNull();
-    expect(screen.queryByRole("button", { name: /Pausar/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Mais opcoes" })).toBeNull();
   });
 
   it("pausa pela colecao da assinatura e recarrega", async () => {
@@ -93,7 +96,8 @@ describe("modulo Assinaturas", () => {
     render(<SubscriptionsTab />);
     await screen.findByText("Comercial");
 
-    fireEvent.click(screen.getByRole("button", { name: "Pausar Resumo da manha" }));
+    abrirMenu("Seg a Sex as 08:00");
+    fireEvent.click(screen.getByRole("button", { name: "Pausar" }));
 
     await waitFor(() => expect(atualizar).toHaveBeenCalledWith(3, 7, { enabled: false }));
     await waitFor(() => expect(listar).toHaveBeenCalledTimes(2));
@@ -104,7 +108,8 @@ describe("modulo Assinaturas", () => {
     render(<SubscriptionsTab />);
     await screen.findByText("Comercial");
 
-    fireEvent.click(screen.getByRole("button", { name: "Excluir Resumo da manha" }));
+    abrirMenu("Seg a Sex as 08:00");
+    fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
     expect(excluir).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "Excluir" }));
 
@@ -116,7 +121,8 @@ describe("modulo Assinaturas", () => {
     render(<SubscriptionsTab />);
     await screen.findByText("Comercial");
 
-    fireEvent.click(screen.getByRole("button", { name: "Enviar agora Resumo da manha" }));
+    abrirMenu("Seg a Sex as 08:00");
+    fireEvent.click(screen.getByRole("button", { name: "Enviar agora" }));
 
     await waitFor(() => expect(enviarAgora).toHaveBeenCalledWith(3, 7));
   });
@@ -126,7 +132,8 @@ describe("modulo Assinaturas", () => {
     render(<SubscriptionsTab />);
     await screen.findByText("Comercial");
 
-    fireEvent.click(screen.getByRole("button", { name: "Editar Resumo da manha" }));
+    abrirMenu("Seg a Sex as 08:00");
+    fireEvent.click(screen.getByRole("button", { name: "Editar" }));
     await screen.findByText("Editar assinatura");
     fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
 

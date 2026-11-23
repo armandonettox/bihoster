@@ -8,6 +8,8 @@ import * as subscriptionsApi from "../../api/subscriptions";
 import type { Subscription, SubscriptionInput } from "../../api/subscriptions";
 import type { ReportChoice } from "../../api/alerts";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import KebabMenu from "../../components/KebabMenu";
+import MenuIcon from "../../components/MenuIcon";
 import Modal from "../../components/Modal";
 import { SkeletonList } from "../../components/Skeleton";
 import SubscriptionForm from "../../components/SubscriptionForm";
@@ -259,7 +261,7 @@ export default function SubscriptionsTab() {
                 <th>Ultimo status</th>
                 <th>Situacao</th>
                 <th>Criado por</th>
-                <th>Acoes</th>
+                <th aria-label="Acoes"></th>
               </tr>
             </thead>
             <tbody>
@@ -292,7 +294,7 @@ export default function SubscriptionsTab() {
                   <td style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
                     {s.created_by_name ? formatPersonName(s.created_by_name) : "--"}
                   </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
+                  <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
                     {running?.id === s.id ? (
                       <RunProgress
                         workspaceId={running.collectionId}
@@ -303,49 +305,69 @@ export default function SubscriptionsTab() {
                         }}
                       />
                     ) : (
-                      <>
-                        {s.can_run !== false && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            aria-label={`Enviar agora ${subTitle(s)}`}
-                            onClick={() => handleRunNow(s)}
-                          >
-                            Enviar agora
-                          </button>
-                        )}
-                        {s.can_edit !== false && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            aria-label={`${s.enabled ? "Pausar" : "Reativar"} ${subTitle(s)}`}
-                            onClick={() =>
-                              attempt(
-                                () => subscriptionsApi.updateSubscription(s.collection_id, s.id, { enabled: !s.enabled }),
-                                "Nao foi possivel alterar a assinatura.",
-                              )
-                            }
-                          >
-                            {s.enabled ? "Pausar" : "Reativar"}
-                          </button>
-                        )}
-                        {s.can_edit !== false && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            aria-label={`Editar ${subTitle(s)}`}
-                            onClick={() => setEditing(s)}
-                          >
-                            Editar
-                          </button>
-                        )}
-                        {s.can_delete !== false && (
-                          <button
-                            className="btn btn-ghost btn-sm"
-                            aria-label={`Excluir ${subTitle(s)}`}
-                            onClick={() => setToDelete(s)}
-                          >
-                            Excluir
-                          </button>
-                        )}
-                      </>
+                      (s.can_run !== false || s.can_edit !== false || s.can_delete !== false) && (
+                        <KebabMenu floating>
+                          {(close) => (
+                            <>
+                              {s.can_run !== false && (
+                                <button
+                                  type="button"
+                                  className="kebab-menu-item kebab-menu-item-with-icon"
+                                  onClick={() => {
+                                    close();
+                                  handleRunNow(s);
+                                  }}
+                                >
+                                  <MenuIcon name="send" />
+                                  Enviar agora
+                                </button>
+                              )}
+                              {s.can_edit !== false && (
+                                <button
+                                  type="button"
+                                  className="kebab-menu-item kebab-menu-item-with-icon"
+                                  onClick={() => {
+                                    close();
+                                  attempt(
+                                    () => subscriptionsApi.updateSubscription(s.collection_id, s.id, { enabled: !s.enabled }),
+                                    "Nao foi possivel alterar a assinatura.",
+                                  );
+                                  }}
+                                >
+                                  <MenuIcon name={s.enabled ? "pause_circle" : "play_circle"} />
+                                  {s.enabled ? "Pausar" : "Reativar"}
+                                </button>
+                              )}
+                              {s.can_edit !== false && (
+                                <button
+                                  type="button"
+                                  className="kebab-menu-item kebab-menu-item-with-icon"
+                                  onClick={() => {
+                                    close();
+                                  setEditing(s);
+                                  }}
+                                >
+                                  <MenuIcon name="edit" />
+                                  Editar
+                                </button>
+                              )}
+                              {s.can_delete !== false && (
+                                <button
+                                  type="button"
+                                  className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
+                                  onClick={() => {
+                                    close();
+                                  setToDelete(s);
+                                  }}
+                                >
+                                  <MenuIcon name="delete" />
+                                  Excluir
+                                </button>
+                              )}
+                            </>
+                          )}
+                        </KebabMenu>
+                      )
                     )}
                   </td>
                 </tr>

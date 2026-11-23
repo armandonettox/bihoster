@@ -1,20 +1,41 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 
 export default function KebabMenu({
   children,
   onClose,
+  floating = false,
 }: {
   children: (close: () => void) => ReactNode;
+  /** Abre a janela solta da tela (posicao fixa) em vez de presa ao botao: para listas dentro de area com rolagem, onde
+   * a janela seria cortada nas ultimas linhas. Fecha ao rolar ou redimensionar. */
+  floating?: boolean;
   /** Chamado sempre que o menu fecha, inclusive por clique fora -- use pra resetar
    * estado de confirmacao de exclusao guardado no componente pai. */
   onClose?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const [floatStyle, setFloatStyle] = useState<CSSProperties | undefined>(undefined);
 
   function close() {
     setOpen(false);
     onClose?.();
+  }
+
+  function toggle() {
+    if (open) return close();
+    if (floating && triggerRef.current) {
+      const rect = triggerRef.current.getBoundingClientRect();
+      // Perto do rodape, abre para cima para a janela caber
+      const opensUp = window.innerHeight - rect.bottom < 200 && rect.top > 200;
+      setFloatStyle({
+        position: "fixed",
+        right: window.innerWidth - rect.right,
+        ...(opensUp ? { bottom: window.innerHeight - rect.top + 4 } : { top: rect.bottom + 4 }),
+      });
+    }
+    setOpen(true);
   }
 
   useEffect(() => {
@@ -33,7 +54,13 @@ export default function KebabMenu({
     }
     document.addEventListener("mousedown", handleClickOutside);
     document.addEventListener("keydown", handleKeyDown);
+    if (floating) {
+      window.addEventListener("scroll", close, true);
+      window.addEventListener("resize", close);
+    }
     return () => {
+      window.removeEventListener("scroll", close, true);
+      window.removeEventListener("resize", close);
       document.removeEventListener("mousedown", handleClickOutside);
       document.removeEventListener("keydown", handleKeyDown);
     };
@@ -44,8 +71,9 @@ export default function KebabMenu({
     <div ref={containerRef} className="kebab-menu" onClick={(e) => e.stopPropagation()}>
       <button
         type="button"
+        ref={triggerRef}
         className="kebab-menu-trigger"
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={toggle}
         title="Mais opcoes"
         aria-label="Mais opcoes"
         aria-haspopup="true"
@@ -53,7 +81,11 @@ export default function KebabMenu({
       >
         &#8942;
       </button>
-      {open && <div className="kebab-menu-dropdown">{children(close)}</div>}
+      {open && (
+        <div className="kebab-menu-dropdown" style={floating ? floatStyle : undefined}>
+          {children(close)}
+        </div>
+      )}
     </div>
   );
 }

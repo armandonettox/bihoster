@@ -4,6 +4,8 @@ import type { Alert, AlertInput, Measure, ReportChoice } from "../../api/alerts"
 import { extractErrorMessage } from "../../api/client";
 import AlertForm from "../../components/AlertForm";
 import ConfirmDialog from "../../components/ConfirmDialog";
+import KebabMenu from "../../components/KebabMenu";
+import MenuIcon from "../../components/MenuIcon";
 import Modal from "../../components/Modal";
 import { SkeletonList } from "../../components/Skeleton";
 import { useBranding } from "../../context/BrandingContext";
@@ -225,7 +227,7 @@ export default function AlertsTab() {
                 <th>Ultima verificacao</th>
                 <th>Situacao</th>
                 <th>Criado por</th>
-                <th>Acoes</th>
+                <th aria-label="Acoes"></th>
               </tr>
             </thead>
             <tbody>
@@ -252,38 +254,56 @@ export default function AlertsTab() {
                   <td style={{ fontSize: 13, color: "var(--color-text-muted)" }}>
                     {a.created_by_name ? formatPersonName(a.created_by_name) : "--"}
                   </td>
-                  <td style={{ whiteSpace: "nowrap" }}>
-                    {a.can_edit !== false && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        aria-label={`${a.enabled ? "Pausar" : "Reativar"} ${alertTitle(a)}`}
-                        onClick={() =>
-                          attempt(
-                            () => alertsApi.updateAlert(a.collection_id, a.id, { enabled: !a.enabled }),
-                            "Nao foi possivel alterar o alerta.",
-                          )
-                        }
-                      >
-                        {a.enabled ? "Pausar" : "Reativar"}
-                      </button>
-                    )}
-                    {a.can_edit !== false && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        aria-label={`Editar ${alertTitle(a)}`}
-                        onClick={() => setEditing(a)}
-                      >
-                        Editar
-                      </button>
-                    )}
-                    {a.can_delete !== false && (
-                      <button
-                        className="btn btn-ghost btn-sm"
-                        aria-label={`Excluir ${alertTitle(a)}`}
-                        onClick={() => setToDelete(a)}
-                      >
-                        Excluir
-                      </button>
+                  <td style={{ whiteSpace: "nowrap", textAlign: "right" }}>
+                    {(a.can_edit !== false || a.can_delete !== false) && (
+                      <KebabMenu floating>
+                        {(close) => (
+                          <>
+                            {a.can_edit !== false && (
+                              <button
+                                type="button"
+                                className="kebab-menu-item kebab-menu-item-with-icon"
+                                onClick={() => {
+                                  close();
+                                attempt(
+                                  () => alertsApi.updateAlert(a.collection_id, a.id, { enabled: !a.enabled }),
+                                  "Nao foi possivel alterar o alerta.",
+                                );
+                                }}
+                              >
+                                <MenuIcon name={a.enabled ? "pause_circle" : "play_circle"} />
+                                {a.enabled ? "Pausar" : "Reativar"}
+                              </button>
+                            )}
+                            {a.can_edit !== false && (
+                              <button
+                                type="button"
+                                className="kebab-menu-item kebab-menu-item-with-icon"
+                                onClick={() => {
+                                  close();
+                                setEditing(a);
+                                }}
+                              >
+                                <MenuIcon name="edit" />
+                                Editar
+                              </button>
+                            )}
+                            {a.can_delete !== false && (
+                              <button
+                                type="button"
+                                className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
+                                onClick={() => {
+                                  close();
+                                setToDelete(a);
+                                }}
+                              >
+                                <MenuIcon name="delete" />
+                                Excluir
+                              </button>
+                            )}
+                          </>
+                        )}
+                      </KebabMenu>
                     )}
                   </td>
                 </tr>
