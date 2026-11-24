@@ -1,3 +1,6 @@
+/// <reference types="node" />
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api/reportDelivery";
@@ -45,6 +48,24 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
+});
+
+describe("ExportMenu - camadas da tela", () => {
+  // O jsdom nao desenha camadas, entao este teste le o CSS: a janela abre solta no body e o botao fica na tela cheia
+  // do relatorio (position fixed com z-index alto). Com z-index menor a janela abre escondida atras do relatorio.
+  function zIndexDe(css: string, seletor: string): number {
+    const bloco = new RegExp(`(?:^|\\n)${seletor.replace(".", "\\.")}\\s*\\{([^}]*)\\}`).exec(css);
+    const valor = /z-index:\s*(\d+)/.exec(bloco?.[1] ?? "");
+    expect(valor, `z-index de ${seletor}`).not.toBeNull();
+    return Number(valor![1]);
+  }
+
+  it("a janela fica acima da tela cheia do relatorio", () => {
+    // O vitest esvazia o CSS importado com ?raw, entao le o arquivo direto (os testes rodam na pasta do frontend)
+    const css = readFileSync(resolve(process.cwd(), "src/index.css"), "utf-8");
+
+    expect(zIndexDe(css, ".export-menu")).toBeGreaterThan(zIndexDe(css, ".fullscreen-view"));
+  });
 });
 
 describe("ExportMenu - a janela", () => {

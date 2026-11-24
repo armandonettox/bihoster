@@ -437,7 +437,8 @@ table.table tr:last-child td {
 
 /* Janela suspensa do botao Exportar (ExportMenu), solta da tela para nao ser cortada pelo cabecalho */
 .export-menu {
-  z-index: 60;
+  /* Acima da tela cheia do relatorio (.fullscreen-view, 1000), onde o botao Exportar vive */
+  z-index: 1100;
   max-width: calc(100vw - 16px);
   max-height: calc(100vh - 80px);
   overflow-y: auto;
