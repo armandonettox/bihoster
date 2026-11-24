@@ -12,6 +12,15 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.43.0 - 2026-11-24 - Exportar mais parecido com o Power BI, com PowerPoint
+- O botão **Exportar** agora funciona como o do Power BI: abre uma lista de formatos, cada um com o seu **logo** (Excel, PowerPoint, PDF e imagem), e ao escolher abre a janela do formato.
+- Novo formato: **PowerPoint (.pptx)**, gerado pelo Power BI.
+- A opção **CSV** foi retirada: as tabelas agora saem só em **Excel**.
+- Nas janelas de PowerPoint, PDF e imagem você escolhe **Valores Atuais** (com os filtros e seleções que estão na tela) ou **Valores Padrão**, e pode **exportar somente a página atual**.
+- A janela do Excel mostra qual tabela exportar, e as tabelas da página agora são lidas assim que a página desenha, então a janela abre na hora, sem esperar a procura.
+- Ao clicar em **Exportar**, a janela **fecha na hora** e a exportação segue **em segundo plano**: um aviso animado no canto da tela mostra o andamento (com a porcentagem quando o Power BI informa), o botão do topo gira enquanto exporta e o arquivo baixa sozinho. Dá para continuar usando o relatório, ou até sair dele, e pedir outro formato ao mesmo tempo. Se falhar, o aviso fica na tela com o motivo.
+- A exportação ficou mais rápida: o sistema passou a perguntar ao Power BI se o arquivo já está pronto a cada 1 segundo (antes eram 3) e a tela a cada 1 segundo (antes eram 2), com a primeira consulta em meio segundo. O tempo que o próprio Power BI leva para gerar o arquivo não muda.
+
 ## 1.42.1 - 2026-11-24 - Módulos de volta ao topo
 - O botão de quadradinho dos módulos voltou para a barra do topo. Os módulos agora aparecem nos dois lugares: no topo e na barra lateral.
 

@@ -43,7 +43,7 @@ licença nem de conta própria no Power BI para ver o que tem permissão. Sobe c
 
 | | |
 |---|---|
-| **Relatórios** | Coleções de relatórios do Power BI embutidos, com busca, favoritos, miniaturas, tela cheia com zoom, escolha das páginas que aparecem e um botão **Exportar** que abre uma janela para escolher o que sai (tabelas da página, página atual ou relatório inteiro) e como (CSV ou Excel para as tabelas; PDF ou imagem para a página e o relatório). O **Modo TV** passa os relatórios sozinho numa tela, com pausa e barra de progresso. |
+| **Relatórios** | Coleções de relatórios do Power BI embutidos, com busca, favoritos, miniaturas, tela cheia com zoom, escolha das páginas que aparecem e um botão **Exportar** que abre uma janela para escolher o que sai (tabelas da página, página atual ou relatório inteiro) e em que formato, como no Power BI (Excel para as tabelas; PowerPoint, PDF ou imagem para a página e o relatório, com valores atuais ou padrão). O **Modo TV** passa os relatórios sozinho numa tela, com pausa e barra de progresso. |
 | **Acesso e segurança** | Permissões separadas por grupo e por pessoa, no sistema todo ou por coleção. Horário de acesso por grupo, bloqueio de contas, login com Google, trilha de **auditoria** com reversão de ações, defesas contra escalada de permissão e chaves cifradas no servidor. |
 | **Entrega por e-mail** | Envio de relatórios em PDF ou imagem, **assinaturas** recorrentes em dias e horários escolhidos e **alertas** que avisam quando uma medida passa de um limite. Todos os e-mails saem em HTML com a sua marca. |
 | **Chat de IA** | Pergunte aos relatórios em linguagem natural. Funciona com OpenAI, Anthropic, Gemini, OpenRouter e NVIDIA, com colunas bloqueáveis por relatório, limite de uso e orçamento. |
