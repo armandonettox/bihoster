@@ -12,6 +12,9 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.41.1 - 2026-11-24 - Janela Exportar abria escondida
+- Corrige o botão **Exportar** da versão 1.41.0: a janela abria, mas ficava atrás da tela cheia do relatório e por isso parecia que nada acontecia. Agora ela aparece por cima.
+
 ## 1.41.0 - 2026-11-23 - Exportar em janela, com Excel, PDF e imagem
 - O botão **Exportar** do topo do relatório agora abre uma janela suspensa, onde você escolhe **o que exportar** (tabelas da página, página atual ou relatório inteiro) e **como** (CSV ou Excel para as tabelas; PDF ou imagem para a página e o relatório).
 - **Excel (.xlsx):** as tabelas saem como planilha, com o cabeçalho em negrito e a primeira linha congelada. Ao exportar todas as tabelas, cada uma vira uma aba do mesmo arquivo.
