@@ -4,6 +4,9 @@ import * as reportsApi from "../api/reports";
 import type { PageVisualInfo } from "../api/aiChat";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { csvHeaders } from "../utils/csvHeaders";
+import { parseCsv } from "../utils/csvParse";
+import { downloadBlob } from "../utils/download";
+import { buildXlsx, sheetName } from "../utils/xlsx";
 import { extractErrorMessage } from "../api/client";
 import { createEmbedTimer } from "../utils/embedTiming";
 import { getPowerBiService, isPreloadStarted } from "../utils/powerbiService";
@@ -26,9 +29,13 @@ export interface PageContextInfo {
   visuals: PageVisualInfo[];
 }
 
+/** Como baixar os dados das tabelas: texto CSV (um arquivo por tabela) ou uma planilha Excel (uma aba por tabela) */
+export type TableExportFormat = "csv" | "xlsx";
+
 export interface ReportEmbedHandle {
   getTableVisuals: () => Promise<TableVisualInfo[]>;
-  exportTableData: (visualName?: string) => Promise<void>;
+  /** Baixa os dados de uma tabela da pagina ativa (ou de todas, sem `visualName`) no formato pedido (padrao: csv) */
+  exportTableData: (visualName?: string, format?: TableExportFormat) => Promise<void>;
   getPageMeasures: () => Promise<VisualMeasure[]>;
   /** Nome tecnico da pagina ativa, ou null se o relatorio ainda nao carregou */
   getActivePageName: () => Promise<string | null>;
@@ -40,18 +47,6 @@ const TABLE_VISUAL_TYPES = ["tableEx", "pivotTable"];
 // Visuais sem dados (texto, imagem, formas e botoes): nao ha campo para ler
 const NO_DATA_VISUAL_TYPES = ["textbox", "image", "shape", "basicShape", "actionButton"];
 const MAX_CONTEXT_VISUALS = 40;
-
-function downloadCsv(data: string, filename: string) {
-  const blob = new Blob([data], { type: "text/csv;charset=utf-8;" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
-}
 
 // O backend so entrega um token novo depois que o do cache vence (5 min antes da expiracao real),
 // entao renova um pouco depois desse ponto, ainda com folga antes de o token vencer de verdade.
@@ -165,7 +160,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       );
       return { page_name: page.name, page_title: page.displayName, visuals: described };
     },
-    exportTableData: async (visualName?: string) => {
+    exportTableData: async (visualName?: string, format: TableExportFormat = "csv") => {
       const report = embeddedRef.current;
       if (!report) throw new Error("Relatorio nao carregado ainda.");
 
@@ -186,18 +181,37 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       }
 
       const errors: string[] = [];
+      const exported: { label: string; csv: string }[] = [];
       for (const visual of targets) {
         try {
           const result = await visual.exportData(pbi.models.ExportDataType.Summarized);
-          const label = visual.title || visual.name || "tabela";
-          downloadCsv(result.data, `${label}.csv`);
+          exported.push({ label: visual.title || visual.name || "tabela", csv: result.data });
         } catch {
           errors.push(visual.title || visual.name || "tabela");
         }
       }
 
-      if (errors.length > 0 && errors.length === targets.length) {
+      if (exported.length === 0) {
         throw new Error("Nao foi possivel exportar os dados. Verifique as permissoes do relatorio.");
+      }
+
+      if (format === "xlsx") {
+        const names: string[] = [];
+        const sheets = exported.map((item) => {
+          const name = sheetName(item.label, names);
+          names.push(name);
+          return { name, rows: parseCsv(item.csv) };
+        });
+        const fileName = exported.length === 1 ? exported[0].label : page.displayName || "tabelas";
+        const bytes = buildXlsx(sheets);
+        downloadBlob(
+          new Blob([bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }),
+          `${fileName}.xlsx`,
+        );
+      } else {
+        for (const item of exported) {
+          downloadBlob(new Blob([item.csv], { type: "text/csv;charset=utf-8;" }), `${item.label}.csv`);
+        }
       }
     },
   }));

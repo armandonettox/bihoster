@@ -3,6 +3,7 @@ import { createRef } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as reportsApi from "../api/reports";
 import type { EmbedConfig } from "../api/reports";
+import { downloadBlob } from "../utils/download";
 import ReportEmbed, { type ReportEmbedHandle } from "./ReportEmbed";
 
 const mocks = vi.hoisted(() => {
@@ -30,6 +31,7 @@ vi.mock("../utils/powerbiService", () => ({
 }));
 vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ currentWorkspace: { id: 3 } }) }));
 vi.mock("../api/reports", () => ({ getEmbedConfig: vi.fn() }));
+vi.mock("../utils/download", () => ({ downloadBlob: vi.fn() }));
 
 const getEmbedConfig = vi.mocked(reportsApi.getEmbedConfig);
 
@@ -219,5 +221,100 @@ describe("ReportEmbed - contexto da pagina para o chat de IA", () => {
 
     expect(await ref.current!.getPageContext()).toBeNull();
     expect(await ref.current!.getActivePageName()).toBeNull();
+  });
+});
+
+describe("ReportEmbed - baixar os dados das tabelas", () => {
+  const baixar = vi.mocked(downloadBlob);
+
+  function tabela(title: string, csv: string | Error, type = "tableEx") {
+    return {
+      title,
+      type,
+      name: `v-${title}`,
+      exportData: csv instanceof Error ? vi.fn().mockRejectedValue(csv) : vi.fn().mockResolvedValue({ data: csv }),
+    };
+  }
+
+  async function abrir(visuals: ReturnType<typeof tabela>[]) {
+    const ref = createRef<ReportEmbedHandle>();
+    render(<ReportEmbed ref={ref} reportId={34} />);
+    await waitFor(() => expect(mocks.service.embed).toHaveBeenCalled());
+    mocks.embedded.getActivePage.mockResolvedValue({
+      name: "ReportSection1",
+      displayName: "Carteira",
+      getVisuals: vi.fn().mockResolvedValue(visuals),
+    });
+    baixar.mockClear();
+    return ref;
+  }
+
+  function lerBytes(blob: Blob): Promise<Uint8Array> {
+    return new Promise((resolve, reject) => {
+      const leitor = new FileReader();
+      leitor.onload = () => resolve(new Uint8Array(leitor.result as ArrayBuffer));
+      leitor.onerror = () => reject(leitor.error);
+      leitor.readAsArrayBuffer(blob);
+    });
+  }
+
+  it("CSV: um arquivo por tabela, com o titulo como nome", async () => {
+    const ref = await abrir([tabela("Vendas", "a,b\n1,2"), tabela("Metas", "c\n3")]);
+
+    await ref.current!.exportTableData();
+
+    expect(baixar.mock.calls.map((c) => c[1])).toEqual(["Vendas.csv", "Metas.csv"]);
+    expect(baixar.mock.calls[0][0].type).toContain("text/csv");
+  });
+
+  it("Excel de uma tabela: um arquivo .xlsx com o titulo da tabela", async () => {
+    const ref = await abrir([tabela("Vendas", "Regiao,Total\nSul,10")]);
+
+    await ref.current!.exportTableData("v-Vendas", "xlsx");
+
+    expect(baixar).toHaveBeenCalledTimes(1);
+    const [blob, nome] = baixar.mock.calls[0];
+    expect(nome).toBe("Vendas.xlsx");
+    expect(blob.type).toBe("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    const texto = new TextDecoder().decode(await lerBytes(blob));
+    expect(texto.startsWith("PK")).toBe(true);
+    expect(texto).toContain('name="Vendas"');
+    expect(texto).toContain("Regiao");
+  });
+
+  it("Excel de todas as tabelas: um arquivo com uma aba por tabela, nomeado pela pagina", async () => {
+    const ref = await abrir([tabela("Vendas", "a\n1"), tabela("Vendas", "b\n2"), tabela("Metas", "c\n3")]);
+
+    await ref.current!.exportTableData(undefined, "xlsx");
+
+    expect(baixar).toHaveBeenCalledTimes(1);
+    const [blob, nome] = baixar.mock.calls[0];
+    expect(nome).toBe("Carteira.xlsx");
+    const texto = new TextDecoder().decode(await lerBytes(blob));
+    // Titulos repetidos ganham numero, para as abas terem nomes unicos
+    expect(texto).toContain('name="Vendas"');
+    expect(texto).toContain('name="Vendas (2)"');
+    expect(texto).toContain('name="Metas"');
+  });
+
+  it("uma tabela com erro nao impede as outras de sairem", async () => {
+    const ref = await abrir([tabela("Vendas", new Error("sem permissao")), tabela("Metas", "c\n3")]);
+
+    await ref.current!.exportTableData(undefined, "csv");
+
+    expect(baixar.mock.calls.map((c) => c[1])).toEqual(["Metas.csv"]);
+  });
+
+  it("se todas falharem, avisa em vez de baixar um arquivo vazio", async () => {
+    const ref = await abrir([tabela("Vendas", new Error("sem permissao"))]);
+
+    await expect(ref.current!.exportTableData(undefined, "xlsx")).rejects.toThrow("Nao foi possivel exportar os dados");
+    expect(baixar).not.toHaveBeenCalled();
+  });
+
+  it("pagina sem tabela avisa", async () => {
+    const ref = await abrir([tabela("Grafico", "a\n1", "barChart")]);
+
+    await expect(ref.current!.exportTableData()).rejects.toThrow("Nenhum visual de tabela");
   });
 });

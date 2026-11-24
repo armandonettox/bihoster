@@ -1,9 +1,11 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Link, MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { MyAccess } from "../api/access";
 import * as reportsApi from "../api/reports";
 import ChatPanel from "../components/ChatPanel";
 import ChatPanelToggle from "../components/ChatPanelToggle";
+import { AccessContext, buildAccess } from "../context/AccessContext";
 import { ChatProvider } from "../context/ChatContext";
 import { deferred, makeReport } from "../test-fixtures";
 import ReportFullscreen from "./ReportFullscreen";
@@ -12,6 +14,8 @@ const mocks = vi.hoisted(() => ({
   selectWorkspace: vi.fn(),
   access: { canSubscribe: false, allowedDomains: [] as string[] },
   canUseChat: true,
+  // Permissoes de quem esta vendo o relatorio (colecao 3)
+  permissoes: [] as string[],
 }));
 
 vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
@@ -37,6 +41,12 @@ vi.mock("../components/ReportSubscriptionsModal", () => ({
     </div>
   ),
 }));
+// A janela de exportar tem teste proprio: aqui so importa se aparece e se a pessoa pode gerar PDF e imagem
+vi.mock("../components/ExportMenu", () => ({
+  default: ({ canExportFile }: { canExportFile: boolean }) => (
+    <button type="button">{canExportFile ? "Exportar (com arquivo)" : "Exportar (so tabelas)"}</button>
+  ),
+}));
 vi.mock("../context/BrandingContext", () => ({ useBranding: () => ({ settings: null }) }));
 vi.mock("../components/ReportEmbed", () => ({
   default: ({ reportId, workspaceId }: { reportId: number; workspaceId: number }) => (
@@ -49,7 +59,9 @@ const RELATORIO = makeReport(34, { name: "Vendas e Inclusoes", collection_id: 3 
 
 /** `historico` e a pilha de enderecos; `indice` qual deles esta aberto (por padrao o ultimo) */
 function abrir(historico: string[], indice = historico.length - 1) {
+  const me: MyAccess = { is_admin: false, global_permissions: [], workspace_permissions: { "3": mocks.permissoes } };
   return render(
+    <AccessContext.Provider value={buildAccess(me)}>
     <MemoryRouter initialEntries={historico} initialIndex={indice}>
       <ChatProvider>
         <Routes>
@@ -67,12 +79,14 @@ function abrir(historico: string[], indice = historico.length - 1) {
           <Route path="/collection/:workspaceId/report/:reportId" element={<ReportFullscreen />} />
         </Routes>
       </ChatProvider>
-    </MemoryRouter>,
+    </MemoryRouter>
+    </AccessContext.Provider>,
   );
 }
 
 beforeEach(() => {
   mocks.canUseChat = true;
+  mocks.permissoes = ["colecao.ver"];
   document.title = "BIHoster";
   mocks.selectWorkspace.mockReset();
   mocks.access = { canSubscribe: false, allowedDomains: [] };
@@ -166,6 +180,28 @@ describe("ReportFullscreen - sair", () => {
     fireEvent.click(screen.getByRole("button", { name: "Sair da tela cheia (Esc)" }));
 
     await waitFor(() => expect(screen.getByText("pagina da colecao")).toBeTruthy());
+  });
+});
+
+describe("ReportFullscreen - exportar", () => {
+  it("quem pode exportar na colecao ve o botao com PDF e imagem liberados", async () => {
+    mocks.permissoes = ["colecao.ver", "relatorio.exportar"];
+    abrir(["/collection/3/report/34"]);
+
+    expect(await screen.findByRole("button", { name: "Exportar (com arquivo)" })).toBeTruthy();
+  });
+
+  it("quem nao pode exportar continua vendo o botao, so com as tabelas", async () => {
+    abrir(["/collection/3/report/34"]);
+
+    expect(await screen.findByRole("button", { name: "Exportar (so tabelas)" })).toBeTruthy();
+  });
+
+  it("o botao antigo Exportar CSV nao existe mais", async () => {
+    abrir(["/collection/3/report/34"]);
+    await screen.findByTestId("embed");
+
+    expect(screen.queryByRole("button", { name: /Exportar CSV/ })).toBeNull();
   });
 });
 
