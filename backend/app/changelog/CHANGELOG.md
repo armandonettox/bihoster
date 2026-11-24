@@ -12,6 +12,10 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.45.1 - 2026-11-24 - Imagens no histórico e passeio refeito
+- O histórico de versões ganhou imagens das telas de várias versões: o novo **Modo TV**, o botão **Exportar**, os módulos na barra lateral e no topo, o menu de 3 pontinhos, **Alertas**, **Assinaturas**, **Gerenciar usuários**, **Auditoria** e as abas **Cache** e **IA**. Clique numa imagem para ampliar.
+- O GIF do passeio pelo sistema foi refeito com as telas novas e sem os rótulos que a ferramenta de gravação deixava nos quadros.
+
 ## 1.45.0 - 2026-11-24 - Novo Modo TV, com TVs cadastradas, link secreto e código de acesso
 - O **Modo TV** saiu de dentro das coleções e virou um **módulo próprio**, no menu de módulos do topo e na barra lateral.
 - Cada **TV** é cadastrada com um nome e tem a sua própria **programação**: páginas de vários relatórios (até de coleções diferentes), **imagens** (PNG, JPG, GIF ou WebP, até 10 MB) e **vídeos do YouTube por link**, cada item com o seu **tempo** e na ordem que você escolher. Cada vídeo pode tocar com ou sem som.
@@ -22,6 +26,14 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - Quem monta a programação só escolhe relatórios que ele mesmo pode ver. Relatórios com segurança por linha (RLS) não passam na TV.
 - Os relatórios que estavam marcados como "Modo TV" nas coleções foram movidos para a seção **Painéis**, e o tempo da TV deixou de existir nas coleções: monte a TV nova no módulo.
 - As ações das TVs (criar, editar, conectar, desconectar, trocar o link, mudar permissões) entram na auditoria.
+
+![A lista de TVs do módulo Modo TV, com a programação e o estado de cada uma (dados fictícios)](img/modo-tv-lista.jpg)
+
+![O cadastro de uma TV: link secreto, código de acesso que muda com o tempo, tempo de conexão e a programação](img/modo-tv-editor.jpg)
+
+![A tela que a TV mostra ao abrir o link secreto: ela pede o código de acesso](img/modo-tv-codigo.jpg)
+
+![A TV passando uma página de relatório, com a barra de progresso no topo](img/modo-tv-passando.jpg)
 
 ## 1.44.0 - 2026-11-24 - Escolher quais páginas e quais tabelas exportar
 - Nas janelas de **PowerPoint, PDF e imagem**, a caixa "Exportar somente a página atual" deu lugar a uma **lista suspensa com todas as páginas do relatório**, com seleção múltipla e busca. Marque as páginas que quer, e só elas são exportadas. Sem nada marcado, vai o relatório inteiro.
@@ -37,15 +49,23 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - Ao clicar em **Exportar**, a janela **fecha na hora** e a exportação segue **em segundo plano**: um aviso animado no canto da tela mostra o andamento (com a porcentagem quando o Power BI informa), o botão do topo gira enquanto exporta e o arquivo baixa sozinho. Dá para continuar usando o relatório, ou até sair dele, e pedir outro formato ao mesmo tempo. Se falhar, o aviso fica na tela com o motivo.
 - A exportação ficou mais rápida: o sistema passou a perguntar ao Power BI se o arquivo já está pronto a cada 1 segundo (antes eram 3) e a tela a cada 1 segundo (antes eram 2), com a primeira consulta em meio segundo. O tempo que o próprio Power BI leva para gerar o arquivo não muda.
 
+![A lista de formatos do botão Exportar: Excel, PowerPoint, PDF e imagem, cada um com o seu logo](img/exportar-formatos.jpg)
+
 ## 1.42.1 - 2026-11-24 - Módulos de volta ao topo
 - O botão de quadradinho dos módulos voltou para a barra do topo. Os módulos agora aparecem nos dois lugares: no topo e na barra lateral.
+
+![O botão de módulos do topo aberto, com o Modo TV entre os módulos](img/modulos-menu-topo.jpg)
 
 ## 1.42.0 - 2026-11-24 - Módulos na barra lateral
 - Os módulos (Gerenciar usuários, Coleções, Assinaturas, Alertas, Administração e Auditoria) agora também ficam na **barra lateral**, logo abaixo de Início e Chat de IA. Cada um só aparece para quem tem permissão, e o módulo da página aberta fica destacado. (Nesta versão o botão de quadradinho do topo sumiu por engano; a 1.42.1 o devolve.)
 - A lista de coleções saiu da barra lateral, já que agora existe o módulo **Coleções**. As coleções continuam acessíveis pelos cartões da página Início e pelos Favoritos.
 
+![Os módulos na barra lateral, logo abaixo de Início e do Chat de IA](img/modulos-barra-lateral.jpg)
+
 ## 1.41.2 - 2026-11-24 - Ícones em todos os menus dos 3 pontinhos
 - Todas as opções dos menus dos 3 pontinhos agora têm ícone: cartão da coleção, ações do relatório (favoritar, enviar por e-mail, atualizar miniatura, editar, excluir), topo da página da coleção, conexões do Power BI e campo de imagem.
+
+![O menu de 3 pontinhos de um relatório, com um ícone em cada opção](img/menu-tres-pontinhos.jpg)
 
 ## 1.41.1 - 2026-11-24 - Janela Exportar abria escondida
 - Corrige o botão **Exportar** da versão 1.41.0: a janela abria, mas ficava atrás da tela cheia do relatório e por isso parecia que nada acontecia. Agora ela aparece por cima.
@@ -71,12 +91,16 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - A página **Assinaturas** deixou de ser só de consulta: agora também cria assinaturas (escolhendo o relatório), edita, pausa, envia na hora e exclui.
 - Cada botão só aparece quando a pessoa pode usá-lo naquela coleção, e o servidor confere de novo. Quem só é editor de uma coleção continua mexendo apenas no que criou, a não ser que tenha a permissão de mexer no de outras pessoas.
 
+![O módulo Alertas, com todos os alertas de medidas e o estado de cada um (dados fictícios)](img/alertas.jpg)
+
+![A página Assinaturas, com os envios recorrentes de todas as coleções (dados fictícios)](img/assinaturas.jpg)
+
 ## 1.37.0 - 2026-11-23 - Imagens e GIFs no histórico de versões
 - O histórico passou a mostrar imagens das telas em várias versões (Marca, E-mail, Geral, miniaturas das coleções e a própria aba Atualizações). Clique numa imagem para vê-la ampliada.
 - Também aceita GIFs animados, como o passeio pelo sistema abaixo.
 - A imagem da aba Atualizações, que já estava prevista na versão 1.33.0, só chegava ao sistema agora.
 
-![Um passeio pelo sistema: coleções com miniaturas, relatórios, a Administração com as paletas de cores, a tela de login e as abas E-mail e Atualizações (dados fictícios)](img/passeio-pelo-sistema.gif)
+![Um passeio pelo sistema: coleções, um relatório, a lista de formatos do Exportar, o menu de módulos, Alertas, Assinaturas, Modo TV, Gerenciar usuários, Auditoria e a Administração (dados fictícios)](img/passeio-pelo-sistema.gif)
 
 ![O histórico de versões com as imagens das telas](img/aba-atualizacoes.jpg)
 
@@ -114,6 +138,10 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 ## 1.31.0 - 2026-11-21 - Cache e IA em lista com janela
 - As abas Cache (aquecimento, status e reset) e IA (provedor, registro, relatórios, opções do chat e consumo) passaram para o estilo de lista com janela de edição.
 - Os blocos da IA mantêm os próprios botões de salvar dentro da janela.
+
+![A aba Cache da Administração, em lista](img/administracao-cache.jpg)
+
+![A aba IA da Administração, em lista](img/administracao-ia.jpg)
 
 ## 1.30.0 - 2026-11-21 - Geral e Autenticação em lista com janela
 - As abas Geral (dados do aplicativo, HTTPS e homepage) e Autenticação (criação de conta e login com Google) agora mostram o estado de cada parte e abrem uma janela para editar.
@@ -183,6 +211,8 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 - Nova página Gerenciar usuários, fora da Administração, com membros, grupos e permissões juntos.
 - Quem atualiza não perde nada: os papéis antigos são convertidos nas permissões novas no primeiro boot.
 
+![A página Gerenciar usuários, com as pessoas, os grupos e as permissões de cada uma (dados fictícios)](img/gerenciar-usuarios.jpg)
+
 ## 1.18.2 - 2026-11-17 - Tabela de membros
 - A tabela de membros ganhou o mesmo estilo da tabela da auditoria e a busca ganhou um ícone.
 
@@ -235,6 +265,8 @@ Toda tag nova precisa de uma seção aqui antes de ser criada.
 
 ## 1.10.0 - 2026-11-11 - Página de Auditoria
 - Página própria com registros filtráveis, analíticos, relatórios mais visitados e cartão da pessoa.
+
+![A página de Auditoria, com os registros filtráveis das ações do sistema](img/auditoria.jpg)
 
 ## 1.9.0 - 2026-11-11 - Login com Google traz a foto
 - O login com Google traz a foto e um resumo da conta, e trava nome, e-mail e senha, que o Google controla.
