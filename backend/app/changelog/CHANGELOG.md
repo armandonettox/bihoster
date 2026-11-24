@@ -12,6 +12,10 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.42.0 - 2026-11-24 - Módulos na barra lateral
+- Os módulos (Gerenciar usuários, Coleções, Assinaturas, Alertas, Administração e Auditoria) saíram do botão de quadradinho do topo e agora ficam na **barra lateral**, logo abaixo de Início e Chat de IA. Cada um só aparece para quem tem permissão, e o módulo da página aberta fica destacado.
+- A lista de coleções saiu da barra lateral, já que agora existe o módulo **Coleções**. As coleções continuam acessíveis pelos cartões da página Início e pelos Favoritos.
+
 ## 1.41.2 - 2026-11-24 - Ícones em todos os menus dos 3 pontinhos
 - Todas as opções dos menus dos 3 pontinhos agora têm ícone: cartão da coleção, ações do relatório (favoritar, enviar por e-mail, atualizar miniatura, editar, excluir), topo da página da coleção, conexões do Power BI e campo de imagem.
 
