@@ -26,7 +26,9 @@ class ExportEmailRequest(BaseModel):
 
 class ExportDownloadRequest(BaseModel):
     format: Literal["PDF", "PNG", "PPTX"] = "PDF"
-    # Vazio = o relatorio inteiro (as paginas escolhidas para ele); com o nome interno, so essa pagina
+    # Vazio = o relatorio inteiro (as paginas escolhidas para ele); com os nomes internos, so essas paginas, na ordem
+    # em que vieram. `page_name` (uma so) e do formato antigo da tela e continua aceito.
+    page_names: Optional[list[str]] = Field(default=None, max_length=200)
     page_name: Optional[str] = None
     # Estado do relatorio aberto (filtros e selecoes atuais), capturado na tela; vazio = valores padrao do relatorio
     bookmark_state: Optional[str] = Field(default=None, max_length=500_000)
@@ -197,10 +199,12 @@ def export_for_download(
         page_display_names = {p["name"]: p["displayName"] for p in pages}
     except Exception:  # noqa: BLE001 -- nomear pelo nome da pagina e um extra; nao pode derrubar a exportacao
         pass
-    if data.page_name:
-        if page_display_names and data.page_name not in page_display_names:
+    # Sem repetidas, mantendo a ordem pedida
+    requested = list(dict.fromkeys(data.page_names or ([data.page_name] if data.page_name else [])))
+    if requested:
+        if page_display_names and any(name not in page_display_names for name in requested):
             raise HTTPException(status_code=400, detail="Pagina nao encontrada neste relatorio.")
-        page_names = [data.page_name]
+        page_names = requested
     else:
         page_names = list(report.pbi_page_names or [])
     fmt = data.format
@@ -224,7 +228,7 @@ def export_for_download(
         workspace_id=workspace_id,
         entity_id=str(report_id),
         details=fmt
-        + (", pagina" if data.page_name else ", relatorio")
+        + (", relatorio" if not requested else ", pagina" if len(requested) == 1 else f", {len(requested)} paginas")
         + (", valores atuais" if data.bookmark_state else ""),
     )
     return DeliveryJobOut(job_id=job.id)

@@ -49,6 +49,54 @@ class TestRotaPedirDownload:
         assert kw["page_names"] == ["ReportSection2"] and kw["fmt"] == "PNG"
         assert kw["page_display_names"] == {"ReportSection1": "Resumo", "ReportSection2": "Detalhe"}
 
+    def test_varias_paginas_vao_na_ordem_pedida_e_sem_repetir(self, client, cenario):
+        p1, p2 = _pbi()
+        paginas = [
+            {"name": "ReportSection1", "displayName": "Resumo"},
+            {"name": "ReportSection2", "displayName": "Detalhe"},
+            {"name": "ReportSection3", "displayName": "Custos"},
+        ]
+        with p1, p2, patch.object(powerbi, "list_pages", return_value=paginas), patch(
+            "app.routers.report_export.report_delivery.start_download_in_background"
+        ) as iniciar:
+            resp = client.post(
+                _url(cenario),
+                json={"format": "PDF", "page_names": ["ReportSection3", "ReportSection1", "ReportSection3"]},
+                headers=cenario.admin,
+            )
+
+        assert resp.status_code == 202
+        assert iniciar.call_args.kwargs["page_names"] == ["ReportSection3", "ReportSection1"]
+
+    def test_uma_pagina_que_nao_existe_entre_varias_recusa_o_pedido_todo(self, client, cenario):
+        p1, p2 = _pbi()
+        paginas = [{"name": "ReportSection1", "displayName": "Resumo"}]
+        with p1, p2, patch.object(powerbi, "list_pages", return_value=paginas), patch(
+            "app.routers.report_export.report_delivery.start_download_in_background"
+        ) as iniciar:
+            resp = client.post(
+                _url(cenario), json={"page_names": ["ReportSection1", "Outra"]}, headers=cenario.admin
+            )
+
+        assert resp.status_code == 400 and "Pagina" in resp.json()["detail"]
+        iniciar.assert_not_called()
+
+    def test_lista_vazia_de_paginas_exporta_o_relatorio_inteiro(self, client, cenario):
+        resp, iniciar = _pedir(client, cenario, {"format": "PDF", "page_names": []})
+
+        assert resp.status_code == 202
+        assert iniciar.call_args.kwargs["page_names"] == []
+
+    def test_a_auditoria_conta_as_paginas_pedidas(self, client, cenario, db_session):
+        p1, p2 = _pbi()
+        with p1, p2, patch("app.routers.report_export.report_delivery.start_download_in_background"):
+            client.post(
+                _url(cenario), json={"format": "PDF", "page_names": ["ReportSection1", "ReportSection2"]}, headers=cenario.admin
+            )
+
+        pedido = db_session.query(AuditLog).filter(AuditLog.action == "export_download_requested").one()
+        assert pedido.details == "PDF, 2 paginas"
+
     def test_pagina_que_nao_existe_no_relatorio_e_recusada(self, client, cenario):
         p1, p2 = _pbi()
         paginas = [{"name": "ReportSection1", "displayName": "Resumo"}]
