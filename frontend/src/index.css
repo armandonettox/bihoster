@@ -1200,6 +1200,26 @@ table.table tr:last-child td {
   padding: 4px 8px;
 }
 
+.apps-menu-trigger {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+}
+
+.account-menu-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 5px);
+  grid-template-rows: repeat(2, 5px);
+  gap: 3px;
+}
+
+.account-menu-grid span {
+  width: 5px;
+  height: 5px;
+  border-radius: 1px;
+  background-color: var(--color-text-muted);
+}
+
 .account-menu-dropdown {
   min-width: 240px;
 }
