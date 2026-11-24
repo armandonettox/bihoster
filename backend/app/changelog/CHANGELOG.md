@@ -12,6 +12,13 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.41.0 - 2026-11-23 - Exportar em janela, com Excel, PDF e imagem
+- O botão **Exportar** do topo do relatório agora abre uma janela suspensa, onde você escolhe **o que exportar** (tabelas da página, página atual ou relatório inteiro) e **como** (CSV ou Excel para as tabelas; PDF ou imagem para a página e o relatório).
+- **Excel (.xlsx):** as tabelas saem como planilha, com o cabeçalho em negrito e a primeira linha congelada. Ao exportar todas as tabelas, cada uma vira uma aba do mesmo arquivo.
+- **PDF e imagem:** o Power BI gera o arquivo, o que leva alguns segundos (a janela mostra o andamento), e o download começa sozinho. Imagem do relatório inteiro vem num zip, com uma imagem por página.
+- PDF e imagem pedem a permissão de exportar da coleção e não funcionam em relatórios com segurança por linha (RLS), como o envio por e-mail. Quem não tem a permissão continua exportando as tabelas.
+- Cada exportação de PDF ou imagem fica registrada na auditoria.
+
 ## 1.40.0 - 2026-11-23 - Imagens do histórico pequenas e padronizadas
 - As imagens e GIFs do histórico de versões agora aparecem todas no mesmo tamanho pequeno, alinhadas à esquerda, em vez de cada uma com um tamanho diferente.
 - Clique numa imagem para ampliar numa janela, com os botões **Abrir em outra aba** e **Fechar** (o Esc e o clique fora também fecham).
