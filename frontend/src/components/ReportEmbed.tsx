@@ -16,6 +16,12 @@ export interface TableVisualInfo {
   title: string;
 }
 
+/** Uma pagina do relatorio: o nome tecnico (que o Power BI usa) e o titulo que aparece para a pessoa */
+export interface ReportPageInfo {
+  name: string;
+  displayName: string;
+}
+
 export interface VisualMeasure {
   measure_name: string;
   table_name: string;
@@ -36,10 +42,13 @@ export interface ReportEmbedHandle {
   /** As tabelas da pagina aberta, se ja foram lidas (resposta na hora); null enquanto a pagina nao terminou de desenhar */
   peekTableVisuals: () => TableVisualInfo[] | null;
   getTableVisuals: () => Promise<TableVisualInfo[]>;
+  /** As paginas do relatorio que a pessoa pode ver (as escolhidas para ele, sem as ocultas), se ja foram lidas; null antes */
+  peekPages: () => ReportPageInfo[] | null;
+  getReportPages: () => Promise<ReportPageInfo[]>;
   /** Estado do relatorio aberto (filtros e selecoes atuais), para exportar com os "valores atuais"; null se nao der */
   captureBookmarkState: () => Promise<string | null>;
-  /** Baixa os dados de uma tabela da pagina ativa (ou de todas, sem `visualName`) no formato pedido (padrao: csv) */
-  exportTableData: (visualName?: string, format?: TableExportFormat) => Promise<void>;
+  /** Baixa os dados de uma ou mais tabelas da pagina ativa (ou de todas, sem `visualNames`) no formato pedido (padrao: csv) */
+  exportTableData: (visualNames?: string | string[], format?: TableExportFormat) => Promise<void>;
   getPageMeasures: () => Promise<VisualMeasure[]>;
   /** Nome tecnico da pagina ativa, ou null se o relatorio ainda nao carregou */
   getActivePageName: () => Promise<string | null>;
@@ -95,6 +104,20 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
 
   // Conta as trocas de pagina: uma leitura que comecou antes da troca nao pode guardar as tabelas da pagina antiga
   const tablePageGenRef = useRef(0);
+  // As paginas do relatorio, lidas quando ele carrega (a lista nao muda): o Exportar mostra a lista de paginas na hora
+  const pagesCacheRef = useRef<ReportPageInfo[] | null>(null);
+  const allowedPagesRef = useRef<string[]>([]);
+
+  async function loadPages(report: pbi.Report): Promise<ReportPageInfo[]> {
+    const pages = await report.getPages();
+    const allowed = allowedPagesRef.current;
+    const list = pages
+      // Fora as paginas ocultas (dicas de ferramenta, detalhamento) e, com paginas escolhidas para o relatorio, as demais
+      .filter((page) => page.visibility !== 1 && (allowed.length === 0 || allowed.includes(page.name)))
+      .map((page) => ({ name: page.name, displayName: page.displayName }));
+    if (embeddedRef.current === report) pagesCacheRef.current = list;
+    return list;
+  }
 
   function loadTableVisuals(report: pbi.Report): Promise<TableVisualInfo[]> {
     if (tableLoadRef.current) return tableLoadRef.current;
@@ -119,6 +142,12 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
 
   useImperativeHandle(ref, () => ({
     peekTableVisuals: () => tableCacheRef.current,
+    peekPages: () => pagesCacheRef.current,
+    getReportPages: async () => {
+      const report = embeddedRef.current;
+      if (!report) throw new Error("Relatorio nao carregado ainda.");
+      return pagesCacheRef.current ?? loadPages(report);
+    },
     captureBookmarkState: async () => {
       const report = embeddedRef.current;
       if (!report) return null;
@@ -201,7 +230,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       );
       return { page_name: page.name, page_title: page.displayName, visuals: described };
     },
-    exportTableData: async (visualName?: string, format: TableExportFormat = "csv") => {
+    exportTableData: async (visualNames?: string | string[], format: TableExportFormat = "csv") => {
       const report = embeddedRef.current;
       if (!report) throw new Error("Relatorio nao carregado ainda.");
 
@@ -213,9 +242,8 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         throw new Error("Nenhum visual de tabela encontrado na pagina atual.");
       }
 
-      const targets = visualName
-        ? tableVisuals.filter((v) => v.name === visualName)
-        : tableVisuals;
+      const wanted = visualNames === undefined ? null : Array.isArray(visualNames) ? visualNames : [visualNames];
+      const targets = wanted ? tableVisuals.filter((v) => wanted.includes(v.name)) : tableVisuals;
 
       if (targets.length === 0) {
         throw new Error("Visual nao encontrado na pagina atual.");
@@ -309,6 +337,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         // Abas escolhidas na hora de adicionar (nomes tecnicos do Power BI, nao os titulos).
         // Backend antigo so manda page_name.
         const selectedPages = config.page_names ?? (config.page_name ? [config.page_name] : []);
+        allowedPagesRef.current = selectedPages;
 
         timer.mark("embed");
         embedded = true;
@@ -364,6 +393,10 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
 
         embeddedReport.on("loaded", async () => {
           timer.mark("loaded");
+          pagesCacheRef.current = null;
+          loadPages(embeddedReport).catch(() => {
+            // Sem a lista, o Exportar exporta o relatorio inteiro e a janela nao mostra a escolha de paginas
+          });
           if (zoomRef.current !== 1) {
             embeddedReport.setZoom(zoomRef.current).catch(() => {});
           }
@@ -411,6 +444,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       tablePageGenRef.current += 1;
       tableCacheRef.current = null;
       tableLoadRef.current = null;
+      pagesCacheRef.current = null;
       if (renewTimer) clearTimeout(renewTimer);
       if (embedded && container) {
         getPowerBiService().reset(container);

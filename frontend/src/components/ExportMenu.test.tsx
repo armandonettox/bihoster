@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as api from "../api/reportDelivery";
 import { resetExportJobs } from "../utils/exportJobs";
 import ExportMenu from "./ExportMenu";
-import type { ReportEmbedHandle, TableVisualInfo } from "./ReportEmbed";
+import type { ReportEmbedHandle, ReportPageInfo, TableVisualInfo } from "./ReportEmbed";
 
 vi.mock("../api/reportDelivery", () => ({
   startReportDownload: vi.fn(),
@@ -21,11 +21,20 @@ const baixar = vi.mocked(api.downloadExportedFile);
 const exportTableData = vi.fn();
 const getTableVisuals = vi.fn();
 const peekTableVisuals = vi.fn();
+const peekPages = vi.fn();
+const getReportPages = vi.fn();
 const getActivePageName = vi.fn();
 const captureBookmarkState = vi.fn();
 
 const TABELA_A: TableVisualInfo = { name: "v1", title: "Vendas por região" } as TableVisualInfo;
 const TABELA_B: TableVisualInfo = { name: "v2", title: "Metas" } as TableVisualInfo;
+const TABELA_C: TableVisualInfo = { name: "v3", title: "Custos" } as TableVisualInfo;
+
+const PAGINAS: ReportPageInfo[] = [
+  { name: "ReportSection1", displayName: "Resumo" },
+  { name: "ReportSection2", displayName: "Detalhe" },
+  { name: "ReportSection3", displayName: "Custos" },
+];
 
 function montar(canExportFile = true) {
   const embedRef = {
@@ -33,6 +42,8 @@ function montar(canExportFile = true) {
       exportTableData,
       getTableVisuals,
       peekTableVisuals,
+      peekPages,
+      getReportPages,
       getActivePageName,
       captureBookmarkState,
     } as unknown as ReportEmbedHandle,
@@ -62,12 +73,16 @@ const confirmar = () => within(screen.getByRole("dialog")).getByRole("button", {
 /** A lista suspensa "Exportar com:" (valores atuais ou padrao) */
 const valores = () => screen.getByRole("combobox", { name: /Exportar com/ }) as HTMLSelectElement;
 const escolherValores = (valor: "current" | "default") => fireEvent.change(valores(), { target: { value: valor } });
-const marcado = (nome: RegExp | string) => (screen.getByRole("checkbox", { name: nome }) as HTMLInputElement).checked;
+/** Abre uma lista suspensa de selecao multipla pelo nome do botao (ex.: "Páginas") */
+const abrirMulti = (nome: string) => fireEvent.click(screen.getByRole("button", { name: new RegExp(`^${nome}:`) }));
+const marcarOpcao = (nome: string) => fireEvent.click(screen.getByRole("checkbox", { name: nome }));
 
 beforeEach(() => {
   vi.resetAllMocks();
   resetExportJobs();
   peekTableVisuals.mockReturnValue([TABELA_A]);
+  peekPages.mockReturnValue(PAGINAS);
+  getReportPages.mockResolvedValue(PAGINAS);
   getTableVisuals.mockResolvedValue([TABELA_A]);
   getActivePageName.mockResolvedValue("ReportSection1");
   captureBookmarkState.mockResolvedValue("estado-abc");
@@ -177,19 +192,44 @@ describe("ExportMenu - Excel das tabelas", () => {
     await waitFor(() => expect(exportTableData).toHaveBeenCalledWith("v1", "xlsx"));
   });
 
-  it("varias tabelas: escolhe qual ou todas", async () => {
+  it("varias tabelas: lista de selecao multipla; nada marcado exporta todas", async () => {
     peekTableVisuals.mockReturnValue([TABELA_A, TABELA_B]);
     await abrirJanela("Excel");
 
-    expect(screen.getByRole("option", { name: "Todas as tabelas (2)" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Tabelas: Todas as tabelas (2)" })).toBeTruthy();
     fireEvent.click(confirmar());
     await waitFor(() => expect(exportTableData).toHaveBeenLastCalledWith(undefined, "xlsx"));
 
     fireEvent.click(botaoTopo());
     fireEvent.click(await screen.findByRole("menuitem", { name: "Excel" }));
-    fireEvent.change(await screen.findByRole("combobox", { name: /Qual tabela/ }), { target: { value: "v2" } });
+    abrirMulti("Tabelas");
+    marcarOpcao("Metas");
     fireEvent.click(confirmar());
-    await waitFor(() => expect(exportTableData).toHaveBeenLastCalledWith("v2", "xlsx"));
+    await waitFor(() => expect(exportTableData).toHaveBeenLastCalledWith(["v2"], "xlsx"));
+  });
+
+  it("varias tabelas: marcar duas de tres exporta so essas duas, na ordem da pagina", async () => {
+    peekTableVisuals.mockReturnValue([TABELA_A, TABELA_B, TABELA_C]);
+    await abrirJanela("Excel");
+
+    abrirMulti("Tabelas");
+    marcarOpcao("Custos");
+    marcarOpcao("Vendas por região");
+    fireEvent.click(confirmar());
+
+    await waitFor(() => expect(exportTableData).toHaveBeenCalledWith(["v1", "v3"], "xlsx"));
+  });
+
+  it("marcar todas as tabelas equivale a exportar todas", async () => {
+    peekTableVisuals.mockReturnValue([TABELA_A, TABELA_B]);
+    await abrirJanela("Excel");
+
+    abrirMulti("Tabelas");
+    marcarOpcao("Vendas por região");
+    marcarOpcao("Metas");
+    fireEvent.click(confirmar());
+
+    await waitFor(() => expect(exportTableData).toHaveBeenCalledWith(undefined, "xlsx"));
   });
 
   it("pagina sem tabelas: avisa e nao deixa exportar", async () => {
@@ -234,7 +274,7 @@ describe("ExportMenu - as tabelas ja lidas", () => {
     await abrirJanela("Excel");
 
     expect(screen.queryByText("Procurando tabelas na página...")).toBeNull();
-    expect(screen.getByRole("combobox", { name: /Qual tabela/ })).toBeTruthy();
+    expect(screen.getByRole("button", { name: /^Tabelas:/ })).toBeTruthy();
     expect((confirmar() as HTMLButtonElement).disabled).toBe(false);
     expect(getTableVisuals).not.toHaveBeenCalled();
   });
@@ -255,12 +295,47 @@ describe("ExportMenu - as tabelas ja lidas", () => {
 });
 
 describe("ExportMenu - a janela de PDF, PowerPoint e imagem", () => {
-  it("abre com Valores Atuais na lista e a caixa da pagina atual desmarcada, como no Power BI", async () => {
+  it("abre com Valores Atuais na lista e todas as paginas, no lugar da caixa de pagina atual", async () => {
     await abrirJanela("PDF");
 
     expect(valores().value).toBe("current");
     expect(within(valores()).getAllByRole("option").map((o) => o.textContent)).toEqual(["Valores Atuais", "Valores Padrão"]);
-    expect(marcado("Exportar somente a página atual")).toBe(false);
+    expect(screen.getByRole("button", { name: "Páginas: Todas as páginas (3)" })).toBeTruthy();
+    expect(screen.queryByText(/somente a página atual/)).toBeNull();
+  });
+
+  it("a lista de paginas traz uma opcao por pagina do relatorio, com o titulo de cada uma", async () => {
+    await abrirJanela("PDF");
+
+    abrirMulti("Páginas");
+
+    expect(within(screen.getByRole("group", { name: "Páginas" })).getAllByRole("checkbox").map((c) => c.closest("label")?.textContent)).toEqual([
+      "Resumo",
+      "Detalhe",
+      "Custos",
+    ]);
+  });
+
+  it("relatorio de uma pagina so: nao mostra a lista de paginas", async () => {
+    peekPages.mockReturnValue([PAGINAS[0]]);
+    await abrirJanela("PDF");
+
+    expect(screen.queryByRole("button", { name: /^Páginas:/ })).toBeNull();
+  });
+
+  it("enquanto as paginas carregam: avisa e nao deixa exportar", async () => {
+    peekPages.mockReturnValue(null);
+    let liberar: (lista: ReportPageInfo[]) => void = () => {};
+    getReportPages.mockReturnValue(new Promise((resolve) => (liberar = resolve)));
+    await abrirJanela("PDF");
+
+    expect(screen.getByText("Carregando as páginas do relatório...")).toBeTruthy();
+    expect((confirmar() as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => liberar(PAGINAS));
+
+    expect(screen.queryByText("Carregando as páginas do relatório...")).toBeNull();
+    expect(screen.getByRole("button", { name: "Páginas: Todas as páginas (3)" })).toBeTruthy();
+    expect((confirmar() as HTMLButtonElement).disabled).toBe(false);
   });
 
   it("o PowerPoint mostra o logo no titulo e explica que cada pagina vira um slide, sem lista travada", async () => {
@@ -289,7 +364,9 @@ describe("ExportMenu - a janela de PDF, PowerPoint e imagem", () => {
   it("cada vez que a janela abre, as opcoes voltam ao padrao", async () => {
     await abrirJanela("PDF");
     escolherValores("default");
-    fireEvent.click(screen.getByRole("checkbox", { name: "Exportar somente a página atual" }));
+    abrirMulti("Páginas");
+    marcarOpcao("Detalhe");
+    expect(screen.getByRole("button", { name: "Páginas: Detalhe" })).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Cancelar" }));
 
     fireEvent.click(botaoTopo());
@@ -297,7 +374,17 @@ describe("ExportMenu - a janela de PDF, PowerPoint e imagem", () => {
     await screen.findByRole("dialog");
 
     expect(valores().value).toBe("current");
-    expect(marcado("Exportar somente a página atual")).toBe(false);
+    expect(screen.getByRole("button", { name: "Páginas: Todas as páginas (3)" })).toBeTruthy();
+  });
+
+  it("Esc com a lista de paginas aberta fecha so a lista, nao a janela", async () => {
+    await abrirJanela("PDF");
+    abrirMulti("Páginas");
+
+    fireEvent.keyDown(document, { key: "Escape" });
+
+    expect(screen.queryByRole("group", { name: "Páginas" })).toBeNull();
+    expect(screen.queryByRole("dialog")).not.toBeNull();
   });
 });
 
@@ -409,14 +496,60 @@ describe("ExportMenu - gerar o arquivo em segundo plano", () => {
     await waitFor(() => expect(iniciar).toHaveBeenCalledWith(3, 34, "PDF", null, null));
   });
 
-  it("somente a pagina atual: pede com o nome da pagina", async () => {
+  it("paginas escolhidas: pede so essas, na ordem do relatorio", async () => {
     iniciar.mockResolvedValue("job-5");
-    status.mockResolvedValue({ ...PRONTO, file_name: "Resumo.pdf" });
+    status.mockResolvedValue({ ...PRONTO, file_name: "Vendas.pdf" });
     baixar.mockResolvedValue(undefined);
 
-    await exportar("PDF", () => fireEvent.click(screen.getByRole("checkbox", { name: "Exportar somente a página atual" })));
+    await exportar("PDF", () => {
+      abrirMulti("Páginas");
+      marcarOpcao("Custos");
+      marcarOpcao("Resumo");
+    });
 
-    await waitFor(() => expect(iniciar).toHaveBeenCalledWith(3, 34, "PDF", "ReportSection1", "estado-abc"));
+    await waitFor(() =>
+      expect(iniciar).toHaveBeenCalledWith(3, 34, "PDF", ["ReportSection1", "ReportSection3"], "estado-abc"),
+    );
+  });
+
+  it("todas as paginas marcadas pedem o relatorio inteiro", async () => {
+    iniciar.mockResolvedValue("job-5b");
+    status.mockResolvedValue({ ...PRONTO, file_name: "Vendas.pdf" });
+    baixar.mockResolvedValue(undefined);
+
+    await exportar("PDF", () => {
+      abrirMulti("Páginas");
+      marcarOpcao("Resumo");
+      marcarOpcao("Detalhe");
+      marcarOpcao("Custos");
+    });
+
+    await waitFor(() => expect(iniciar).toHaveBeenCalledWith(3, 34, "PDF", null, "estado-abc"));
+  });
+
+  it("uma pagina so escolhida: pede com essa pagina, tambem no PowerPoint", async () => {
+    iniciar.mockResolvedValue("job-5c");
+    status.mockResolvedValue({ ...PRONTO, file_name: "Detalhe.pptx" });
+    baixar.mockResolvedValue(undefined);
+
+    await exportar("PowerPoint", () => {
+      abrirMulti("Páginas");
+      marcarOpcao("Detalhe");
+    });
+
+    await waitFor(() => expect(iniciar).toHaveBeenCalledWith(3, 34, "PPTX", ["ReportSection2"], "estado-abc"));
+  });
+
+  it("sem conseguir ler as paginas, exporta o relatorio inteiro sem mostrar a escolha", async () => {
+    peekPages.mockReturnValue(null);
+    getReportPages.mockRejectedValue(new Error("sem paginas"));
+    iniciar.mockResolvedValue("job-5d");
+    status.mockResolvedValue({ ...PRONTO, file_name: "Vendas.pdf" });
+    baixar.mockResolvedValue(undefined);
+
+    await exportar("PDF", () => undefined);
+
+    await waitFor(() => expect(iniciar).toHaveBeenCalledWith(3, 34, "PDF", null, "estado-abc"));
   });
 
   it("PowerPoint: pede PPTX e baixa o arquivo", async () => {
@@ -476,15 +609,6 @@ describe("ExportMenu - gerar o arquivo em segundo plano", () => {
     await exportar("PDF");
 
     expect((await screen.findByRole("alert")).textContent).toContain("RLS");
-  });
-
-  it("pagina que nao da para identificar nao chega a pedir a exportacao", async () => {
-    getActivePageName.mockResolvedValue(null);
-
-    await exportar("PDF", () => fireEvent.click(screen.getByRole("checkbox", { name: "Exportar somente a página atual" })));
-
-    expect((await screen.findByRole("alert")).textContent).toContain("identificar a pagina");
-    expect(iniciar).not.toHaveBeenCalled();
   });
 
   it("da para abrir o Exportar de novo e pedir outro formato enquanto o primeiro roda", async () => {

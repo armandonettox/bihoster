@@ -426,3 +426,79 @@ describe("ReportEmbed - leitura antecipada das tabelas", () => {
     expect(ref.current!.peekTableVisuals()).toBeNull();
   });
 });
+
+describe("ReportEmbed - paginas e tabelas escolhidas para o Exportar", () => {
+  const pagina = (name: string, displayName: string, visibility = 0) => ({ name, displayName, visibility });
+
+  async function abrir(config: EmbedConfig = CONFIG) {
+    getEmbedConfig.mockResolvedValue(config);
+    const ref = createRef<ReportEmbedHandle>();
+    render(<ReportEmbed ref={ref} reportId={34} />);
+    await waitFor(() => expect(mocks.handlers.loaded).toBeTypeOf("function"));
+    return ref;
+  }
+
+  it("antes de o relatorio carregar, a lista de paginas ainda nao existe", async () => {
+    const ref = await abrir();
+
+    expect(ref.current!.peekPages()).toBeNull();
+  });
+
+  it("le as paginas quando o relatorio carrega, sem as ocultas", async () => {
+    mocks.embedded.getPages.mockResolvedValue([pagina("P1", "Resumo"), pagina("P2", "Dica", 1), pagina("P3", "Detalhe")]);
+    const ref = await abrir();
+
+    await act(async () => {
+      await mocks.handlers.loaded();
+    });
+
+    expect(ref.current!.peekPages()).toEqual([
+      { name: "P1", displayName: "Resumo" },
+      { name: "P3", displayName: "Detalhe" },
+    ]);
+  });
+
+  it("com paginas escolhidas para o relatorio, so elas entram na lista", async () => {
+    mocks.embedded.getPages.mockResolvedValue([pagina("P1", "Resumo"), pagina("P2", "Dica"), pagina("P3", "Detalhe")]);
+    const ref = await abrir({ ...CONFIG, page_names: ["P3"] });
+
+    await act(async () => {
+      await mocks.handlers.loaded();
+    });
+
+    expect(ref.current!.peekPages()).toEqual([{ name: "P3", displayName: "Detalhe" }]);
+  });
+
+  it("pedir as paginas antes de elas estarem lidas le na hora", async () => {
+    mocks.embedded.getPages.mockResolvedValue([pagina("P1", "Resumo")]);
+    const ref = await abrir();
+
+    const lista = await ref.current!.getReportPages();
+
+    expect(lista).toEqual([{ name: "P1", displayName: "Resumo" }]);
+    expect(ref.current!.peekPages()).toEqual(lista);
+  });
+
+  it("Excel de varias tabelas escolhidas: so as escolhidas, cada uma numa aba", async () => {
+    const baixar = vi.mocked(downloadBlob);
+    const ref = await abrir();
+    const tabela = (title: string) => ({ title, type: "tableEx", name: `v-${title}`, exportData: vi.fn().mockResolvedValue({ data: "a\n1" }) });
+    const vendas = tabela("Vendas");
+    const metas = tabela("Metas");
+    const custos = tabela("Custos");
+    mocks.embedded.getActivePage.mockResolvedValue({
+      name: "P1",
+      displayName: "Carteira",
+      getVisuals: vi.fn().mockResolvedValue([vendas, metas, custos]),
+    });
+    baixar.mockClear();
+
+    await ref.current!.exportTableData(["v-Vendas", "v-Custos"], "xlsx");
+
+    expect(vendas.exportData).toHaveBeenCalled();
+    expect(custos.exportData).toHaveBeenCalled();
+    expect(metas.exportData).not.toHaveBeenCalled();
+    expect(baixar).toHaveBeenCalledTimes(1);
+    expect(baixar.mock.calls[0][1]).toBe("Carteira.xlsx");
+  });
+});

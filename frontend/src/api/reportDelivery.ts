@@ -30,19 +30,19 @@ export async function getDeliveryStatus(workspaceId: number, jobId: string): Pro
 
 export type DownloadFormat = "PDF" | "PNG" | "PPTX";
 
-/** Pede a exportacao do relatorio (ou de uma pagina) para baixar, em segundo plano. Sem `pageName`, exporta o relatorio
- * inteiro. Devolve o id do trabalho; o andamento sai em `getDeliveryStatus` e o arquivo em `downloadExportedFile`. */
+/** Pede a exportacao do relatorio (ou de algumas paginas) para baixar, em segundo plano. Sem `pageNames`, exporta o
+ * relatorio inteiro. Devolve o id do trabalho; o andamento sai em `getDeliveryStatus` e o arquivo em `downloadExportedFile`. */
 export async function startReportDownload(
   workspaceId: number,
   reportId: number,
   format: DownloadFormat,
-  pageName?: string | null,
+  pageNames?: string[] | null,
   /** Estado capturado do relatorio aberto (filtros e selecoes atuais); sem ele, sai com os valores padrao */
   bookmarkState?: string | null,
 ): Promise<string> {
   const { data } = await api.post(`/workspaces/${workspaceId}/powerbi/reports/${reportId}/export-download`, {
     format,
-    page_name: pageName ?? null,
+    page_names: pageNames ?? null,
     bookmark_state: bookmarkState ?? null,
   });
   return data.job_id;

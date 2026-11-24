@@ -491,7 +491,8 @@ table.table tr:last-child td {
   width: 100%;
   max-width: 460px;
   max-height: calc(100vh - 16vh);
-  overflow-y: auto;
+  /* Visivel: as listas suspensas (paginas, tabelas) abrem para baixo e nao podem ser cortadas pela janela */
+  overflow: visible;
   padding: 20px 24px;
   background-color: var(--color-surface);
   border-radius: var(--radius-md);
