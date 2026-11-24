@@ -80,8 +80,29 @@ class TestRotaPedirDownload:
 
     def test_formato_desconhecido_e_recusado(self, client, cenario):
         assert client.post(_url(cenario), json={"format": "DOCX"}, headers=cenario.admin).status_code == 422
-        # PPTX existe so no envio por e-mail
-        assert client.post(_url(cenario), json={"format": "PPTX"}, headers=cenario.admin).status_code == 422
+
+    def test_powerpoint_e_aceito_e_vai_para_a_thread(self, client, cenario):
+        resp, iniciar = _pedir(client, cenario, {"format": "PPTX"})
+
+        assert resp.status_code == 202
+        assert iniciar.call_args.kwargs["fmt"] == "PPTX"
+
+    def test_valores_atuais_chegam_na_thread(self, client, cenario):
+        resp, iniciar = _pedir(client, cenario, {"format": "PDF", "bookmark_state": "estado-123"})
+
+        assert resp.status_code == 202
+        assert iniciar.call_args.kwargs["bookmark_state"] == "estado-123"
+
+    def test_sem_estado_usa_os_valores_padrao(self, client, cenario):
+        _, iniciar = _pedir(client, cenario, {"format": "PDF"})
+
+        assert iniciar.call_args.kwargs["bookmark_state"] is None
+
+    def test_a_auditoria_diz_quando_o_pedido_foi_com_valores_atuais(self, client, cenario, db_session):
+        _pedir(client, cenario, {"format": "PDF", "bookmark_state": "estado-123"})
+
+        pedido = db_session.query(AuditLog).filter(AuditLog.action == "export_download_requested").one()
+        assert pedido.details == "PDF, relatorio, valores atuais"
 
     def test_a_auditoria_registra_o_pedido_e_o_resultado(self, client, cenario, db_session):
         p1, p2 = _pbi()
@@ -224,6 +245,13 @@ class TestPrepararArquivo:
         ("fmt", "dados", "paginas", "nome_esperado", "tipo"),
         [
             ("PDF", b"%PDF", [], "Vendas.pdf", "application/pdf"),
+            (
+                "PPTX",
+                b"PK",
+                [],
+                "Vendas.pptx",
+                "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            ),
             ("PNG", b"\x89PNG", ["a"], "Pagina A.png", "image/png"),
             ("PNG", b"\x89PNG", ["x"], "Vendas.png", "image/png"),
         ],

@@ -1,7 +1,7 @@
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
 from app.core import email_templates, powerbi, report_delivery
@@ -25,9 +25,11 @@ class ExportEmailRequest(BaseModel):
 
 
 class ExportDownloadRequest(BaseModel):
-    format: Literal["PDF", "PNG"] = "PDF"
+    format: Literal["PDF", "PNG", "PPTX"] = "PDF"
     # Vazio = o relatorio inteiro (as paginas escolhidas para ele); com o nome interno, so essa pagina
     page_name: Optional[str] = None
+    # Estado do relatorio aberto (filtros e selecoes atuais), capturado na tela; vazio = valores padrao do relatorio
+    bookmark_state: Optional[str] = Field(default=None, max_length=500_000)
 
 
 class DeliveryJobOut(BaseModel):
@@ -174,7 +176,7 @@ def export_for_download(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_workspace_permission("relatorio.exportar")),
 ):
-    """Exporta o relatorio (ou uma pagina) em PDF ou imagem, em segundo plano, para a pessoa baixar. Devolve o id do
+    """Exporta o relatorio (ou uma pagina) em PDF, PowerPoint ou imagem, em segundo plano, para a pessoa baixar. Devolve o id do
     trabalho: a tela acompanha em /export-jobs/{id} e baixa o arquivo em /export-jobs/{id}/file. Mesmas regras do envio
     por e-mail: permissao de exportar e relatorio sem RLS, porque o dado sai do sistema."""
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
@@ -212,6 +214,7 @@ def export_for_download(
         report_name=report.name,
         page_display_names=page_display_names,
         on_finish=lambda ok, message: _audit_download(user_id, workspace_id, report_id, fmt, ok, message),
+        bookmark_state=data.bookmark_state or None,
     )
     log_action(
         db,
@@ -220,7 +223,9 @@ def export_for_download(
         user_id=user_id,
         workspace_id=workspace_id,
         entity_id=str(report_id),
-        details=fmt + (", pagina" if data.page_name else ", relatorio"),
+        details=fmt
+        + (", pagina" if data.page_name else ", relatorio")
+        + (", valores atuais" if data.bookmark_state else ""),
     )
     return DeliveryJobOut(job_id=job.id)
 

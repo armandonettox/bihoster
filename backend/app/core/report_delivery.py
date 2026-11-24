@@ -135,6 +135,7 @@ def run_download(
     report_name: str,
     page_display_names: Optional[dict[str, str]] = None,
     on_finish: Optional[Callable[[bool, str], None]] = None,
+    bookmark_state: Optional[str] = None,
 ) -> None:
     """Exporta o relatorio e guarda o arquivo no trabalho, para a tela baixar. Nunca levanta."""
     ok = False
@@ -147,7 +148,13 @@ def run_download(
                 job.progress = percent
 
             data = powerbi.export_report(
-                connection, pbi_workspace_id, pbi_report_id, fmt, list(page_names) or None, on_progress=progress
+                connection,
+                pbi_workspace_id,
+                pbi_report_id,
+                fmt,
+                list(page_names) or None,
+                on_progress=progress,
+                bookmark_state=bookmark_state,
             )
         job.file_data, job.file_mimetype, job.file_name = prepare_export_file(
             fmt, data, page_names, page_display_names or {}, report_name

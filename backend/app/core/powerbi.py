@@ -362,7 +362,7 @@ EXPORT_FORMATS = {
 # Acima disso o arquivo nao cabe como anexo na maioria dos servidores de e-mail
 MAX_EXPORT_BYTES = 20 * 1024 * 1024
 EXPORT_TIMEOUT_SECONDS = 300
-EXPORT_POLL_SECONDS = 3
+EXPORT_POLL_SECONDS = 1
 
 
 def start_export(
@@ -371,15 +371,22 @@ def start_export(
     report_id: str,
     fmt: str = "PDF",
     page_names: Optional[list[str]] = None,
+    bookmark_state: Optional[str] = None,
 ) -> str:
     """Pede ao Power BI que exporte o relatorio e devolve o id da exportacao. `page_names` limita
-    as abas exportadas (vazio = o relatorio inteiro)."""
+    as abas exportadas (vazio = o relatorio inteiro). `bookmark_state` e o estado capturado do relatorio aberto
+    (filtros e selecoes atuais); sem ele, o Power BI exporta com os valores padrao."""
     if fmt not in EXPORT_FORMATS:
         raise PowerBIError(f"Formato de exportacao desconhecido: {fmt}")
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}/ExportTo"
     body: dict = {"format": fmt}
+    config: dict = {}
     if page_names:
-        body["powerBIReportConfiguration"] = {"pages": [{"pageName": name} for name in page_names]}
+        config["pages"] = [{"pageName": name} for name in page_names]
+    if bookmark_state:
+        config["defaultBookmark"] = {"state": bookmark_state}
+    if config:
+        body["powerBIReportConfiguration"] = config
     response = _http.post(url, headers=_headers(connection), json=body)
     if response.status_code not in (200, 202):
         raise PowerBIError(f"Falha ao iniciar a exportacao do relatorio: {_error_detail(response)}")
@@ -423,10 +430,11 @@ def export_report(
     on_progress: Optional[Callable[[int], None]] = None,
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
+    bookmark_state: Optional[str] = None,
 ) -> bytes:
     """Exporta o relatorio e devolve o arquivo. Espera o Power BI terminar (a exportacao leva de
     segundos a minutos) e para com erro se falhar ou passar de `timeout_seconds`."""
-    export_id = start_export(connection, workspace_id, report_id, fmt, page_names)
+    export_id = start_export(connection, workspace_id, report_id, fmt, page_names, bookmark_state)
     deadline = clock() + timeout_seconds
     while True:
         status = get_export_status(connection, workspace_id, report_id, export_id)

@@ -62,6 +62,21 @@ class TestStartExport:
 
         assert "powerBIReportConfiguration" not in post.call_args.kwargs["json"]
 
+    def test_valores_atuais_mandam_o_estado_capturado_do_relatorio(self):
+        with patch.object(powerbi._http, "post", return_value=_resp(202, {"id": "x"})) as post:
+            powerbi.start_export(CONEXAO, "ws", "rel", "PDF", ["ReportSection1"], bookmark_state="estado-123")
+
+        assert post.call_args.kwargs["json"]["powerBIReportConfiguration"] == {
+            "pages": [{"pageName": "ReportSection1"}],
+            "defaultBookmark": {"state": "estado-123"},
+        }
+
+    def test_sem_estado_capturado_exporta_com_os_valores_padrao(self):
+        with patch.object(powerbi._http, "post", return_value=_resp(202, {"id": "x"})) as post:
+            powerbi.start_export(CONEXAO, "ws", "rel", "PDF", None, bookmark_state=None)
+
+        assert "powerBIReportConfiguration" not in post.call_args.kwargs["json"]
+
     def test_formato_desconhecido_nem_chega_a_chamar_o_power_bi(self):
         with patch.object(powerbi._http, "post") as post:
             with pytest.raises(powerbi.PowerBIError, match="Formato"):
@@ -151,4 +166,4 @@ class TestExportReport:
         ), patch.object(powerbi, "download_export", return_value=b"x"):
             powerbi.export_report(CONEXAO, "ws", "rel", "PNG", ["P1"], sleep=sleep, clock=clock)
 
-        inicio.assert_called_once_with(CONEXAO, "ws", "rel", "PNG", ["P1"])
+        inicio.assert_called_once_with(CONEXAO, "ws", "rel", "PNG", ["P1"], None)
