@@ -19,10 +19,10 @@ vi.mock("../context/ChatContext", () => ({
   useChat: () => ({ canUse: mocks.canUse, setPanelOpen: mocks.setPanelOpen }),
 }));
 
-function renderMenu(globais: string[] = [], opcoes: { admin?: boolean; colecoes?: Record<string, string[]> } = {}) {
+function renderMenu(globais: string[] = [], opcoes: { admin?: boolean; colecoes?: Record<string, string[]>; tvAccess?: boolean } = {}) {
   const me: MyAccess = opcoes.admin
     ? ADMIN_ACCESS
-    : { is_admin: false, global_permissions: globais, workspace_permissions: opcoes.colecoes ?? {} };
+    : { is_admin: false, global_permissions: globais, workspace_permissions: opcoes.colecoes ?? {}, tv_access: opcoes.tvAccess };
   return render(
     <AccessContext.Provider value={buildAccess(me)}>
       <AppsMenu />
@@ -190,6 +190,23 @@ describe("AppsMenu", () => {
 
     expect(screen.getByRole("button", { name: "Auditoria" })).toBeTruthy();
     expect(screen.queryByText("Analíticos")).toBeNull();
+  });
+
+  it("quem tem acesso a alguma TV ve Modo TV, que abre o modulo, e o botao dos modulos aparece", () => {
+    renderMenu([], { tvAccess: true });
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Modo TV" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/tv");
+  });
+
+  it("quem pode criar TVs ve Modo TV", () => {
+    renderMenu(["tv.criar"]);
+    openMenu();
+
+    expect(screen.getByRole("button", { name: "Modo TV" })).toBeTruthy();
   });
 
   it("administrador da plataforma ve Administracao e Auditoria", () => {

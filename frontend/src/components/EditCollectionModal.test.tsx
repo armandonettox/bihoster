@@ -19,7 +19,6 @@ const COLECAO = {
   description: "Vendas do mês",
   icon: null,
   color: null,
-  tv_interval_seconds: 30,
   role: "admin",
 } as unknown as Workspace;
 

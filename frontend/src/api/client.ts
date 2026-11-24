@@ -42,8 +42,8 @@ api.interceptors.response.use(
       safeStorage.removeItem("token");
       // No Modo TV (kiosk sem ninguem por perto), redirecionar pro login silenciosamente
       // deixa a tela "morta" sem ninguem notar -- em vez disso deixa a propria pagina
-      // mostrar o erro (TvPlaylistPlayer ja trata isso), visivel pra quem passar na frente.
-      const isTvKiosk = window.location.pathname.startsWith("/tv/");
+      // mostrar o erro (a pagina da TV trata isso), visivel pra quem passar na frente.
+      const isTvKiosk = window.location.pathname.startsWith("/tv/p/");
       if (!isTvKiosk && window.location.pathname !== "/login") {
         window.location.href = loginUrlFor(window.location.pathname + window.location.search);
       }

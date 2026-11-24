@@ -33,7 +33,9 @@ const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
 const WorkspaceOnboarding = lazy(() => import("./pages/WorkspaceOnboarding"));
 const AnalyticsOnly = lazy(() => import("./pages/AnalyticsOnly"));
-const TvPlaylistPlayer = lazy(() => import("./pages/TvPlaylistPlayer"));
+const Tvs = lazy(() => import("./pages/Tvs"));
+const TvEditor = lazy(() => import("./pages/TvEditor"));
+const TvPlayer = lazy(() => import("./pages/TvPlayer"));
 const ReportFullscreen = lazy(() => import("./pages/ReportFullscreen"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -81,16 +83,8 @@ function RoutedContent() {
       <Suspense fallback={<PageLoading />}>
       <Routes>
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/tv/:workspaceId"
-          element={
-            <ProtectedRoute>
-              <WorkspaceProvider>
-                <TvPlaylistPlayer />
-              </WorkspaceProvider>
-            </ProtectedRoute>
-          }
-        />
+        {/* A pagina da propria TV: fora do login e dos provedores de pessoa, o acesso e o link secreto mais o codigo */}
+        <Route path="/tv/p/:secret" element={<TvPlayer />} />
         <Route path="/register" element={<Register />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route element={<ChatShell />}>
@@ -116,6 +110,8 @@ function RoutedContent() {
             <Route path="collections" element={<Collections />} />
             <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="alerts" element={<Alerts />} />
+            <Route path="tv" element={<Tvs />} />
+            <Route path="tv/:tvId" element={<TvEditor />} />
             <Route path="users" element={<ManageUsers />} />
             <Route path="account" element={<Account />} />
             <Route path="audit" element={<Audit />} />

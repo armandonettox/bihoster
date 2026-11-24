@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as homeApi from "../api/home";
 import * as reportsApi from "../api/reports";
 import type { Report } from "../api/reports";
-import * as workspacesApi from "../api/workspaces";
 import type { Workspace } from "../api/workspaces";
 import { AccessContext, buildAccess } from "../context/AccessContext";
 import { makeReport, makeWorkspace } from "../test-fixtures";
@@ -67,11 +66,10 @@ vi.mock("../components/FullscreenReportView", () => ({
 
 const listReports = vi.mocked(reportsApi.listReports);
 const moveReport = vi.mocked(reportsApi.moveReport);
-const updateWorkspace = vi.mocked(workspacesApi.updateWorkspace);
 const recordCollectionView = vi.mocked(homeApi.recordCollectionView);
 const getCollectionRefreshInfo = vi.mocked(reportsApi.getCollectionRefreshInfo);
 
-// 8 relatorios: o campo de filtro so aparece a partir de 6
+// 6 relatorios: o campo de filtro so aparece a partir de 6
 const REPORTS: Report[] = [
   makeReport(1, { name: "Vendas Mensal" }),
   makeReport(2, { name: "Vendas Anual" }),
@@ -79,8 +77,6 @@ const REPORTS: Report[] = [
   makeReport(4, { name: "Painel Geral", display_type: "painel" }),
   makeReport(5, { name: "Apresentacao A", display_type: "apresentacao" }),
   makeReport(6, { name: "Apresentacao B", display_type: "apresentacao" }),
-  makeReport(7, { name: "TV Loja 1", display_type: "tv" }),
-  makeReport(8, { name: "TV Loja 2", display_type: "tv" }),
 ];
 
 // Pagina de mentira da tela cheia de um relatorio: mostra os numeros que vieram no endereco
@@ -120,13 +116,13 @@ function montar(entrada: string | { pathname: string; state?: unknown } = "/coll
 }
 
 function comRole(role: Workspace["role"]) {
-  mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role, tv_interval_seconds: 15 });
+  mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role });
   mocks.permissoes = PERMISSOES_POR_PAPEL[role];
 }
 
 /** A colecao com so as permissoes escolhidas (alem de ver a colecao) */
 function comPermissoes(...chaves: string[]) {
-  mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role: "viewer", tv_interval_seconds: 15 });
+  mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role: "viewer" });
   mocks.permissoes = ["colecao.ver", ...chaves];
 }
 
@@ -165,7 +161,7 @@ describe("CollectionHome - carga e secoes", () => {
     await renderLoaded();
 
     expect(screen.getByRole("heading", { name: "Colecao Vendas" })).toBeTruthy();
-    for (const titulo of ["Relatorios", "Painel", "Apresentacao", "Modo TV"]) {
+    for (const titulo of ["Relatorios", "Painel", "Apresentacao"]) {
       expect(screen.getByRole("heading", { name: titulo })).toBeTruthy();
     }
     expect(listReports).toHaveBeenCalledWith(3);
@@ -341,7 +337,6 @@ describe("CollectionHome - filtro por nome", () => {
     expect(screen.getByText("Estoque Atual")).toBeTruthy();
     expect(screen.queryByText("Vendas Mensal")).toBeNull();
     expect(screen.queryByRole("heading", { name: "Painel" })).toBeNull();
-    expect(screen.queryByRole("heading", { name: "Modo TV" })).toBeNull();
   });
 
   it("avisa quando nada combina com o filtro", async () => {
@@ -372,12 +367,11 @@ describe("CollectionHome - reordenar", () => {
     expect(screen.queryByLabelText(/^Mover /)).toBeNull();
   });
 
-  it("quem edita ve os botoes so na Apresentacao e no Modo TV, e o primeiro nao sobe", async () => {
+  it("quem edita ve os botoes so na Apresentacao, e o primeiro nao sobe", async () => {
     comRole("editor");
     await renderLoaded();
 
     expect(screen.getByLabelText("Mover Apresentacao A para baixo")).toBeTruthy();
-    expect(screen.getByLabelText("Mover TV Loja 1 para baixo")).toBeTruthy();
     expect(screen.queryByLabelText("Mover Vendas Mensal para baixo")).toBeNull();
     expect((screen.getByLabelText("Mover Apresentacao A para cima") as HTMLButtonElement).disabled).toBe(true);
   });
@@ -425,15 +419,6 @@ describe("CollectionHome - tela cheia", () => {
     expect(screen.getByTestId("pagina-relatorio").textContent).toBe("3/2");
   });
 
-  it("o Modo TV usa a lista completa mesmo com a pagina filtrada", async () => {
-    await renderLoaded();
-    digitarFiltro("TV Loja 1");
-
-    fireEvent.click(screen.getByRole("button", { name: /Abrir modo TV/ }));
-
-    expect(screen.getByTestId("fullscreen-section").textContent).toContain("tv:2");
-  });
-
   it("a Apresentacao tambem usa a lista completa e volta para a pagina ao sair", async () => {
     await renderLoaded();
     digitarFiltro("Apresentacao A");
@@ -446,35 +431,6 @@ describe("CollectionHome - tela cheia", () => {
     expect(screen.getByRole("heading", { name: "Colecao Vendas" })).toBeTruthy();
   });
 
-  it("a tela cheia da TV fica no historico: recarregar a pagina nao joga de volta pra colecao", async () => {
-    // Uma entrada do historico que ja traz a tela cheia, como acontece depois do F5
-    render(montar({ pathname: "/collection", state: { fullscreen: "tv" } }));
-
-    expect(await screen.findByTestId("fullscreen-section")).toBeTruthy();
-    expect(screen.getByTestId("fullscreen-section").textContent).toContain("tv:2");
-  });
-});
-
-describe("CollectionHome - tempo do Modo TV", () => {
-  it("so o administrador ve o campo de tempo", async () => {
-    comRole("editor");
-    await renderLoaded();
-
-    expect(screen.queryByLabelText("Tempo (s)")).toBeNull();
-  });
-
-  it("grava o novo tempo ao sair do campo e recarrega a colecao", async () => {
-    updateWorkspace.mockResolvedValue(makeWorkspace());
-    await renderLoaded();
-    const campo = screen.getByLabelText("Tempo (s)") as HTMLInputElement;
-    expect(campo.value).toBe("15");
-
-    fireEvent.change(campo, { target: { value: "30" } });
-    fireEvent.blur(campo);
-
-    await waitFor(() => expect(updateWorkspace).toHaveBeenCalledWith(3, { tv_interval_seconds: 30 }));
-    await waitFor(() => expect(mocks.reload).toHaveBeenCalled());
-  });
 });
 
 describe("CollectionHome - cada acao pela sua permissao", () => {
@@ -547,20 +503,8 @@ describe("CollectionHome - cada acao pela sua permissao", () => {
     expect(screen.queryByLabelText(/^Mover /)).toBeNull();
   });
 
-  it("o campo de tempo da TV e de quem pode editar a colecao", async () => {
-    comPermissoes("relatorio.editar", "relatorio.reordenar");
-    await renderLoaded();
-    expect(screen.queryByLabelText("Tempo (s)")).toBeNull();
-
-    comPermissoes("colecao.editar");
-    const outra = await renderLoaded();
-    outra.unmount();
-    await renderLoaded();
-    expect(screen.getByLabelText("Tempo (s)")).toBeTruthy();
-  });
-
   it("a permissao dada em outra colecao nao vale nesta", async () => {
-    mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role: "viewer", tv_interval_seconds: 15 });
+    mocks.workspace = makeWorkspace({ id: 3, name: "Colecao Vendas", role: "viewer" });
     mocks.permissoes = ["colecao.ver"];
     await renderLoaded();
 

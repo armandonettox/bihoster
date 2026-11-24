@@ -30,7 +30,6 @@ export function makeWorkspace(extra: Partial<Workspace> = {}): Workspace {
     description: null,
     icon: null,
     color: null,
-    tv_interval_seconds: 15,
     role: "admin",
     ...extra,
   };

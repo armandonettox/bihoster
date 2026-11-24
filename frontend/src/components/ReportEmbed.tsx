@@ -89,13 +89,19 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   workspaceId?: number;
   /** Nivel de zoom aplicado ao frame (1.0 = normal, 0.8 = menor, 1.5 = maior). */
   zoom?: number;
-}>(function ReportEmbed({ reportId, height = 600, workspaceId, zoom = 1 }, ref) {
+  /** Busca a configuracao do embed por outro caminho que nao o da pessoa logada (a TV do Modo TV, que tem token proprio). */
+  loadConfig?: () => Promise<reportsApi.EmbedConfig>;
+  /** Abre exatamente esta pagina, sem navegacao entre paginas nem painel de filtros (um item da lista da TV). */
+  forcePage?: string;
+}>(function ReportEmbed({ reportId, height = 600, workspaceId, zoom = 1, loadConfig, forcePage }, ref) {
   const { currentWorkspace } = useWorkspace();
   const effectiveWorkspaceId = workspaceId ?? currentWorkspace?.id;
   const containerRef = useRef<HTMLDivElement>(null);
   const embeddedRef = useRef<pbi.Report | null>(null);
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
+  const loadConfigRef = useRef(loadConfig);
+  loadConfigRef.current = loadConfig;
 
   // As tabelas da pagina aberta, lidas com antecedencia (quando a pagina desenha) para o Exportar abrir na hora, sem
   // esperar a ida e volta ao Power BI. Zera ao trocar de pagina.
@@ -291,7 +297,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   const [activePage, setActivePage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!effectiveWorkspaceId) return;
+    if (!effectiveWorkspaceId && !loadConfigRef.current) return;
 
     let cancelled = false;
     setTabs([]);
@@ -305,12 +311,17 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
     setError(null);
     setLoading(true);
 
+    // A TV busca a configuracao pelo token dela; a pessoa logada, pelo caminho normal da colecao
+    function fetchConfig() {
+      const custom = loadConfigRef.current;
+      return custom ? custom() : reportsApi.getEmbedConfig(effectiveWorkspaceId as number, reportId);
+    }
+
     // Troca o token do relatorio ja aberto (sem recarregar) antes de ele vencer -- sem isso, uma
     // aba deixada aberta por mais de ~1h (ou o modo TV com um relatorio so) ficava em branco.
     function renewToken(embeddedReport: pbi.Report) {
       if (cancelled) return;
-      reportsApi
-        .getEmbedConfig(effectiveWorkspaceId as number, reportId)
+      fetchConfig()
         .then(async (fresh) => {
           if (cancelled) return;
           await embeddedReport.setAccessToken(fresh.access_token);
@@ -328,15 +339,14 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
       renewTimer = setTimeout(() => renewToken(embeddedReport), delay);
     }
 
-    reportsApi
-      .getEmbedConfig(effectiveWorkspaceId, reportId)
+    fetchConfig()
       .then((config) => {
         if (cancelled || !container) return;
         timer.mark("config");
 
         // Abas escolhidas na hora de adicionar (nomes tecnicos do Power BI, nao os titulos).
         // Backend antigo so manda page_name.
-        const selectedPages = config.page_names ?? (config.page_name ? [config.page_name] : []);
+        const selectedPages = forcePage ? [forcePage] : (config.page_names ?? (config.page_name ? [config.page_name] : []));
         allowedPagesRef.current = selectedPages;
 
         timer.mark("embed");
@@ -353,11 +363,11 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
             background: pbi.models.BackgroundType.Transparent,
             bars: { actionBar: { visible: false } },
             panes: {
-              filters: { visible: config.show_filter_pane ?? false },
+              filters: { visible: forcePage ? false : (config.show_filter_pane ?? false) },
               // Com abas escolhidas e show_page_nav desativado, a navegacao nativa some:
               // a barra propria abaixo assume quando ha multiplas abas selecionadas.
               pageNavigation: {
-                visible: config.show_page_nav ?? (selectedPages.length === 0),
+                visible: forcePage ? false : (config.show_page_nav ?? (selectedPages.length === 0)),
               },
             },
             // Cabecalho do visual (menu "..."): so visivel quando habilitado no relatorio.
@@ -450,7 +460,7 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         getPowerBiService().reset(container);
       }
     };
-  }, [reportId, effectiveWorkspaceId]);
+  }, [reportId, effectiveWorkspaceId, forcePage]);
 
   useEffect(() => {
     const report = embeddedRef.current;

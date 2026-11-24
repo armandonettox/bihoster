@@ -13,7 +13,7 @@ const getInfo = vi.mocked(reportsApi.getCollectionRefreshInfo);
 const REPORTS = [
   makeReport(1, { name: "Vendas" }),
   makeReport(2, { name: "Estoque", display_type: "painel" }),
-  makeReport(3, { name: "Financeiro", display_type: "tv" }),
+  makeReport(3, { name: "Financeiro", display_type: "apresentacao" }),
   makeReport(4, { name: "Sem dataset" }),
 ];
 

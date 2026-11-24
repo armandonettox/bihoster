@@ -17,6 +17,8 @@ export interface AccessValue {
   canAny: (...keys: string[]) => boolean;
   /** Tem esta permissão neste escopo do rascunho de permissões ("global" ou o id da coleção)? Só se dá e se tira o que se tem */
   holds: (scope: string, key: string) => boolean;
+  /** Cria TVs ou tem acesso a alguma TV: mostra o módulo Modo TV */
+  hasTvAccess: boolean;
   /** Busca de novo (depois de a pessoa mudar as próprias permissões) */
   refresh: () => Promise<void>;
 }
@@ -41,6 +43,7 @@ export function buildAccess(
     canIn: (key, workspaceId) => isAdmin || (workspaceId != null && (byWorkspace.get(workspaceId)?.has(key) ?? false)),
     canInAny: (key) => isAdmin || [...byWorkspace.values()].some((keys) => keys.has(key)),
     canAny: (...keys) => keys.some(can),
+    hasTvAccess: isAdmin || can("tv.criar") || (me?.tv_access ?? false),
     holds: (scope, key) => (scope === "global" ? can(key) : isAdmin || (byWorkspace.get(Number(scope))?.has(key) ?? false)),
     refresh,
   };

@@ -14,7 +14,6 @@ const DISPLAY_TYPE_OPTIONS: { key: DisplayType; label: string; hint: string }[] 
   { key: "relatorio", label: "Relatorio", hint: "Aparece na lista, um relatorio expandido por vez." },
   { key: "painel", label: "Painel", hint: "Aparece numa grade, junto com os outros do painel." },
   { key: "apresentacao", label: "Apresentacao", hint: "Navegacao manual entre os relatorios da apresentacao." },
-  { key: "tv", label: "Modo TV", hint: "Pode entrar numa playlist de TV que reveza em tela cheia." },
 ];
 
 export default function NewReportForm({

@@ -13,11 +13,11 @@ vi.mock("../hooks/useAnalyticsAccess", () => ({
 
 function renderModules(
   globais: string[] = [],
-  opcoes: { admin?: boolean; colecoes?: Record<string, string[]>; rota?: string } = {},
+  opcoes: { admin?: boolean; colecoes?: Record<string, string[]>; rota?: string; tvAccess?: boolean } = {},
 ) {
   const me: MyAccess = opcoes.admin
     ? ADMIN_ACCESS
-    : { is_admin: false, global_permissions: globais, workspace_permissions: opcoes.colecoes ?? {} };
+    : { is_admin: false, global_permissions: globais, workspace_permissions: opcoes.colecoes ?? {}, tv_access: opcoes.tvAccess };
   return render(
     <MemoryRouter initialEntries={[opcoes.rota ?? "/"]}>
       <AccessContext.Provider value={buildAccess(me)}>
@@ -126,9 +126,25 @@ describe("SidebarModules", () => {
     expect(screen.queryByRole("link", { name: "Analíticos" })).toBeNull();
   });
 
+  it("quem tem acesso a alguma TV ve Modo TV, que leva ao modulo", () => {
+    renderModules([], { tvAccess: true });
+    expect(link("Modo TV").getAttribute("href")).toBe("/tv");
+    expect(screen.queryByRole("link", { name: "Administração" })).toBeNull();
+  });
+
+  it("quem pode criar TVs ve Modo TV mesmo sem TV nenhuma ainda", () => {
+    renderModules(["tv.criar"]);
+    expect(link("Modo TV")).toBeTruthy();
+  });
+
+  it("sem criar TV e sem acesso a nenhuma, Modo TV nao aparece", () => {
+    renderModules(["alerta.todas"]);
+    expect(screen.queryByRole("link", { name: "Modo TV" })).toBeNull();
+  });
+
   it("administrador da plataforma ve todos os modulos", () => {
     renderModules([], { admin: true });
-    for (const nome of ["Gerenciar usuários", "Coleções", "Assinaturas", "Alertas", "Administração", "Auditoria"]) {
+    for (const nome of ["Gerenciar usuários", "Coleções", "Assinaturas", "Alertas", "Modo TV", "Administração", "Auditoria"]) {
       expect(link(nome)).toBeTruthy();
     }
   });

@@ -9,7 +9,6 @@ export interface Workspace {
   description: string | null;
   icon: string | null;
   color: string | null;
-  tv_interval_seconds: number;
   role: UserRole;
 }
 
@@ -18,7 +17,6 @@ export interface WorkspaceInput {
   description?: string | null;
   icon?: string | null;
   color?: string | null;
-  tv_interval_seconds?: number;
   /** Ao criar: toda colecao nova pode ser vista por todas as pessoas, a nao ser que seja desligado (colecao privada) */
   everyone_can_view?: boolean;
 }

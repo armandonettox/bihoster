@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export type DisplayType = "relatorio" | "painel" | "apresentacao" | "tv";
+export type DisplayType = "relatorio" | "painel" | "apresentacao";
 
 export interface Report {
   id: number;

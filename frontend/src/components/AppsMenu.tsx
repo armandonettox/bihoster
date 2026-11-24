@@ -21,12 +21,13 @@ export default function AppsMenu() {
   const canSeeCollections = access.canAny(...COLLECTIONS_AREA_KEYS);
   const canSeeSubscriptions = access.canAny(...SUBSCRIPTIONS_AREA_KEYS);
   const canSeeAlerts = access.canAny(...ALERTS_AREA_KEYS);
+  const canSeeTv = access.hasTvAccess;
   // O log geral da auditoria tem permissao propria
   const canSeeAudit = access.can("auditoria.ver");
   // Quem so tem a permissao de ver os analiticos entra direto no painel, sem a tabela de registros
   const { canView: canViewAnalytics } = useAnalyticsAccess();
   const canSeeAnalytics = canViewAnalytics && !canSeeAudit;
-  if (!isAnyAdmin && !canManageUsers && !canSeeCollections && !canSeeSubscriptions && !canSeeAlerts && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
+  if (!isAnyAdmin && !canManageUsers && !canSeeCollections && !canSeeSubscriptions && !canSeeAlerts && !canSeeTv && !canUseChat && !canSeeAudit && !canSeeAnalytics) return null;
 
   return (
     <div ref={containerRef} className="topbar-menu">
@@ -95,6 +96,18 @@ export default function AppsMenu() {
             >
               <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">notifications_active</span>
               Alertas
+            </button>
+          )}
+          {canSeeTv && (
+            <button
+              className="topbar-menu-item"
+              onClick={() => {
+                setOpen(false);
+                navigate("/tv");
+              }}
+            >
+              <span className="material-symbols-outlined" style={{ fontSize: 18 }} aria-hidden="true">tv</span>
+              Modo TV
             </button>
           )}
           {isAnyAdmin && (

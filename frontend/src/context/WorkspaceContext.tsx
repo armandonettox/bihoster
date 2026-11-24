@@ -67,6 +67,20 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
   );
 }
 
+/** Para telas sem pessoa logada (a TV do Modo TV): quem usa o relatorio embutido pergunta pela colecao atual e aqui
+ * ela nao existe. Nao busca nada e nao quebra. */
+export function NoWorkspaceProvider({ children }: { children: ReactNode }) {
+  const value: WorkspaceContextValue = {
+    workspaces: [],
+    currentWorkspace: null,
+    loading: false,
+    selectWorkspace: () => {},
+    reload: async () => {},
+    reloadAndSelect: async () => {},
+  };
+  return <WorkspaceContext.Provider value={value}>{children}</WorkspaceContext.Provider>;
+}
+
 export function useWorkspace(): WorkspaceContextValue {
   const context = useContext(WorkspaceContext);
   if (!context) {

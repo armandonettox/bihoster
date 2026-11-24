@@ -12,9 +12,7 @@ import KebabMenu from "../components/KebabMenu";
 import MenuIcon from "../components/MenuIcon";
 import ReorderButtons from "../components/ReorderButtons";
 import ReportActionsMenu from "../components/ReportActionsMenu";
-import ReportIconGrid from "../components/ReportIconGrid";
 import ReportSection from "../components/ReportSection";
-import TvSectionHeader from "../components/TvSectionHeader";
 import type { ViewMode } from "../components/ViewModeToggle";
 import ListFilter from "../components/ListFilter";
 import { filterByName } from "../utils/filterByName";
@@ -28,14 +26,12 @@ import { useAccess } from "../context/AccessContext";
 import { useAuth } from "../context/AuthContext";
 import SendReportEmailModal from "../components/SendReportEmailModal";
 import ThumbnailPickerModal from "../components/ThumbnailPickerModal";
-import { useTvInterval } from "../hooks/useTvInterval";
 import { preloadPowerBi } from "../utils/powerbiService";
 
 const SECTION_TITLES: Record<DisplayType, string> = {
   relatorio: "Relatorios",
   painel: "Painel",
   apresentacao: "Apresentacao",
-  tv: "Modo TV",
 };
 
 const VIEW_MODE_KEY = "collection_view_mode";
@@ -46,7 +42,7 @@ export default function CollectionHome() {
   const { favoriteIds, toggleFavorite } = useFavorites();
 
   // Os efeitos abaixo dependem so do id da colecao, nao do objeto: o reload do WorkspaceContext
-  // cria um objeto novo a cada chamada (ex: ao mudar o intervalo da TV ou editar a colecao), e
+  // cria um objeto novo a cada chamada (ex: ao editar a colecao), e
   // depender do objeto resetava a pagina inteira e registrava a visita em "Recentes" de novo.
   const workspaceId = currentWorkspace?.id;
 
@@ -60,7 +56,6 @@ export default function CollectionHome() {
     movingReportId,
     moveReport,
   } = useCollectionReports(workspaceId);
-  const tvInterval = useTvInterval(currentWorkspace, reloadWorkspaces);
 
   const [creatingReport, setCreatingReport] = useState(false);
   const [editingReport, setEditingReport] = useState<Report | null>(null);
@@ -72,11 +67,11 @@ export default function CollectionHome() {
   const [thumbnailPickerReport, setThumbnailPickerReport] = useState<Report | null>(null);
   const navigate = useNavigate();
   const location = useLocation();
-  // A tela cheia da Apresentacao e do Modo TV fica no historico do navegador (state da navegacao):
+  // A tela cheia da Apresentacao fica no historico do navegador (state da navegacao):
   // o Voltar sai dela e o F5 nao joga a pessoa de volta pra colecao. O relatorio avulso e uma
   // pagina propria (ver pages/ReportFullscreen.tsx).
   const fullscreenSection =
-    (location.state as { fullscreen?: "apresentacao" | "tv" } | null)?.fullscreen ?? null;
+    (location.state as { fullscreen?: "apresentacao" } | null)?.fullscreen ?? null;
   const [viewMode, setViewMode] = useState<ViewMode>(
     () => (safeStorage.getItem(VIEW_MODE_KEY) as ViewMode) || "icon"
   );
@@ -123,44 +118,40 @@ export default function CollectionHome() {
   const relatorioReports = reports.filter((r) => r.display_type === "relatorio");
   const painelReports = reports.filter((r) => r.display_type === "painel");
   const apresentacaoReports = reports.filter((r) => r.display_type === "apresentacao");
-  const tvReports = reports.filter((r) => r.display_type === "tv");
 
-  // O filtro so vale pro que aparece na pagina. A exibicao em tela cheia (TV e Apresentacao) usa
-  // as listas completas acima: filtrar a pagina nao pode mudar o que passa na TV.
+  // O filtro so vale pro que aparece na pagina. A exibicao em tela cheia (Apresentacao) usa
+  // as listas completas acima: filtrar a pagina nao pode mudar o que passa na apresentacao.
   const filtering = filter.trim() !== "";
   const shownRelatorio = filterByName(relatorioReports, filter, (r) => r.name);
   const shownPainel = filterByName(painelReports, filter, (r) => r.name);
   const shownApresentacao = filterByName(apresentacaoReports, filter, (r) => r.name);
-  const shownTv = filterByName(tvReports, filter, (r) => r.name);
-  const shownTotal = shownRelatorio.length + shownPainel.length + shownApresentacao.length + shownTv.length;
+  const shownTotal = shownRelatorio.length + shownPainel.length + shownApresentacao.length;
 
   // Abrir um relatorio em tela cheia e ir para a pagina dele (o Voltar do navegador sai)
   function openReport(reportId: number) {
     navigate(`/collection/${currentWorkspace!.id}/report/${reportId}`);
   }
 
-  function openSection(section: "apresentacao" | "tv") {
+  function openSection(section: "apresentacao") {
     navigate(location.pathname + location.search, { state: { fullscreen: section } });
   }
 
   if (fullscreenSection) {
     return (
       <FullscreenReportView
-        mode={fullscreenSection}
-        reports={fullscreenSection === "apresentacao" ? apresentacaoReports : tvReports}
-        tvIntervalSeconds={currentWorkspace.tv_interval_seconds}
+        reports={apresentacaoReports}
         onExit={() => navigate(-1)}
       />
     );
   }
 
-  // A ordem so importa (e so pode ser mudada) no Modo TV e na Apresentacao, onde ela define a
+  // A ordem so importa (e so pode ser mudada) na Apresentacao, onde ela define a
   // sequencia de exibicao, e so por quem pode editar.
   function reorderControls(report: Report, sectionReports: Report[]) {
     // Com filtro a secao mostrada e so uma parte: "subir" pareceria pular itens escondidos, porque
     // o servidor troca com o vizinho da secao completa. Limpe o filtro pra reordenar.
     if (!canReorder || filtering || sectionReports.length < 2) return null;
-    if (report.display_type !== "tv" && report.display_type !== "apresentacao") return null;
+    if (report.display_type !== "apresentacao") return null;
     const index = sectionReports.findIndex((r) => r.id === report.id);
     return (
       <ReorderButtons
@@ -283,25 +274,6 @@ export default function CollectionHome() {
               </span>
               Abrir apresentacao
             </button>
-          )}
-
-          {shownTv.length > 0 && (
-            <>
-              <TvSectionHeader
-                title={SECTION_TITLES.tv}
-                workspaceId={currentWorkspace.id}
-                isAdmin={canEditCollection}
-                intervalDraft={tvInterval.draft}
-                onIntervalChange={tvInterval.setDraft}
-                onIntervalCommit={tvInterval.commit}
-                onOpenTv={() => openSection("tv")}
-              />
-              <ReportIconGrid
-                reports={shownTv}
-                onOpenFullscreen={openReport}
-                renderActions={renderActions}
-              />
-            </>
           )}
         </>
       )}

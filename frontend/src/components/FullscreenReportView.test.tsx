@@ -10,8 +10,8 @@ vi.mock("./ReportEmbed", () => ({
 
 const REPORTS = [makeReport(1, { name: "Painel Norte" }), makeReport(2, { name: "Painel Sul" })];
 
-function abrir(onExit = vi.fn(), mode: "tv" | "apresentacao" = "apresentacao") {
-  render(<FullscreenReportView mode={mode} reports={REPORTS} tvIntervalSeconds={15} onExit={onExit} />);
+function abrir(onExit = vi.fn()) {
+  render(<FullscreenReportView reports={REPORTS} onExit={onExit} />);
   return onExit;
 }
 
@@ -57,7 +57,7 @@ describe("FullscreenReportView", () => {
 
   it("secao sem relatorios avisa e deixa sair", () => {
     const sair = vi.fn();
-    render(<FullscreenReportView mode="tv" reports={[]} onExit={sair} />);
+    render(<FullscreenReportView reports={[]} onExit={sair} />);
 
     expect(screen.getByText("Nenhum relatorio nesta secao ainda.")).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: "Sair" }));

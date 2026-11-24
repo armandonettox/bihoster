@@ -10,7 +10,6 @@ const TYPE_LABELS: Record<DisplayType, string> = {
   relatorio: "Relatorio",
   painel: "Painel",
   apresentacao: "Apresentacao",
-  tv: "Modo TV",
 };
 
 type SortKey = "name" | "type" | "status" | "last_refresh" | "next_refresh";
