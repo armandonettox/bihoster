@@ -12,6 +12,9 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.41.2 - 2026-11-24 - Ícones em todos os menus dos 3 pontinhos
+- Todas as opções dos menus dos 3 pontinhos agora têm ícone: cartão da coleção, ações do relatório (favoritar, enviar por e-mail, atualizar miniatura, editar, excluir), topo da página da coleção, conexões do Power BI e campo de imagem.
+
 ## 1.41.1 - 2026-11-24 - Janela Exportar abria escondida
 - Corrige o botão **Exportar** da versão 1.41.0: a janela abria, mas ficava atrás da tela cheia do relatório e por isso parecia que nada acontecia. Agora ela aparece por cima.
 
