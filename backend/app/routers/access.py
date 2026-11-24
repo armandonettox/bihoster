@@ -6,6 +6,7 @@ Etapa 1 do plano: esta API le e grava access_grants. As regras do sistema ainda 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core import tv_access
 from app.core.access_catalog import PRESETS, scope_of
 from app.core.access_deps import require_any_global_permission, require_global_permission
 from app.core.access_engine import effective_access
@@ -61,6 +62,7 @@ def my_access(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         is_admin=access.is_admin,
         global_permissions=sorted(access.global_keys),
         workspace_permissions={wid: sorted(keys) for wid, keys in access.by_workspace.items()},
+        tv_access=tv_access.has_any_access(db, current_user.id),
     )
 
 

@@ -2,7 +2,7 @@ from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
-DisplayType = Literal["relatorio", "painel", "apresentacao", "tv"]
+DisplayType = Literal["relatorio", "painel", "apresentacao"]
 
 # Nomes tecnicos das abas do Power BI escolhidas pra exibir
 PageNames = Annotated[list[Annotated[str, Field(max_length=100)]], Field(max_length=50)]

@@ -18,6 +18,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - relatorio.editar: PUT do relatório;  relatorio.reordenar: /move;  relatorio.miniatura: /thumbnail
 - assinatura.*: rotas de /subscriptions;  alerta.*: rotas de /alerts
 - relatorio.exportar: /reports/{id}/export-email;  colecao.criar: POST /workspaces;  colecao.todas: GET /workspaces/all
+- tv.criar: POST /tvs (ver e modificar cada TV não está aqui: é por TV, na tabela tv_grants, ver core/tv_access.py)
 - assinatura.*-outras e alerta.*-outras: as mesmas rotas, quando o item foi criado por outra pessoa;
 - assinatura.todas: GET /subscriptions (visão do portal todo);  alerta.todas: GET /alerts e /alerts/reports (módulo Alertas);  sistema.versao: GET /system/version, /history e /logs
 - membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.liberar-horario: /access-extensions; membros.adicionar: /users/welcome-email)
@@ -81,7 +82,7 @@ _SYSTEM = ("sistema", "Configurações do sistema", "As abas de configuração d
 
 CATALOG: tuple[Permission, ...] = (
     _workspace(COLLECTION_VIEW, "Ver a coleção", "Entrar na coleção e abrir os relatórios.", "Coleção"),
-    _workspace("colecao.editar", "Editar a coleção", "Mudar nome, descrição, ícone, cor e tempo da TV.", "Coleção"),
+    _workspace("colecao.editar", "Editar a coleção", "Mudar nome, descrição, ícone e cor.", "Coleção"),
     _workspace("colecao.excluir", "Excluir a coleção", "Apagar a coleção e tudo que tem dentro.", "Coleção"),
     _workspace("colecao.auditoria", "Ver a auditoria da coleção", "Ler o registro de ações feitas nesta coleção.", "Coleção"),
     _workspace("relatorio.publicar", "Publicar relatório", "Adicionar um relatório novo na coleção.", "Relatórios"),
@@ -156,6 +157,12 @@ CATALOG: tuple[Permission, ...] = (
         "Ver os alertas de todo o portal",
         "Abrir o módulo Alertas e ver os alertas de todas as coleções. Criar, editar e excluir continuam dependendo das permissões de alerta de cada coleção.",
         "Administração: coleções",
+    ),
+    _global(
+        "tv.criar",
+        "Criar TVs",
+        "Cadastrar uma TV nova no módulo Modo TV. Quem cria recebe permissão de modificar a TV; ver e modificar cada TV se dá na própria TV.",
+        "Modo TV",
     ),
     _global("conexao.ver", "Ver as conexões do Power BI", "Ver as conexões cadastradas, sem os segredos.", "Administração: Power BI", feature=_CONNECTIONS),
     _global("conexao.criar", "Cadastrar conexões", "Adicionar uma conexão nova com o Power BI.", "Administração: Power BI", feature=_CONNECTIONS, requires=("conexao.ver",)),

@@ -126,6 +126,8 @@ class MyAccessOut(BaseModel):
     is_admin: bool
     global_permissions: list[str]
     workspace_permissions: dict[int, list[str]]
+    # Cria TVs ou tem acesso a alguma: mostra o modulo Modo TV (o acesso de cada TV e por TV, nao entra nas listas acima)
+    tv_access: bool = False
 
 
 def catalog_out(presets: dict[str, tuple[str, ...]]) -> CatalogOut:

@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
-from app.models import email_template as email_template_model, access_grant as access_grant_model, access_extension as access_extension_model, access_schedule as access_schedule_model, ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, user, workspace  # noqa: F401
+from app.models import email_template as email_template_model, access_grant as access_grant_model, access_extension as access_extension_model, access_schedule as access_schedule_model, ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, favorite, group_permission, invite, password_reset, powerbi_connection, report, subscription, tv as tv_model, user, workspace  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
     access,
@@ -51,6 +51,7 @@ from app.routers import (  # noqa: F401
     search,
     subscriptions,
     system,
+    tvs,
     users,
 )
 from app.routers import settings as settings_router
@@ -66,6 +67,9 @@ _seed_db = _SessionLocal()
 try:
     migrate_legacy_access(_seed_db)
     migrate_own_scope_split(_seed_db)
+    # O modo TV saiu das colecoes (agora e o modulo Modo TV): relatorio que estava marcado como TV vira painel
+    from app.core.tv import move_old_tv_reports
+    move_old_tv_reports(_seed_db)
 finally:
     _seed_db.close()
 
@@ -228,6 +232,8 @@ app.include_router(ai_history.router)
 app.include_router(ai_options.router)
 app.include_router(ai_usage.router)
 app.include_router(report_export.router)
+app.include_router(tvs.router)
+app.include_router(tvs.player_router)
 app.include_router(subscriptions.router)
 app.include_router(subscriptions.admin_router)
 app.include_router(alerts.router)

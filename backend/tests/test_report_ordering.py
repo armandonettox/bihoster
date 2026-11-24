@@ -25,7 +25,7 @@ def _setup(client):
     return headers, workspace, conn
 
 
-def _add(client, headers, workspace, conn, name: str, display_type: str = "tv") -> dict:
+def _add(client, headers, workspace, conn, name: str, display_type: str = "apresentacao") -> dict:
     resp = client.post(
         f"/workspaces/{workspace['id']}/reports/",
         json={
@@ -91,15 +91,15 @@ def test_a_resposta_ja_traz_a_lista_na_nova_ordem(client):
 
 
 def test_mover_so_considera_relatorios_da_mesma_secao(client):
-    """Um relatorio de outra secao entre dois da TV nao conta como vizinho."""
+    """Um relatorio de outra secao entre dois da mesma secao nao conta como vizinho."""
     headers, ws, conn = _setup(client)
-    tv1 = _add(client, headers, ws, conn, "TV1", "tv")
+    tv1 = _add(client, headers, ws, conn, "TV1", "apresentacao")
     _add(client, headers, ws, conn, "Painel", "painel")
-    _add(client, headers, ws, conn, "TV2", "tv")
+    _add(client, headers, ws, conn, "TV2", "apresentacao")
 
     _move(client, headers, ws, tv1, "down")
 
-    assert _names(client, headers, ws, "tv") == ["TV2", "TV1"]
+    assert _names(client, headers, ws, "apresentacao") == ["TV2", "TV1"]
     assert _names(client, headers, ws, "painel") == ["Painel"]
 
 
@@ -192,7 +192,7 @@ def test_sem_login_da_401(client):
     assert resp.status_code == 401
 
 
-@pytest.mark.parametrize("display_type", ["tv", "apresentacao", "relatorio", "painel"])
+@pytest.mark.parametrize("display_type", ["apresentacao", "relatorio", "painel"])
 def test_funciona_em_todas_as_secoes(client, display_type):
     headers, ws, conn = _setup(client)
     a, b = (_add(client, headers, ws, conn, n, display_type) for n in ("A", "B"))
