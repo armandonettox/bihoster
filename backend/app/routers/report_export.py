@@ -1,6 +1,6 @@
-from typing import Literal
+from typing import Literal, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
 
@@ -24,6 +24,12 @@ class ExportEmailRequest(BaseModel):
     format: Literal["PDF", "PNG", "PPTX"] = "PDF"
 
 
+class ExportDownloadRequest(BaseModel):
+    format: Literal["PDF", "PNG"] = "PDF"
+    # Vazio = o relatorio inteiro (as paginas escolhidas para ele); com o nome interno, so essa pagina
+    page_name: Optional[str] = None
+
+
 class DeliveryJobOut(BaseModel):
     job_id: str
 
@@ -32,6 +38,8 @@ class DeliveryStatusOut(BaseModel):
     status: str
     message: str
     progress: int
+    # So na exportacao para baixar: o nome do arquivo pronto (ainda nao baixado)
+    file_name: Optional[str] = None
 
 
 def _audit_result(user_id: int, workspace_id: int, report_id: int, fmt: str, ok: bool, message: str) -> None:
@@ -132,4 +140,101 @@ def get_export_job(job_id: str, current_user: User = Depends(get_current_user)):
     job = report_delivery.get_job(job_id, current_user.id)
     if job is None:
         raise HTTPException(status_code=404, detail="Envio nao encontrado")
-    return DeliveryStatusOut(status=job.status, message=job.message, progress=job.progress)
+    return DeliveryStatusOut(
+        status=job.status,
+        message=job.message,
+        progress=job.progress,
+        file_name=job.file_name if job.file_data is not None else None,
+    )
+
+
+def _audit_download(user_id: int, workspace_id: int, report_id: int, fmt: str, ok: bool, message: str) -> None:
+    db = SessionLocal()
+    try:
+        log_action(
+            db,
+            action="export_download_done" if ok else "export_download_failed",
+            entity="report",
+            user_id=user_id,
+            workspace_id=workspace_id,
+            entity_id=str(report_id),
+            details=fmt if ok else f"{fmt}: {message}"[:300],
+        )
+    finally:
+        db.close()
+
+
+@router.post("/reports/{report_id}/export-download", response_model=DeliveryJobOut, status_code=202)
+@limiter.limit("6/minute")
+def export_for_download(
+    request: Request,
+    workspace_id: int,
+    report_id: int,
+    data: ExportDownloadRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_workspace_permission("relatorio.exportar")),
+):
+    """Exporta o relatorio (ou uma pagina) em PDF ou imagem, em segundo plano, para a pessoa baixar. Devolve o id do
+    trabalho: a tela acompanha em /export-jobs/{id} e baixa o arquivo em /export-jobs/{id}/file. Mesmas regras do envio
+    por e-mail: permissao de exportar e relatorio sem RLS, porque o dado sai do sistema."""
+    report = embed_router._get_report_or_404(db, workspace_id, report_id)
+    connection = embed_router._get_connection_or_error(db, report)
+    static = embed_router.get_report_static_fresh(connection, workspace_id, report)
+    if static["needs_identity"]:
+        raise HTTPException(
+            status_code=400,
+            detail="Relatorios com seguranca por linha (RLS) ainda nao podem ser exportados.",
+        )
+
+    user_id = current_user.id
+    job = report_delivery.create_job(user_id)
+    conn_snapshot = embed_router._connection_snapshot(connection)
+    page_display_names: dict[str, str] = {}
+    try:
+        pages = powerbi.list_pages(conn_snapshot, report.pbi_workspace_id, report.pbi_report_id)
+        page_display_names = {p["name"]: p["displayName"] for p in pages}
+    except Exception:  # noqa: BLE001 -- nomear pelo nome da pagina e um extra; nao pode derrubar a exportacao
+        pass
+    if data.page_name:
+        if page_display_names and data.page_name not in page_display_names:
+            raise HTTPException(status_code=400, detail="Pagina nao encontrada neste relatorio.")
+        page_names = [data.page_name]
+    else:
+        page_names = list(report.pbi_page_names or [])
+    fmt = data.format
+    report_delivery.start_download_in_background(
+        job=job,
+        connection=conn_snapshot,
+        pbi_workspace_id=report.pbi_workspace_id,
+        pbi_report_id=report.pbi_report_id,
+        page_names=page_names,
+        fmt=fmt,
+        report_name=report.name,
+        page_display_names=page_display_names,
+        on_finish=lambda ok, message: _audit_download(user_id, workspace_id, report_id, fmt, ok, message),
+    )
+    log_action(
+        db,
+        action="export_download_requested",
+        entity="report",
+        user_id=user_id,
+        workspace_id=workspace_id,
+        entity_id=str(report_id),
+        details=fmt + (", pagina" if data.page_name else ", relatorio"),
+    )
+    return DeliveryJobOut(job_id=job.id)
+
+
+@router.get("/export-jobs/{job_id}/file")
+def download_export_file(job_id: str, current_user: User = Depends(get_current_user)):
+    """O arquivo da exportacao pronta. So quem pediu baixa, e o arquivo sai da memoria depois do primeiro download."""
+    job = report_delivery.get_job(job_id, current_user.id)
+    if job is None or job.file_data is None:
+        raise HTTPException(status_code=404, detail="Arquivo nao encontrado ou ja baixado")
+    data, name, mimetype = job.file_data, job.file_name or "relatorio", job.file_mimetype or "application/octet-stream"
+    job.file_data = None
+    return Response(
+        content=data,
+        media_type=mimetype,
+        headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"},
+    )

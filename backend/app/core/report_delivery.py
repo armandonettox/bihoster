@@ -38,6 +38,10 @@ class DeliveryJob:
     message: str = "Na fila."
     progress: int = 0
     created_at: float = field(default_factory=time.monotonic)
+    # Exportacao para baixar (sem e-mail): o arquivo pronto fica aqui ate a pessoa baixar ou o trabalho vencer
+    file_data: Optional[bytes] = None
+    file_name: Optional[str] = None
+    file_mimetype: Optional[str] = None
 
     @property
     def finished(self) -> bool:
@@ -104,6 +108,71 @@ def _rename_zip_pages(data: bytes, display_names: dict[str, str]) -> bytes:
     return dst.getvalue()
 
 
+def prepare_export_file(
+    fmt: str,
+    data: bytes,
+    page_names: Sequence[str],
+    display: dict[str, str],
+    report_name: str,
+) -> tuple[bytes, str, str]:
+    """Nome e tipo do arquivo exportado. Imagem de varias paginas chega em zip, com uma imagem por pagina."""
+    mimetype, extension = powerbi.EXPORT_FORMATS[fmt]
+    if fmt == "PNG" and data[:2] == b"PK":
+        return _rename_zip_pages(data, display), "application/zip", safe_filename(report_name, ".zip")
+    if fmt == "PNG" and len(page_names) == 1 and page_names[0] in display:
+        return data, mimetype, safe_filename(display[page_names[0]], ".png")
+    return data, mimetype, safe_filename(report_name, extension)
+
+
+def run_download(
+    job: DeliveryJob,
+    *,
+    connection,
+    pbi_workspace_id: str,
+    pbi_report_id: str,
+    page_names: Sequence[str],
+    fmt: str,
+    report_name: str,
+    page_display_names: Optional[dict[str, str]] = None,
+    on_finish: Optional[Callable[[bool, str], None]] = None,
+) -> None:
+    """Exporta o relatorio e guarda o arquivo no trabalho, para a tela baixar. Nunca levanta."""
+    ok = False
+    try:
+        job.status, job.message = "queued", "Esperando vaga para exportar."
+        with _export_slots:
+            job.status, job.message = "exporting", "Exportando o relatorio no Power BI..."
+
+            def progress(percent: int) -> None:
+                job.progress = percent
+
+            data = powerbi.export_report(
+                connection, pbi_workspace_id, pbi_report_id, fmt, list(page_names) or None, on_progress=progress
+            )
+        job.file_data, job.file_mimetype, job.file_name = prepare_export_file(
+            fmt, data, page_names, page_display_names or {}, report_name
+        )
+        job.status, job.message, job.progress = "done", "Arquivo pronto.", 100
+        ok = True
+    except powerbi.PowerBIError as exc:
+        job.status, job.message = "error", str(exc)
+    except Exception:  # noqa: BLE001 -- a thread nunca pode morrer sem registrar o resultado
+        logger.exception("falha inesperada ao exportar relatorio para baixar")
+        job.status, job.message = "error", "Erro inesperado ao exportar o relatorio."
+    finally:
+        if on_finish is not None:
+            try:
+                on_finish(ok, job.message)
+            except Exception:  # noqa: BLE001
+                logger.exception("falha ao registrar o resultado da exportacao")
+
+
+def start_download_in_background(**kwargs) -> threading.Thread:
+    thread = threading.Thread(target=run_download, kwargs=kwargs, name="report-download", daemon=True)
+    thread.start()
+    return thread
+
+
 def run_delivery(
     job: DeliveryJob,
     *,
@@ -138,17 +207,7 @@ def run_delivery(
                 connection, pbi_workspace_id, pbi_report_id, fmt, list(page_names) or None, on_progress=progress
             )
         job.status, job.message = "sending", "Enviando o e-mail..."
-        mimetype, extension = powerbi.EXPORT_FORMATS[fmt]
-        if fmt == "PNG" and data[:2] == b"PK":
-            # Relatorio com varias paginas: o Power BI entrega um zip com uma imagem por pagina
-            mimetype, extension = "application/zip", ".zip"
-            data = _rename_zip_pages(data, display)
-            attachment_name = safe_filename(report_name, ".zip")
-        elif fmt == "PNG" and len(page_names) == 1 and page_names[0] in display:
-            # Pagina unica selecionada: nomeia pelo nome de exibicao da pagina
-            attachment_name = safe_filename(display[page_names[0]], ".png")
-        else:
-            attachment_name = safe_filename(report_name, extension)
+        data, mimetype, attachment_name = prepare_export_file(fmt, data, page_names, display, report_name)
         send_email(
             smtp,
             list(recipients),

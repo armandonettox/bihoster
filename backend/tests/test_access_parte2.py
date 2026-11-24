@@ -21,6 +21,7 @@ ROTAS_DE_COLECAO = [
     ("delete", "/workspaces/{ws}/reports/1", "relatorio.excluir"),
     ("post", "/workspaces/{ws}/powerbi/reports/1/refresh", "powerbi.atualizar"),
     ("post", "/workspaces/{ws}/powerbi/reports/1/export-email", "relatorio.exportar"),
+    ("post", "/workspaces/{ws}/powerbi/reports/1/export-download", "relatorio.exportar"),
     ("put", "/workspaces/{ws}", "colecao.editar"),
     ("delete", "/workspaces/{ws}", "colecao.excluir"),
     ("get", "/workspaces/{ws}/audit/", "colecao.auditoria"),
