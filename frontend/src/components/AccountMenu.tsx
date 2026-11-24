@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 import { useDropdownMenu } from "../hooks/useDropdownMenu";
 import UserAvatar from "./UserAvatar";
 
-/** Foto (ou iniciais) do perfil na barra do topo: abre Minha conta e Sair. Os modulos ficam no AppsMenu. */
+/** Foto (ou iniciais) do perfil na barra do topo: abre Minha conta e Sair. Os modulos ficam na barra lateral (SidebarModules). */
 export default function AccountMenu() {
   const { open, setOpen, containerRef, triggerRef } = useDropdownMenu();
   const { user, logout } = useAuth();

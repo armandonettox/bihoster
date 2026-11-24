@@ -4,10 +4,9 @@ import { useBranding } from "../context/BrandingContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useFavorites } from "../context/FavoritesContext";
 import type { Report } from "../api/reports";
-import CollectionList from "../components/CollectionList";
 import SearchBar from "../components/SearchBar";
 import AccountMenu from "../components/AccountMenu";
-import AppsMenu from "../components/AppsMenu";
+import SidebarModules from "../components/SidebarModules";
 import ChatNavLink from "../components/ChatNavLink";
 import ChatPanel from "../components/ChatPanel";
 import DefaultBrandLogo from "../components/DefaultBrandLogo";
@@ -106,7 +105,6 @@ export default function Layout() {
               {theme === "dark" ? "light_mode" : "dark_mode"}
             </span>
           </button>
-          <AppsMenu />
           <AccountMenu />
         </div>
       </header>
@@ -125,6 +123,7 @@ export default function Layout() {
                   Inicio
                 </Link>
                 <ChatNavLink />
+                <SidebarModules />
               </div>
 
               {favorites.length > 0 && (
@@ -151,10 +150,6 @@ export default function Layout() {
                 </div>
               )}
 
-              <div className="sidebar-section">
-                <p className="sidebar-section-title">Colecoes</p>
-                <CollectionList />
-              </div>
             </div>
             {version && <p className="sidebar-version">{version === "dev" ? "dev" : `v${version}`}</p>}
           </aside>
