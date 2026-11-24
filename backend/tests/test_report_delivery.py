@@ -347,7 +347,8 @@ class TestRotaDoAcompanhamento:
 
         resp = client.get(self._url(cenario, job.id), headers=cenario.admin)
 
-        assert resp.json() == {"status": "exporting", "message": "Exportando...", "progress": 40}
+        # Sem arquivo pronto (envio por e-mail ou exportacao em andamento), o nome do arquivo vem vazio
+        assert resp.json() == {"status": "exporting", "message": "Exportando...", "progress": 40, "file_name": None}
 
     def test_trabalho_de_outra_pessoa_ou_inexistente_da_404(self, client, cenario):
         alheio = report_delivery.create_job(user_id=999)
