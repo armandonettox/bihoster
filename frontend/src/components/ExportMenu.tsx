@@ -1,40 +1,83 @@
 import { useCallback, useEffect, useRef, useState, type CSSProperties, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { extractErrorMessage } from "../api/client";
 import * as deliveryApi from "../api/reportDelivery";
-import type { ReportEmbedHandle, TableExportFormat, TableVisualInfo } from "./ReportEmbed";
+import { startExportJob, useExportJobs } from "../utils/exportJobs";
+import ExportFormatIcon, { type ExportFormatKind } from "./ExportFormatIcon";
+import ExportJobsTray from "./ExportJobsTray";
+import type { ReportEmbedHandle, TableVisualInfo } from "./ReportEmbed";
 
-type Scope = "tables" | "page" | "report";
-type Format = TableExportFormat | deliveryApi.DownloadFormat;
+type Format = ExportFormatKind;
+type ValuesMode = "current" | "default";
+type ProgressUpdate = Parameters<Parameters<typeof startExportJob>[1]>[0];
 
-const POLL_MS = 2000;
+// Consulta o andamento logo no comeco (exportacao pequena termina em segundos) e depois a cada segundo
+const FIRST_POLL_MS = 500;
+const POLL_MS = 1000;
 const GIVE_UP_MS = 6 * 60 * 1000;
-const POPOVER_WIDTH = 340;
+const POPOVER_WIDTH = 300;
 
-const SCOPES: { value: Scope; label: string; hint: string; needsFile: boolean }[] = [
-  { value: "tables", label: "Tabelas da página", hint: "Os dados das tabelas desta página.", needsFile: false },
-  { value: "page", label: "Página atual", hint: "A página aberta, como aparece na tela.", needsFile: true },
-  { value: "report", label: "Relatório inteiro", hint: "Todas as páginas do relatório.", needsFile: true },
+// Os formatos, na ordem do menu Exportar do Power BI: Excel, PowerPoint e PDF (mais a imagem). O Excel sai das tabelas
+// da página, direto do navegador; os demais são gerados pelo Power BI e precisam da permissão de exportar.
+const FORMATS: { value: Format; label: string; title: string; needsFile: boolean }[] = [
+  { value: "xlsx", label: "Excel", title: "Exportar para o Excel", needsFile: false },
+  { value: "PPTX", label: "PowerPoint", title: "Exportar para o PowerPoint", needsFile: true },
+  { value: "PDF", label: "PDF", title: "Exportar para PDF", needsFile: true },
+  { value: "PNG", label: "Imagem (PNG)", title: "Exportar como imagem", needsFile: true },
 ];
 
-const FORMATS: Record<Scope, { value: Format; label: string; hint: string }[]> = {
-  tables: [
-    { value: "csv", label: "CSV", hint: "Texto separado por vírgulas" },
-    { value: "xlsx", label: "Excel (.xlsx)", hint: "Planilha, uma aba por tabela" },
-  ],
-  page: [
-    { value: "PDF", label: "PDF", hint: "Documento para ler e imprimir" },
-    { value: "PNG", label: "Imagem (PNG)", hint: "Foto da página" },
-  ],
-  report: [
-    { value: "PDF", label: "PDF", hint: "Documento para ler e imprimir" },
-    { value: "PNG", label: "Imagem (PNG)", hint: "Uma imagem por página, em um zip" },
-  ],
-};
+const FILE_EXTENSION: Record<deliveryApi.DownloadFormat, string> = { PDF: "pdf", PNG: "png", PPTX: "pptx" };
 
-/** O botão Exportar do topo do relatório: abre uma janela suspensa para escolher o que exportar (tabelas da página,
- * página atual ou relatório inteiro) e como (CSV ou Excel para tabelas; PDF ou imagem para página e relatório). Tabelas
- * saem direto do navegador; PDF e imagem são gerados pelo Power BI, o que leva alguns segundos. */
+/** Gera o arquivo no Power BI e baixa. Roda em segundo plano (ver `startExportJob`), sem depender da janela aberta. */
+async function runFileExport(opts: {
+  workspaceId: number;
+  reportId: number;
+  embed: ReportEmbedHandle | null;
+  format: deliveryApi.DownloadFormat;
+  onlyCurrentPage: boolean;
+  valuesMode: ValuesMode;
+  update: ProgressUpdate;
+}) {
+  const { workspaceId, reportId, embed, format, update } = opts;
+  update({ message: "Preparando a exportação..." });
+  // O nome da página e o estado do relatório (valores atuais) são lidos ao mesmo tempo, para não somar as esperas
+  const [pageName, bookmarkState] = await Promise.all([
+    opts.onlyCurrentPage ? Promise.resolve(embed?.getActivePageName() ?? null) : Promise.resolve(null),
+    opts.valuesMode === "current" ? Promise.resolve(embed?.captureBookmarkState?.() ?? null) : Promise.resolve(null),
+  ]);
+  if (opts.onlyCurrentPage && !pageName) {
+    throw new Error("Nao foi possivel identificar a pagina aberta. Aguarde o relatorio carregar.");
+  }
+  update({ message: "Pedindo a exportação ao Power BI..." });
+  const jobId = await deliveryApi.startReportDownload(workspaceId, reportId, format, pageName, bookmarkState);
+  const startedAt = Date.now();
+  let first = true;
+  for (;;) {
+    await new Promise((resolve) => setTimeout(resolve, first ? FIRST_POLL_MS : POLL_MS));
+    first = false;
+    let status: deliveryApi.DeliveryStatus | null = null;
+    try {
+      status = await deliveryApi.getDeliveryStatus(workspaceId, jobId);
+    } catch {
+      // Falha pontual de rede: tenta de novo no próximo ciclo
+    }
+    if (status) {
+      update({ message: status.message || "Exportando...", progress: status.progress || null });
+      if (status.status === "error") throw new Error(status.message || "Nao foi possivel exportar o relatorio.");
+      if (status.status === "done") {
+        update({ message: "Baixando o arquivo...", progress: 100 });
+        await deliveryApi.downloadExportedFile(workspaceId, jobId, status.file_name || `relatorio.${FILE_EXTENSION[format]}`);
+        return;
+      }
+    }
+    if (Date.now() - startedAt > GIVE_UP_MS) throw new Error("A exportacao demorou demais. Tente de novo em instantes.");
+  }
+}
+
+/** O botão Exportar do topo do relatório, no estilo do Power BI. Abre uma lista de formatos com o logo de cada um
+ * (Excel, PowerPoint, PDF e imagem); ao escolher, abre a janela do formato. Ao clicar em Exportar a janela fecha na
+ * hora e a exportação segue em segundo plano, com um aviso animado no canto da tela. Excel exporta as tabelas da
+ * página direto do navegador. PowerPoint, PDF e imagem são gerados pelo Power BI, com os valores atuais ou padrão do
+ * relatório, a página atual ou o relatório inteiro. */
 export default function ExportMenu({
   embedRef,
   workspaceId,
@@ -44,21 +87,20 @@ export default function ExportMenu({
   embedRef: RefObject<ReportEmbedHandle | null>;
   workspaceId: number;
   reportId: number;
-  /** Pode gerar PDF e imagem (permissão de exportar na coleção). Sem isso, só as tabelas. */
+  /** Pode gerar PowerPoint, PDF e imagem (permissão de exportar na coleção). Sem isso, só o Excel das tabelas. */
   canExportFile: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [scope, setScope] = useState<Scope>("tables");
-  const [format, setFormat] = useState<Format>("csv");
+  const [listOpen, setListOpen] = useState(false);
+  const [format, setFormat] = useState<Format | null>(null);
+  const [valuesMode, setValuesMode] = useState<ValuesMode>("current");
+  const [onlyCurrentPage, setOnlyCurrentPage] = useState(false);
   const [tables, setTables] = useState<TableVisualInfo[] | null>(null);
   const [tableChoice, setTableChoice] = useState("all");
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const [position, setPosition] = useState<CSSProperties>({});
   const triggerRef = useRef<HTMLButtonElement>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const cancelledRef = useRef(false);
+  const exporting = useExportJobs().some((job) => job.state === "running");
 
   useEffect(() => {
     cancelledRef.current = false;
@@ -67,51 +109,51 @@ export default function ExportMenu({
     };
   }, []);
 
-  const close = useCallback(() => {
-    setOpen(false);
-    setMessage(null);
-    setError(null);
-  }, []);
+  const closeList = useCallback(() => setListOpen(false), []);
+  const closeDialog = useCallback(() => setFormat(null), []);
 
   function toggle() {
-    if (open) return busy ? undefined : close();
+    if (listOpen) return closeList();
+    if (format) return;
     const rect = triggerRef.current?.getBoundingClientRect();
     if (rect) {
       const left = Math.max(8, Math.min(rect.left, window.innerWidth - POPOVER_WIDTH - 8));
       setPosition({ position: "fixed", top: rect.bottom + 8, left, width: POPOVER_WIDTH });
     }
-    setError(null);
-    setMessage(null);
+    setListOpen(true);
+    // As tabelas costumam estar lidas desde que a página desenhou: ficam prontas na hora. Só se a página ainda não
+    // terminou de desenhar é que a leitura é pedida agora.
+    const ready = embedRef.current?.peekTableVisuals?.() ?? null;
+    if (ready) {
+      setTables(ready);
+      return;
+    }
     setTables(null);
-    setTableChoice("all");
-    setScope("tables");
-    setFormat("csv");
-    setOpen(true);
     embedRef.current
       ?.getTableVisuals()
-      .then((list) => {
-        if (cancelledRef.current) return;
-        setTables(list);
-        // Página sem tabelas: o que sobra para exportar é a própria página
-        if (list.length === 0 && canExportFile) {
-          setScope("page");
-          setFormat("PDF");
-        }
-      })
+      .then((list) => !cancelledRef.current && setTables(list))
       .catch(() => !cancelledRef.current && setTables([]));
     if (!embedRef.current) setTables([]);
   }
 
-  // Fecha com Esc ou clique fora, menos enquanto exporta (para não perder o andamento de vista)
+  function chooseFormat(next: Format) {
+    setListOpen(false);
+    setTableChoice("all");
+    setValuesMode("current");
+    setOnlyCurrentPage(false);
+    setFormat(next);
+  }
+
+  // A lista fecha com Esc ou clique fora
   useEffect(() => {
-    if (!open) return;
+    if (!listOpen) return;
     function handleKey(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busy) close();
+      if (event.key === "Escape") closeList();
     }
     function handleClick(event: MouseEvent) {
       const target = event.target as Node;
-      if (busy || panelRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
-      close();
+      if (listRef.current?.contains(target) || triggerRef.current?.contains(target)) return;
+      closeList();
     }
     document.addEventListener("keydown", handleKey);
     document.addEventListener("mousedown", handleClick);
@@ -119,70 +161,43 @@ export default function ExportMenu({
       document.removeEventListener("keydown", handleKey);
       document.removeEventListener("mousedown", handleClick);
     };
-  }, [open, busy, close]);
+  }, [listOpen, closeList]);
 
-  function chooseScope(next: Scope) {
-    setScope(next);
-    setFormat(FORMATS[next][0].value);
-    setError(null);
+  // A janela fecha com Esc
+  useEffect(() => {
+    if (!format) return;
+    function handleKey(event: KeyboardEvent) {
+      if (event.key === "Escape") closeDialog();
+    }
+    document.addEventListener("keydown", handleKey);
+    return () => document.removeEventListener("keydown", handleKey);
+  }, [format, closeDialog]);
+
+  // Fecha a janela na hora e entrega o trabalho ao segundo plano: o aviso animado mostra o andamento e o arquivo
+  // baixa sozinho, mesmo que a pessoa continue usando o relatório (ou saia dele).
+  function handleExport() {
+    if (!format) return;
+    const embed = embedRef.current;
+    const chosen = format;
+    const label = FORMATS.find((f) => f.value === chosen)?.label ?? "arquivo";
+    const options = { workspaceId, reportId, embed, onlyCurrentPage, valuesMode };
+    const tableName = tableChoice === "all" ? (tables?.length === 1 ? tables[0].name : undefined) : tableChoice;
+    closeDialog();
+    startExportJob(label, async (update) => {
+      if (chosen === "xlsx") {
+        update({ message: "Gerando a planilha..." });
+        await embed?.exportTableData(tableName, "xlsx");
+        return;
+      }
+      await runFileExport({ ...options, format: chosen, update });
+    });
   }
 
-  async function exportFile(downloadFormat: deliveryApi.DownloadFormat) {
-    let pageName: string | null = null;
-    if (scope === "page") {
-      pageName = (await embedRef.current?.getActivePageName()) ?? null;
-      if (!pageName) throw new Error("Nao foi possivel identificar a pagina aberta. Aguarde o relatorio carregar.");
-    }
-    setMessage("Pedindo a exportação ao Power BI...");
-    const jobId = await deliveryApi.startReportDownload(workspaceId, reportId, downloadFormat, pageName);
-    const startedAt = Date.now();
-    for (;;) {
-      await new Promise((resolve) => setTimeout(resolve, POLL_MS));
-      if (cancelledRef.current) return;
-      let status: deliveryApi.DeliveryStatus | null = null;
-      try {
-        status = await deliveryApi.getDeliveryStatus(workspaceId, jobId);
-      } catch {
-        // Falha pontual de rede: tenta de novo no próximo ciclo
-      }
-      if (status) {
-        setMessage(status.message || "Exportando...");
-        if (status.status === "error") throw new Error(status.message || "Nao foi possivel exportar o relatorio.");
-        if (status.status === "done") {
-          setMessage("Baixando o arquivo...");
-          await deliveryApi.downloadExportedFile(workspaceId, jobId, status.file_name || `relatorio.${downloadFormat === "PDF" ? "pdf" : "png"}`);
-          return;
-        }
-      }
-      if (Date.now() - startedAt > GIVE_UP_MS) throw new Error("A exportacao demorou demais. Tente de novo em instantes.");
-    }
-  }
-
-  async function handleExport() {
-    setError(null);
-    setBusy(true);
-    try {
-      if (scope === "tables") {
-        const name = tableChoice === "all" ? (tables?.length === 1 ? tables[0].name : undefined) : tableChoice;
-        await embedRef.current?.exportTableData(name, format as TableExportFormat);
-      } else {
-        await exportFile(format as deliveryApi.DownloadFormat);
-      }
-      if (!cancelledRef.current) close();
-    } catch (err) {
-      if (!cancelledRef.current) {
-        setMessage(null);
-        // Recusa do servidor (ex.: RLS) traz o motivo em response.data.detail; erro nosso traz a propria mensagem
-        setError(extractErrorMessage(err) || (err instanceof Error && err.message) || "Nao foi possivel exportar.");
-      }
-    } finally {
-      if (!cancelledRef.current) setBusy(false);
-    }
-  }
-
-  const noTables = scope === "tables" && tables !== null && tables.length === 0;
-  const loadingTables = scope === "tables" && tables === null;
-  const visibleScopes = SCOPES.filter((s) => !s.needsFile || canExportFile);
+  const visibleFormats = FORMATS.filter((f) => !f.needsFile || canExportFile);
+  const current = FORMATS.find((f) => f.value === format) ?? null;
+  const isTables = format === "xlsx";
+  const noTables = isTables && tables !== null && tables.length === 0;
+  const loadingTables = isTables && tables === null;
 
   return (
     <>
@@ -191,85 +206,112 @@ export default function ExportMenu({
         type="button"
         className="fullscreen-action"
         onClick={toggle}
-        aria-haspopup="dialog"
-        aria-expanded={open}
+        aria-haspopup="menu"
+        aria-expanded={listOpen}
         title="Exportar dados ou o relatório"
       >
-        <span className="material-symbols-outlined" aria-hidden="true">
-          download
-        </span>
-        <span>Exportar</span>
+        {exporting ? (
+          <span className="export-spinner" aria-hidden="true" />
+        ) : (
+          <span className="material-symbols-outlined" aria-hidden="true">
+            download
+          </span>
+        )}
+        <span>{exporting ? "Exportando..." : "Exportar"}</span>
       </button>
-      {open &&
+      <ExportJobsTray />
+
+      {listOpen &&
         createPortal(
-          <div ref={panelRef} className="export-menu" style={position} role="dialog" aria-label="Exportar">
-            <p className="export-menu-title">Exportar</p>
-
-            <fieldset className="export-menu-group" disabled={busy}>
-              <legend>O que exportar</legend>
-              {visibleScopes.map((s) => (
-                <label key={s.value} className="export-menu-option">
-                  <input type="radio" name="export-scope" checked={scope === s.value} onChange={() => chooseScope(s.value)} />
-                  <span>
-                    <strong>{s.label}</strong>
-                    <small>{s.hint}</small>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-
-            {scope === "tables" && tables !== null && tables.length > 1 && (
-              <label className="export-menu-field">
-                Qual tabela
-                <select className="input" value={tableChoice} onChange={(e) => setTableChoice(e.target.value)} disabled={busy}>
-                  <option value="all">Todas as tabelas ({tables.length})</option>
-                  {tables.map((t) => (
-                    <option key={t.name} value={t.name}>
-                      {t.title || t.name}
-                    </option>
-                  ))}
-                </select>
-              </label>
-            )}
-            {loadingTables && <p className="export-menu-note">Procurando tabelas na página...</p>}
-            {noTables && <p className="export-menu-note">Nenhuma tabela encontrada na página atual.</p>}
-
-            <fieldset className="export-menu-group" disabled={busy}>
-              <legend>Como exportar</legend>
-              {FORMATS[scope].map((f) => (
-                <label key={f.value} className="export-menu-option">
-                  <input type="radio" name="export-format" checked={format === f.value} onChange={() => setFormat(f.value)} />
-                  <span>
-                    <strong>{f.label}</strong>
-                    <small>{f.hint}</small>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
-
-            {message && (
-              <p className="export-menu-note" role="status">
-                {message}
-              </p>
-            )}
-            {error && (
-              <p className="auth-error" role="alert">
-                {error}
-              </p>
-            )}
-
-            <div className="export-menu-actions">
-              <button type="button" className="btn btn-ghost btn-sm" onClick={close} disabled={busy}>
-                Cancelar
+          <div ref={listRef} className="export-menu" style={position} role="menu" aria-label="Exportar">
+            {visibleFormats.map((f) => (
+              <button key={f.value} type="button" role="menuitem" className="export-format-item" onClick={() => chooseFormat(f.value)}>
+                <ExportFormatIcon kind={f.value} />
+                {f.label}
               </button>
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={handleExport}
-                disabled={busy || loadingTables || noTables}
-              >
-                {busy ? "Exportando..." : "Exportar"}
-              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
+
+      {current &&
+        createPortal(
+          <div
+            className="export-dialog-overlay"
+            onMouseDown={(event) => {
+              if (event.target === event.currentTarget) closeDialog();
+            }}
+          >
+            <div className="export-dialog" role="dialog" aria-label={current.title}>
+              <div className="export-dialog-header">
+                {current.value !== "PDF" && <ExportFormatIcon kind={current.value} />}
+                <h2 className="export-dialog-title">{current.title}</h2>
+                <button type="button" className="export-dialog-close" onClick={closeDialog} aria-label="Fechar">
+                  <span className="material-symbols-outlined" aria-hidden="true">
+                    close
+                  </span>
+                </button>
+              </div>
+
+              {isTables && (
+                <>
+                  {tables !== null && tables.length > 1 && (
+                    <label className="export-dialog-field">
+                      Qual tabela
+                      <select className="input" value={tableChoice} onChange={(e) => setTableChoice(e.target.value)}>
+                        <option value="all">Todas as tabelas ({tables.length})</option>
+                        {tables.map((t) => (
+                          <option key={t.name} value={t.name}>
+                            {t.title || t.name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  {tables !== null && tables.length === 1 && (
+                    <p className="export-dialog-note">Será exportada a tabela da página: {tables[0].title || tables[0].name}.</p>
+                  )}
+                  {tables !== null && tables.length > 1 && (
+                    <p className="export-dialog-note">Cada tabela vira uma aba da planilha.</p>
+                  )}
+                  {loadingTables && <p className="export-dialog-note">Procurando tabelas na página...</p>}
+                  {noTables && <p className="export-dialog-note">Nenhuma tabela encontrada na página atual.</p>}
+                </>
+              )}
+
+              {!isTables && (
+                <>
+                  {current.value === "PPTX" && (
+                    <p className="export-dialog-note">Cada página do relatório vira um slide, com a imagem da página.</p>
+                  )}
+                  <label className="export-dialog-field">
+                    Exportar com:
+                    <select className="input" value={valuesMode} onChange={(e) => setValuesMode(e.target.value as ValuesMode)}>
+                      <option value="current">Valores Atuais</option>
+                      <option value="default">Valores Padrão</option>
+                    </select>
+                  </label>
+                  <div className="export-dialog-group">
+                    <label className="export-dialog-choice">
+                      <input
+                        type="checkbox"
+                        checked={onlyCurrentPage}
+                        onChange={(e) => setOnlyCurrentPage(e.target.checked)}
+                      />
+                      Exportar somente a página atual
+                    </label>
+                  </div>
+                </>
+              )}
+
+              <div className="export-dialog-actions">
+                <button type="button" className="btn btn-primary btn-sm" onClick={handleExport} disabled={loadingTables || noTables}>
+                  Exportar
+                </button>
+                <button type="button" className="btn btn-secondary btn-sm" onClick={closeDialog}>
+                  Cancelar
+                </button>
+              </div>
             </div>
           </div>,
           document.body,

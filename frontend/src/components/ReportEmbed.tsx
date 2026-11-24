@@ -33,7 +33,11 @@ export interface PageContextInfo {
 export type TableExportFormat = "csv" | "xlsx";
 
 export interface ReportEmbedHandle {
+  /** As tabelas da pagina aberta, se ja foram lidas (resposta na hora); null enquanto a pagina nao terminou de desenhar */
+  peekTableVisuals: () => TableVisualInfo[] | null;
   getTableVisuals: () => Promise<TableVisualInfo[]>;
+  /** Estado do relatorio aberto (filtros e selecoes atuais), para exportar com os "valores atuais"; null se nao der */
+  captureBookmarkState: () => Promise<string | null>;
   /** Baixa os dados de uma tabela da pagina ativa (ou de todas, sem `visualName`) no formato pedido (padrao: csv) */
   exportTableData: (visualName?: string, format?: TableExportFormat) => Promise<void>;
   getPageMeasures: () => Promise<VisualMeasure[]>;
@@ -84,15 +88,52 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   const zoomRef = useRef(zoom);
   zoomRef.current = zoom;
 
+  // As tabelas da pagina aberta, lidas com antecedencia (quando a pagina desenha) para o Exportar abrir na hora, sem
+  // esperar a ida e volta ao Power BI. Zera ao trocar de pagina.
+  const tableCacheRef = useRef<TableVisualInfo[] | null>(null);
+  const tableLoadRef = useRef<Promise<TableVisualInfo[]> | null>(null);
+
+  // Conta as trocas de pagina: uma leitura que comecou antes da troca nao pode guardar as tabelas da pagina antiga
+  const tablePageGenRef = useRef(0);
+
+  function loadTableVisuals(report: pbi.Report): Promise<TableVisualInfo[]> {
+    if (tableLoadRef.current) return tableLoadRef.current;
+    const generation = tablePageGenRef.current;
+    const load = (async () => {
+      const page = await report.getActivePage();
+      const visuals = await page.getVisuals();
+      const list = visuals
+        .filter((v) => TABLE_VISUAL_TYPES.includes(v.type))
+        .map((v) => ({ name: v.name, title: v.title || v.name }));
+      // So guarda se o relatorio e a pagina continuam os mesmos de quando o pedido saiu
+      if (embeddedRef.current === report && tablePageGenRef.current === generation) tableCacheRef.current = list;
+      return list;
+    })();
+    tableLoadRef.current = load;
+    const release = () => {
+      if (tableLoadRef.current === load) tableLoadRef.current = null;
+    };
+    load.then(release, release);
+    return load;
+  }
+
   useImperativeHandle(ref, () => ({
+    peekTableVisuals: () => tableCacheRef.current,
+    captureBookmarkState: async () => {
+      const report = embeddedRef.current;
+      if (!report) return null;
+      try {
+        const bookmark = await report.bookmarksManager.capture();
+        return bookmark.state || null;
+      } catch {
+        // Sem como capturar o estado: o arquivo sai com os valores padrao do relatorio
+        return null;
+      }
+    },
     getTableVisuals: async () => {
       const report = embeddedRef.current;
       if (!report) throw new Error("Relatorio nao carregado ainda.");
-      const page = await report.getActivePage();
-      const visuals = await page.getVisuals();
-      return visuals
-        .filter((v) => TABLE_VISUAL_TYPES.includes(v.type))
-        .map((v) => ({ name: v.name, title: v.title || v.name }));
+      return tableCacheRef.current ?? loadTableVisuals(report);
     },
     getPageMeasures: async (): Promise<VisualMeasure[]> => {
       const report = embeddedRef.current;
@@ -304,11 +345,17 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         embeddedReport.on("pageChanged", (event) => {
           const newPage = (event.detail as { newPage?: { name?: string } } | undefined)?.newPage;
           if (newPage?.name) setActivePage(newPage.name);
+          // Outra pagina, outras tabelas: a leitura antecipada recomeca quando ela terminar de desenhar
+          tablePageGenRef.current += 1;
+          tableCacheRef.current = null;
+          tableLoadRef.current = null;
         });
 
         embeddedReport.on("rendered", () => {
           timer.mark("rendered");
           timer.finish();
+          // Le as tabelas da pagina logo que ela desenha, para o Exportar nao ter que procurar
+          if (!tableCacheRef.current) loadTableVisuals(embeddedReport).catch(() => {});
         });
 
         embeddedReport.on("error", () => {
@@ -361,6 +408,9 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
     return () => {
       cancelled = true;
       embeddedRef.current = null;
+      tablePageGenRef.current += 1;
+      tableCacheRef.current = null;
+      tableLoadRef.current = null;
       if (renewTimer) clearTimeout(renewTimer);
       if (embedded && container) {
         getPowerBiService().reset(container);

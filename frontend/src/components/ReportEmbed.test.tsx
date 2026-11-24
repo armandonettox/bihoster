@@ -318,3 +318,111 @@ describe("ReportEmbed - baixar os dados das tabelas", () => {
     await expect(ref.current!.exportTableData()).rejects.toThrow("Nenhum visual de tabela");
   });
 });
+
+describe("ReportEmbed - leitura antecipada das tabelas", () => {
+  function pagina(titulos: string[]) {
+    return {
+      name: "ReportSection1",
+      displayName: "Carteira",
+      getVisuals: vi.fn().mockResolvedValue(titulos.map((title) => ({ title, type: "tableEx", name: `v-${title}` }))),
+    };
+  }
+
+  async function abrir() {
+    const ref = createRef<ReportEmbedHandle>();
+    render(<ReportEmbed ref={ref} reportId={34} />);
+    await waitFor(() => expect(mocks.service.embed).toHaveBeenCalled());
+    await waitFor(() => expect(mocks.handlers.rendered).toBeTypeOf("function"));
+    mocks.embedded.getActivePage.mockReset();
+    return ref;
+  }
+
+  it("antes de a pagina desenhar nao ha tabelas lidas; depois que desenha, a resposta e imediata", async () => {
+    const ref = await abrir();
+    mocks.embedded.getActivePage.mockResolvedValue(pagina(["Vendas", "Metas"]));
+
+    expect(ref.current!.peekTableVisuals()).toBeNull();
+
+    await act(async () => {
+      mocks.handlers.rendered();
+    });
+
+    await waitFor(() =>
+      expect(ref.current!.peekTableVisuals()).toEqual([
+        { name: "v-Vendas", title: "Vendas" },
+        { name: "v-Metas", title: "Metas" },
+      ]),
+    );
+  });
+
+  it("pedir as tabelas depois da leitura nao volta ao Power BI", async () => {
+    const ref = await abrir();
+    mocks.embedded.getActivePage.mockResolvedValue(pagina(["Vendas"]));
+    await act(async () => {
+      mocks.handlers.rendered();
+    });
+    await waitFor(() => expect(ref.current!.peekTableVisuals()).not.toBeNull());
+    mocks.embedded.getActivePage.mockClear();
+
+    const lista = await ref.current!.getTableVisuals();
+
+    expect(lista).toEqual([{ name: "v-Vendas", title: "Vendas" }]);
+    expect(mocks.embedded.getActivePage).not.toHaveBeenCalled();
+  });
+
+  it("varios desenhos seguidos fazem uma leitura so", async () => {
+    const ref = await abrir();
+    const p = pagina(["Vendas"]);
+    mocks.embedded.getActivePage.mockResolvedValue(p);
+
+    await act(async () => {
+      mocks.handlers.rendered();
+      mocks.handlers.rendered();
+      mocks.handlers.rendered();
+    });
+    await waitFor(() => expect(ref.current!.peekTableVisuals()).not.toBeNull());
+    await act(async () => {
+      mocks.handlers.rendered();
+    });
+
+    expect(mocks.embedded.getActivePage).toHaveBeenCalledTimes(1);
+  });
+
+  it("trocar de pagina zera a leitura e a pagina nova e lida quando desenha", async () => {
+    const ref = await abrir();
+    mocks.embedded.getActivePage.mockResolvedValue(pagina(["Vendas"]));
+    await act(async () => {
+      mocks.handlers.rendered();
+    });
+    await waitFor(() => expect(ref.current!.peekTableVisuals()).not.toBeNull());
+
+    mocks.embedded.getActivePage.mockResolvedValue(pagina(["Metas"]));
+    await act(async () => {
+      (mocks.handlers.pageChanged as unknown as (e: unknown) => void)({ detail: { newPage: { name: "ReportSection2" } } });
+    });
+    expect(ref.current!.peekTableVisuals()).toBeNull();
+
+    await act(async () => {
+      mocks.handlers.rendered();
+    });
+    await waitFor(() => expect(ref.current!.peekTableVisuals()).toEqual([{ name: "v-Metas", title: "Metas" }]));
+  });
+
+  it("uma leitura que comecou antes da troca de pagina nao guarda as tabelas da pagina antiga", async () => {
+    const ref = await abrir();
+    let liberar: (valor: ReturnType<typeof pagina>) => void = () => {};
+    mocks.embedded.getActivePage.mockReturnValueOnce(new Promise((resolve) => (liberar = resolve)));
+
+    await act(async () => {
+      mocks.handlers.rendered();
+    });
+    await act(async () => {
+      (mocks.handlers.pageChanged as unknown as (e: unknown) => void)({ detail: { newPage: { name: "ReportSection2" } } });
+    });
+    await act(async () => {
+      liberar(pagina(["Antiga"]));
+    });
+
+    expect(ref.current!.peekTableVisuals()).toBeNull();
+  });
+});
