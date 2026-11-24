@@ -56,9 +56,9 @@ vi.mock("../components/LazyMount", () => ({ default: ({ children }: { children: 
 vi.mock("../components/NewReportForm", () => ({ default: () => null }));
 vi.mock("../components/EditCollectionModal", () => ({ default: () => null }));
 vi.mock("../components/FullscreenReportView", () => ({
-  default: ({ mode, reports, onExit }: { mode: string; reports: Report[]; onExit: () => void }) => (
+  default: ({ reports, onExit }: { reports: Report[]; onExit: () => void }) => (
     <div data-testid="fullscreen-section">
-      <span>{`${mode}:${reports.length}`}</span>
+      <span>{`apresentacao:${reports.length}`}</span>
       <button onClick={onExit}>sair da secao</button>
     </div>
   ),
@@ -386,7 +386,7 @@ describe("CollectionHome - reordenar", () => {
   });
 
   it("mostra a ordem devolvida pelo servidor depois de mover", async () => {
-    const reordenada = [REPORTS[0], REPORTS[1], REPORTS[2], REPORTS[3], REPORTS[5], REPORTS[4], REPORTS[6], REPORTS[7]];
+    const reordenada = [REPORTS[0], REPORTS[1], REPORTS[2], REPORTS[3], REPORTS[5], REPORTS[4]];
     moveReport.mockResolvedValue(reordenada);
     await renderLoaded();
     const ordem = () => screen.getAllByText(/^Apresentacao [AB]$/).map((el) => el.textContent);
