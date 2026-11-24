@@ -12,6 +12,11 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.44.0 - 2026-11-24 - Escolher quais páginas e quais tabelas exportar
+- Nas janelas de **PowerPoint, PDF e imagem**, a caixa "Exportar somente a página atual" deu lugar a uma **lista suspensa com todas as páginas do relatório**, com seleção múltipla e busca. Marque as páginas que quer, e só elas são exportadas. Sem nada marcado, vai o relatório inteiro.
+- Na janela do **Excel**, uma lista suspensa igual deixa escolher **quais tabelas** da página saem na planilha, cada uma numa aba.
+- A lista de páginas mostra só as páginas que a pessoa pode ver no relatório (as escolhidas para ele, sem as ocultas) e é lida assim que o relatório carrega.
+
 ## 1.43.0 - 2026-11-24 - Exportar mais parecido com o Power BI, com PowerPoint
 - O botão **Exportar** agora funciona como o do Power BI: abre uma lista de formatos, cada um com o seu **logo** (Excel, PowerPoint, PDF e imagem), e ao escolher abre a janela do formato.
 - Novo formato: **PowerPoint (.pptx)**, gerado pelo Power BI.
