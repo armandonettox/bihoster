@@ -9,6 +9,7 @@ import FullscreenReportView from "../components/FullscreenReportView";
 import EditCollectionModal from "../components/EditCollectionModal";
 import RefreshDetailsModal from "../components/RefreshDetailsModal";
 import KebabMenu from "../components/KebabMenu";
+import MenuIcon from "../components/MenuIcon";
 import ReorderButtons from "../components/ReorderButtons";
 import ReportActionsMenu from "../components/ReportActionsMenu";
 import ReportIconGrid from "../components/ReportIconGrid";
@@ -219,33 +220,36 @@ export default function CollectionHome() {
             <>
               {canPublish && (
                 <button
-                  className="kebab-menu-item"
+                  className="kebab-menu-item kebab-menu-item-with-icon"
                   onClick={() => {
                     close();
                     setCreatingReport(true);
                   }}
                 >
+                  <MenuIcon name="add" />
                   + Adicionar
                 </button>
               )}
               {canEditCollection && (
                 <button
-                  className="kebab-menu-item"
+                  className="kebab-menu-item kebab-menu-item-with-icon"
                   onClick={() => {
                     close();
                     setEditingCollection(true);
                   }}
                 >
+                  <MenuIcon name="edit" />
                   Editar colecao
                 </button>
               )}
               <button
-                className="kebab-menu-item"
+                className="kebab-menu-item kebab-menu-item-with-icon"
                 onClick={() => {
                   close();
                   setShowingRefreshDetails(true);
                 }}
               >
+                <MenuIcon name="update" />
                 Atualizacoes
               </button>
             </>

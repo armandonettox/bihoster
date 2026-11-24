@@ -1,5 +1,6 @@
 import type { Report } from "../api/reports";
 import KebabMenu from "./KebabMenu";
+import MenuIcon from "./MenuIcon";
 
 export default function ReportActionsMenu({
   report,
@@ -27,55 +28,60 @@ export default function ReportActionsMenu({
       {(close) => (
         <>
           <button
-            className="kebab-menu-item"
+            className="kebab-menu-item kebab-menu-item-with-icon"
             onClick={() => {
               close();
               onToggleFavorite(report);
             }}
           >
+            <MenuIcon name={isFavorite ? "star_half" : "star"} />
             {isFavorite ? "Remover dos favoritos" : "Adicionar aos favoritos"}
           </button>
           {onSendByEmail && (
             <button
-              className="kebab-menu-item"
+              className="kebab-menu-item kebab-menu-item-with-icon"
               onClick={() => {
                 close();
                 onSendByEmail(report);
               }}
             >
+              <MenuIcon name="mail" />
               Enviar por e-mail
             </button>
           )}
           {onRefreshThumbnail && (
             <button
-              className="kebab-menu-item"
+              className="kebab-menu-item kebab-menu-item-with-icon"
               onClick={() => {
                 close();
                 onRefreshThumbnail(report);
               }}
             >
+              <MenuIcon name="image" />
               Atualizar miniatura
             </button>
           )}
           {onEdit && (
             <button
-              className="kebab-menu-item"
+              className="kebab-menu-item kebab-menu-item-with-icon"
               onClick={() => {
                 close();
                 onEdit(report);
               }}
             >
+              <MenuIcon name="edit" />
               Editar
             </button>
           )}
           {onDelete && (
             <button
-              className="kebab-menu-item kebab-menu-item-danger"
+              className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
               onClick={() => {
                 close();
                 onDelete(report.id);
               }}
             >
+              <MenuIcon name="delete" />
               Excluir
             </button>
           )}

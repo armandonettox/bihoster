@@ -7,6 +7,7 @@ import { useToast } from "../context/ToastContext";
 import CollectionIcon from "./CollectionIcon";
 import EditCollectionModal from "./EditCollectionModal";
 import KebabMenu from "./KebabMenu";
+import MenuIcon from "./MenuIcon";
 import type { ViewMode } from "./ViewModeToggle";
 
 export default function CollectionCard({
@@ -74,17 +75,22 @@ export default function CollectionCard({
               <>
                 {canEdit && (
                   <button
-                    className="kebab-menu-item"
+                    className="kebab-menu-item kebab-menu-item-with-icon"
                     onClick={() => {
                       setEditing(true);
                       close();
                     }}
                   >
+                    <MenuIcon name="edit" />
                     Editar
                   </button>
                 )}
                 {canDelete && (
-                  <button className="kebab-menu-item kebab-menu-item-danger" onClick={() => setConfirmingDelete(true)}>
+                  <button
+                    className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
+                    onClick={() => setConfirmingDelete(true)}
+                  >
+                    <MenuIcon name="delete" />
                     Excluir
                   </button>
                 )}
@@ -92,16 +98,21 @@ export default function CollectionCard({
             ) : (
               <>
                 <button
-                  className="kebab-menu-item kebab-menu-item-danger"
+                  className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
                   disabled={deleting}
                   onClick={() => {
                     close();
                     handleDelete();
                   }}
                 >
+                  <MenuIcon name="delete_forever" />
                   {deleting ? "Excluindo..." : "Confirmar exclusao"}
                 </button>
-                <button className="kebab-menu-item" onClick={() => setConfirmingDelete(false)}>
+                <button
+                  className="kebab-menu-item kebab-menu-item-with-icon"
+                  onClick={() => setConfirmingDelete(false)}
+                >
+                  <MenuIcon name="close" />
                   Cancelar
                 </button>
               </>

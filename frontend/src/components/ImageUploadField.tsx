@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import ConfirmDialog from "./ConfirmDialog";
 import KebabMenu from "./KebabMenu";
+import MenuIcon from "./MenuIcon";
 
 interface ImageUploadFieldProps {
   label: string;
@@ -40,23 +41,25 @@ export default function ImageUploadField({ label, hint, imageUrl, onUpload, onRe
     <>
       <button
         type="button"
-        className="kebab-menu-item"
+        className="kebab-menu-item kebab-menu-item-with-icon"
         onClick={() => {
           close();
           inputRef.current?.click();
         }}
       >
+        <MenuIcon name="image" />
         Trocar imagem
       </button>
       {onRemove && (
         <button
           type="button"
-          className="kebab-menu-item kebab-menu-item-danger"
+          className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
           onClick={() => {
             close();
             setConfirmingRemove(true);
           }}
         >
+          <MenuIcon name="delete" />
           Remover
         </button>
       )}

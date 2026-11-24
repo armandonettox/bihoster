@@ -5,6 +5,7 @@ import * as powerbiApi from "../api/powerbi";
 import { useToast } from "../context/ToastContext";
 import { extractErrorMessage } from "../api/client";
 import KebabMenu from "./KebabMenu";
+import MenuIcon from "./MenuIcon";
 import Modal from "./Modal";
 import ConfirmDialog from "./ConfirmDialog";
 import { SkeletonList } from "./Skeleton";
@@ -208,21 +209,23 @@ export default function PowerBiConnectionsSection() {
                   {(close) => (
                     <>
                       <button
-                        className="kebab-menu-item"
+                        className="kebab-menu-item kebab-menu-item-with-icon"
                         onClick={() => {
                           close();
                           setEditingConnection(connection);
                         }}
                       >
+                        <MenuIcon name="edit" />
                         Editar
                       </button>
                       <button
-                        className="kebab-menu-item kebab-menu-item-danger"
+                        className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
                         onClick={() => {
                           close();
                           setConfirmingDelete(connection);
                         }}
                       >
+                        <MenuIcon name="delete" />
                         Excluir
                       </button>
                     </>
