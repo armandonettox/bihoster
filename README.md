@@ -43,7 +43,7 @@ licença nem de conta própria no Power BI para ver o que tem permissão. Sobe c
 
 | | |
 |---|---|
-| **Relatórios** | Coleções de relatórios do Power BI embutidos, com busca, favoritos, miniaturas, tela cheia com zoom, escolha das páginas que aparecem e um botão **Exportar** que abre uma janela para escolher o que sai (tabelas da página, página atual ou relatório inteiro) e em que formato, como no Power BI (Excel para as tabelas; PowerPoint, PDF ou imagem para a página e o relatório, com valores atuais ou padrão, e a escolha de quais páginas ou tabelas sair). O **Modo TV** passa os relatórios sozinho numa tela, com pausa e barra de progresso. |
+| **Relatórios** | Coleções de relatórios do Power BI embutidos, com busca, favoritos, miniaturas, tela cheia com zoom, escolha das páginas que aparecem e um botão **Exportar** que abre uma janela para escolher o que sai (tabelas da página, página atual ou relatório inteiro) e em que formato, como no Power BI (Excel para as tabelas; PowerPoint, PDF ou imagem para a página e o relatório, com valores atuais ou padrão, e a escolha de quais páginas ou tabelas sair). O módulo **Modo TV** cadastra TVs, cada uma com a sua programação (páginas de relatórios, imagens e vídeos do YouTube, cada um com o seu tempo), link secreto, código de acesso que muda com o tempo e permissões por TV. |
 | **Acesso e segurança** | Permissões separadas por grupo e por pessoa, no sistema todo ou por coleção. Horário de acesso por grupo, bloqueio de contas, login com Google, trilha de **auditoria** com reversão de ações, defesas contra escalada de permissão e chaves cifradas no servidor. |
 | **Entrega por e-mail** | Envio de relatórios em PDF ou imagem, **assinaturas** recorrentes em dias e horários escolhidos e **alertas** que avisam quando uma medida passa de um limite. Todos os e-mails saem em HTML com a sua marca. |
 | **Chat de IA** | Pergunte aos relatórios em linguagem natural. Funciona com OpenAI, Anthropic, Gemini, OpenRouter e NVIDIA, com colunas bloqueáveis por relatório, limite de uso e orçamento. |
@@ -117,8 +117,9 @@ frente** — qualquer cliente poderia forjar o header e escapar dessa checagem.
 
 ### Duração da sessão
 
-A sessão de login se renova sozinha enquanto a tela estiver aberta, então o **Modo TV** e as abas
-paradas não caem a cada hora. Para não existir sessão eterna, há um limite absoluto desde o
+A sessão de login se renova sozinha enquanto a tela estiver aberta, então as abas
+paradas não caem a cada hora. As TVs do **Modo TV** não usam login: entram pelo link secreto e pelo código,
+e ficam conectadas pelo tempo configurado em cada TV. Para não existir sessão eterna, há um limite absoluto desde o
 login, controlado por `SESSION_MAX_HOURS` no `.env` (padrão **168**, ou seja, 7 dias): depois
 disso é preciso entrar de novo. Trocar a senha também encerra a renovação das sessões antigas.
 `SESSION_MAX_HOURS=0` desliga o limite — só faça isso se aceitar que uma sessão roubada nunca

@@ -12,6 +12,17 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.45.0 - 2026-11-24 - Novo Modo TV, com TVs cadastradas, link secreto e código de acesso
+- O **Modo TV** saiu de dentro das coleções e virou um **módulo próprio**, no menu de módulos do topo e na barra lateral.
+- Cada **TV** é cadastrada com um nome e tem a sua própria **programação**: páginas de vários relatórios (até de coleções diferentes), **imagens** (PNG, JPG, GIF ou WebP, até 10 MB) e **vídeos do YouTube por link**, cada item com o seu **tempo** e na ordem que você escolher. Cada vídeo pode tocar com ou sem som.
+- Agora a TV troca **de página**, e não só de relatório: cada item da lista é uma página, então um relatório com várias páginas passa por todas elas.
+- Cada TV tem um **link secreto**, que dá para copiar ou abrir em outra aba, e que não precisa de login. Ao abrir o link, a TV pede um **código de 6 dígitos que muda a cada 5 minutos** (como a dupla autenticação). O código aparece no cadastro da TV. Depois do código certo, a TV fica conectada pelo **tempo configurado na própria TV**, que pode ser "para sempre". Toda nova conexão pede o código.
+- Dá para **desconectar** a TV a qualquer hora e **trocar o link** (o antigo para de funcionar). Errar o código muitas vezes tranca a TV por alguns minutos.
+- **Permissões por TV**, para pessoas ou grupos: **ver e utilizar** (ver a programação, abrir o link, ver o código e desconectar) e **modificar** (também editar, trocar o link, mudar o tempo de conexão e excluir). Quem assiste a TV não precisa ter acesso às coleções dos relatórios. Criar TVs é uma permissão geral nova, **Criar TVs**, e quem cria recebe "modificar" na própria TV.
+- Quem monta a programação só escolhe relatórios que ele mesmo pode ver. Relatórios com segurança por linha (RLS) não passam na TV.
+- Os relatórios que estavam marcados como "Modo TV" nas coleções foram movidos para a seção **Painéis**, e o tempo da TV deixou de existir nas coleções: monte a TV nova no módulo.
+- As ações das TVs (criar, editar, conectar, desconectar, trocar o link, mudar permissões) entram na auditoria.
+
 ## 1.44.0 - 2026-11-24 - Escolher quais páginas e quais tabelas exportar
 - Nas janelas de **PowerPoint, PDF e imagem**, a caixa "Exportar somente a página atual" deu lugar a uma **lista suspensa com todas as páginas do relatório**, com seleção múltipla e busca. Marque as páginas que quer, e só elas são exportadas. Sem nada marcado, vai o relatório inteiro.
 - Na janela do **Excel**, uma lista suspensa igual deixa escolher **quais tabelas** da página saem na planilha, cada uma numa aba.
