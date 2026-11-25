@@ -37,10 +37,16 @@ GLOBAL = "global"
 # Escopo dos itens que so existem num relatorio (ver e compartilhar). Os itens de colecao que tambem valem num
 # relatorio (exportar, editar, assinar, alertar...) continuam com escopo "workspace" e entram em REPORT_CAPABLE.
 REPORT = "report"
+# Escopo dos itens que so existem num modelo semantico (ver, atualizar, historico, compartilhar). `modelo.seguranca` e global E
+# pode ser dado so num modelo (DATASET_CAPABLE).
+DATASET = "dataset"
 
 COLLECTION_VIEW = "colecao.ver"
 REPORT_VIEW = "relatorio.ver"
 REPORT_SHARE = "relatorio.compartilhar"
+DATASET_VIEW = "modelo.ver"
+DATASET_SHARE = "modelo.compartilhar"
+DATASET_SECURITY = "modelo.seguranca"
 
 
 @dataclass(frozen=True)
@@ -217,6 +223,37 @@ CATALOG: tuple[Permission, ...] = (
         "Relatório",
     ),
     Permission(
+        DATASET_VIEW,
+        "Ver o modelo",
+        "Ver este modelo semântico na lista. Não dá acesso aos relatórios que usam o modelo.",
+        DATASET,
+        "Modelo semântico",
+    ),
+    Permission(
+        "modelo.atualizar",
+        "Atualizar o modelo",
+        "Pedir a atualização dos dados deste modelo no Power BI.",
+        DATASET,
+        "Modelo semântico",
+        requires=(DATASET_VIEW,),
+    ),
+    Permission(
+        "modelo.historico",
+        "Ver o histórico de atualização",
+        "Ler quando e como este modelo foi atualizado.",
+        DATASET,
+        "Modelo semântico",
+        requires=(DATASET_VIEW,),
+    ),
+    Permission(
+        DATASET_SHARE,
+        "Compartilhar o modelo",
+        "Dar este modelo a outras pessoas e grupos, só com permissões que a pessoa já tem nele.",
+        DATASET,
+        "Modelo semântico",
+        requires=(DATASET_VIEW,),
+    ),
+    Permission(
         REPORT_SHARE,
         "Compartilhar o relatório",
         "Dar este relatório a outras pessoas e grupos, só com permissões que a pessoa já tem nele.",
@@ -297,6 +334,23 @@ def report_requires(key: str) -> tuple[str, ...]:
     if permission is None:
         return ()
     return tuple(REPORT_VIEW if required == COLLECTION_VIEW else required for required in permission.requires)
+
+
+DATASET_CAPABLE: frozenset[str] = frozenset({DATASET_VIEW, "modelo.atualizar", "modelo.historico", DATASET_SECURITY, DATASET_SHARE})
+
+
+def dataset_requires(key: str) -> tuple[str, ...]:
+    """O que um item exige quando e dado num modelo: tudo exige "ver o modelo" (o proprio ver nao exige nada)."""
+    return () if key == DATASET_VIEW else (DATASET_VIEW,)
+
+
+def with_implied_dataset(keys: set[str] | list[str] | tuple[str, ...]) -> list[str]:
+    """Junta o que cada permissao de modelo exige (atualizar exige ver o modelo). Sem repetidos e na ordem do catalogo."""
+    result = set(keys)
+    if result:
+        result.add(DATASET_VIEW)
+    order = {p.key: index for index, p in enumerate(CATALOG)}
+    return sorted(result, key=lambda key: order.get(key, len(order)))
 
 
 def with_implied_report(keys: set[str] | list[str] | tuple[str, ...]) -> list[str]:

@@ -18,6 +18,7 @@ from app.core.access_deps import require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
+from app.core.workspace_catalog import ensure_datasets_for_reports
 from app.models.catalog_sync import CatalogSync, DatasetRoleGrant, PbiDataset
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
@@ -310,6 +311,9 @@ def list_catalog_datasets(
     db: Session = Depends(get_db),
     _: User = Depends(require_global_permission("modelo.catalogo")),
 ):
+    # Os modelos dos relatorios ja cadastrados entram na lista mesmo sem sincronizacao (nome = id curto ate a API trazer o real)
+    if ensure_datasets_for_reports(db):
+        db.commit()
     query = db.query(PbiDataset, PowerBIConnection.name).outerjoin(PowerBIConnection, PowerBIConnection.id == PbiDataset.connection_id)
     if search:
         like = _like(search.strip())

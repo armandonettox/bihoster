@@ -128,6 +128,8 @@ class MyAccessOut(BaseModel):
     workspace_permissions: dict[int, list[str]]
     # O que a pessoa recebeu direto em cada relatorio (id do relatorio para as chaves); o que vem da colecao esta em workspace_permissions
     report_permissions: dict[int, list[str]] = {}
+    # O mesmo para modelos semanticos (id do modelo para as chaves)
+    dataset_permissions: dict[int, list[str]] = {}
     # Cria TVs ou tem acesso a alguma: mostra o modulo Modo TV (o acesso de cada TV e por TV, nao entra nas listas acima)
     tv_access: bool = False
 

@@ -62,7 +62,11 @@ export interface Person {
   name: string;
   is_admin: boolean;
   rows: PersonRow[];
-  truncated: boolean;
+  /** Paginado no servidor, sem limite fixo */
+  total: number;
+  page: number;
+  page_size: number;
+  truncated?: boolean;
 }
 
 export interface BulkInput {
@@ -100,8 +104,10 @@ export async function getMatrix(params: { search?: string; where?: MatrixWhere; 
   return data;
 }
 
-export async function getPerson(userId: number): Promise<Person> {
-  const { data } = await api.get(`/report-access/person/${userId}`);
+export async function getPerson(userId: number, params: { page?: number; pageSize?: number; search?: string } = {}): Promise<Person> {
+  const { data } = await api.get(`/report-access/person/${userId}`, {
+    params: { page: params.page ?? 1, page_size: params.pageSize ?? 25, search: params.search || undefined },
+  });
   return data;
 }
 

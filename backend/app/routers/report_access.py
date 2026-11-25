@@ -364,17 +364,28 @@ class PersonOut(BaseModel):
     name: str
     is_admin: bool
     rows: list[PersonRow]
-    truncated: bool
+    # Sem limite fixo: a lista e paginada no servidor (total, pagina e tamanho da pagina)
+    total: int = 0
+    page: int = 1
+    page_size: int = 25
+    truncated: bool = False
 
 
 @router.get("/person/{user_id}", response_model=PersonOut)
-def person(user_id: int, db: Session = Depends(get_db), _: User = Depends(_can_list)):
+def person(
+    user_id: int,
+    search: str = Query("", max_length=100),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(25, ge=1, le=100),
+    db: Session = Depends(get_db),
+    _: User = Depends(_can_list),
+):
     """O que esta pessoa ve e por que: cada relatorio que ela abre, com a origem (direto, por grupo ou pela colecao)."""
     target = db.query(User).get(user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="Pessoa nao encontrada")
     if is_platform_admin(db, user_id):
-        return PersonOut(user_id=user_id, name=target.name, is_admin=True, rows=[], truncated=False)
+        return PersonOut(user_id=user_id, name=target.name, is_admin=True, rows=[], total=0, page=page, page_size=page_size)
 
     access = effective_access(db, user_id)
     my_groups = {gm.group_id: name for gm, name in db.query(GroupMember, Group.name).join(Group, Group.id == GroupMember.group_id).filter(GroupMember.user_id == user_id).all()}
@@ -389,12 +400,12 @@ def person(user_id: int, db: Session = Depends(get_db), _: User = Depends(_can_l
     linked_ids = {row[0] for row in db.query(ReportCollection.report_id).filter(ReportCollection.collection_id.in_(visible_collections or [-1]))}
     query = db.query(Report, Workspace).join(Workspace, Workspace.id == Report.collection_id)
     query = query.filter(or_(Report.id.in_((report_ids | linked_ids) or [-1]), Report.collection_id.in_(visible_collections or [-1])))
-    found = query.order_by(Report.name, Report.id).limit(PERSON_LIMIT + 1).all()
-    truncated = len(found) > PERSON_LIMIT
-    links = _links_of(db, [report.id for report, _ in found[:PERSON_LIMIT]])
+    needle = search.strip().lower()
+    found = [pair for pair in query.order_by(Report.name, Report.id).all() if not needle or needle in pair[0].name.lower()]
+    links = _links_of(db, [report.id for report, _ in found])
     folder_names = {w.id: w.name for w in db.query(Workspace.id, Workspace.name).all()}
     rows = []
-    for report, collection in found[:PERSON_LIMIT]:
+    for report, collection in found:
         folders = [collection.id, *links.get(report.id, [])]
         keys = access.report_keys(report.id, report.collection_id, links.get(report.id, []))
         if REPORT_VIEW not in keys:
@@ -404,7 +415,9 @@ def person(user_id: int, db: Session = Depends(get_db), _: User = Depends(_can_l
             if folder in access.by_workspace:
                 origin.add(f"Coleção {folder_names.get(folder, folder)}")
         rows.append(PersonRow(report=_ref(report, collection), permissions=sorted(keys), sources=sorted(origin)))
-    return PersonOut(user_id=user_id, name=target.name, is_admin=False, rows=rows, truncated=truncated)
+    total = len(rows)
+    window = rows[(page - 1) * page_size : page * page_size]
+    return PersonOut(user_id=user_id, name=target.name, is_admin=False, rows=window, total=total, page=page, page_size=page_size)
 
 
 @router.post("/bulk", response_model=BulkOut)

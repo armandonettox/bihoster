@@ -47,23 +47,42 @@ describe("AppsMenu", () => {
     expect(screen.queryByRole("button", { name: "Módulos" })).toBeNull();
   });
 
-  it("quem tem so a permissao do catalogo ve Catalogo, que abre a pagina dele", () => {
-    renderMenu(["relatorio.catalogo"]);
+  it.each([["relatorio.catalogo"], ["modelo.catalogo"], ["membros.ver"], ["permissoes.editar"]])("quem tem %s ve Relatorios, o modulo unico, que abre /catalog", (permissao) => {
+    renderMenu([permissao]);
     openMenu();
 
-    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Catálogo" }));
+    expect(screen.queryByRole("button", { name: "Catálogo" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Acessos aos relatórios" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Relatórios" }));
 
     expect(mocks.navigate).toHaveBeenCalledWith("/catalog");
   });
 
-  it("quem pode ver membros ve Acessos aos relatorios, que abre a pagina dele", () => {
-    renderMenu(["membros.ver"]);
+  it("quem so recebeu um relatorio ou um modelo direto tambem ve Relatorios", () => {
+    const me: MyAccess = { is_admin: false, global_permissions: [], workspace_permissions: {}, report_permissions: { "7": ["relatorio.ver"] } };
+    const { unmount } = render(
+      <AccessContext.Provider value={buildAccess(me)}>
+        <AppsMenu />
+      </AccessContext.Provider>,
+    );
     openMenu();
+    expect(screen.getByRole("button", { name: "Relatórios" })).toBeTruthy();
+    unmount();
 
-    fireEvent.click(screen.getByRole("button", { name: "Acessos aos relatórios" }));
+    const modelo: MyAccess = { is_admin: false, global_permissions: [], workspace_permissions: {}, dataset_permissions: { "3": ["modelo.ver"] } };
+    render(
+      <AccessContext.Provider value={buildAccess(modelo)}>
+        <AppsMenu />
+      </AccessContext.Provider>,
+    );
+    openMenu();
+    expect(screen.getByRole("button", { name: "Relatórios" })).toBeTruthy();
+  });
 
-    expect(mocks.navigate).toHaveBeenCalledWith("/report-access");
+  it("quem so tem acesso a uma colecao nao ve Relatorios", () => {
+    renderMenu([], { colecoes: { "1": ["colecao.ver"] } });
+
+    expect(screen.queryByRole("button", { name: "Módulos" })).toBeNull();
   });
 
   it("quem tem uma aba da Administracao ve Administracao, que abre Configuracoes", () => {

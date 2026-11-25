@@ -6,6 +6,7 @@ email. Quando a pessoa se cadastra, elas viram permissoes avulsas dela; se o ult
 from sqlalchemy.orm import Session
 
 from app.models.access_grant import AccessGrant, AccessInviteGrant
+from app.models.dataset_grant import DatasetInviteGrant
 from app.models.invite import GroupInvite
 from app.models.report_grant import ReportInviteGrant
 from app.models.user import User
@@ -26,6 +27,7 @@ def drop_if_no_invite(db: Session, email: str) -> None:
     if db.query(GroupInvite.id).filter(GroupInvite.email == email).first() is None:
         db.query(AccessInviteGrant).filter(AccessInviteGrant.email == email).delete(synchronize_session=False)
         db.query(ReportInviteGrant).filter(ReportInviteGrant.email == email).delete(synchronize_session=False)
+        db.query(DatasetInviteGrant).filter(DatasetInviteGrant.email == email).delete(synchronize_session=False)
 
 
 def consume_pending(db: Session, user: User, had_invites: bool) -> bool:
@@ -33,7 +35,10 @@ def consume_pending(db: Session, user: User, had_invites: bool) -> bool:
     para o email e apagado de qualquer jeito. Devolve se mexeu no banco (quem chama faz o commit)."""
     from app.core.report_access import apply_pending_report_grants  # import aqui: o modulo importa o motor de acesso
 
+    from app.core.dataset_access import apply_pending_dataset_grants
+
     report_changed = apply_pending_report_grants(db, user, had_invites)
+    report_changed = apply_pending_dataset_grants(db, user, had_invites) or report_changed
     rows = db.query(AccessInviteGrant).filter(AccessInviteGrant.email == user.email).all()
     if not rows:
         return report_changed

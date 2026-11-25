@@ -28,6 +28,7 @@ from app.core import powerbi
 from app.core.audit import log_action
 from app.core.database import SessionLocal
 from app.core.root_collection import ensure_root_collection
+from app.core.workspace_catalog import ensure_datasets_for_reports
 from app.models.catalog_sync import CatalogSync, PbiDataset
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
@@ -244,6 +245,10 @@ def sync_connection(
                 # Modelos sao um extra: a falha entra no aviso, mas nao desfaz os relatorios
                 counts.failed_workspaces.append(f"{workspace.get('name') or workspace['id']} (modelos): {str(exc)[:160]}")
             db.commit()
+
+        # Modelos que os relatorios ja usam e a API nao trouxe: ficam na lista com o id curto (nunca somem da tela)
+        ensure_datasets_for_reports(db, connection.id)
+        db.commit()
 
         # So marca workspaces removidos quando a lista do tenant veio completa (filtro vazio)
         if not chosen and listed_ok_everywhere:

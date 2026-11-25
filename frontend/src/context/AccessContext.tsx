@@ -21,6 +21,8 @@ export interface AccessValue {
   holds: (scope: string, key: string) => boolean;
   /** Cria TVs ou tem acesso a alguma TV: mostra o módulo Modo TV */
   hasTvAccess: boolean;
+  /** Recebeu algum relatório ou modelo direto (por ela ou por um grupo): o módulo Relatórios aparece mesmo sem o catálogo geral */
+  hasItemGrants: boolean;
   /** Busca de novo (depois de a pessoa mudar as próprias permissões) */
   refresh: () => Promise<void>;
 }
@@ -40,6 +42,9 @@ export function buildAccess(
   const byReport = new Map<number, Set<string>>(
     Object.entries(me?.report_permissions ?? {}).map(([id, keys]) => [Number(id), new Set(keys)]),
   );
+  const hasItemGrants =
+    Object.values(me?.report_permissions ?? {}).some((keys) => keys.includes("relatorio.ver")) ||
+    Object.values(me?.dataset_permissions ?? {}).some((keys) => keys.includes("modelo.ver"));
   const can = (key: string) => isAdmin || globalKeys.has(key);
   return {
     loading,
@@ -53,6 +58,7 @@ export function buildAccess(
       (reportId != null && (byReport.get(reportId)?.has(key) ?? false)),
     canAny: (...keys) => keys.some(can),
     hasTvAccess: isAdmin || can("tv.criar") || (me?.tv_access ?? false),
+    hasItemGrants,
     holds: (scope, key) => (scope === "global" ? can(key) : isAdmin || (byWorkspace.get(Number(scope))?.has(key) ?? false)),
     refresh,
   };

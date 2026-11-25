@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.orm import Session
 
 from app.core import dataset_security, powerbi
-from app.core.access_deps import require_global_permission
+from app.core.access_deps import require_dataset_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
@@ -129,7 +129,7 @@ def _out(db: Session, dataset: PbiDataset) -> SecurityOut:
 
 
 @router.get("", response_model=SecurityOut)
-def get_security(dataset_id: int, db: Session = Depends(get_db), _: User = Depends(require_global_permission("modelo.seguranca"))):
+def get_security(dataset_id: int, db: Session = Depends(get_db), _: User = Depends(require_dataset_permission("modelo.seguranca"))):
     return _out(db, _dataset_or_404(db, dataset_id))
 
 
@@ -138,7 +138,7 @@ def put_security(
     dataset_id: int,
     data: SecurityIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_global_permission("modelo.seguranca")),
+    current_user: User = Depends(require_dataset_permission("modelo.seguranca")),
 ):
     """Troca o mapeamento do modelo inteiro. Com ao menos uma linha o modelo passa a exigir funcao para abrir; sem nenhuma
     volta ao comportamento de antes. O token em cache dos relatorios do modelo e descartado."""
@@ -178,7 +178,7 @@ def test_role(
     dataset_id: int,
     data: RoleTestIn,
     db: Session = Depends(get_db),
-    _: User = Depends(require_global_permission("modelo.seguranca")),
+    _: User = Depends(require_dataset_permission("modelo.seguranca")),
 ):
     """Tenta gerar um token com a funcao num relatorio do modelo: confirma que o nome existe e que o Power BI a aceita. O
     token nunca e devolvido nem guardado. Nao confirma o que a funcao deixa ver: isso se confere abrindo o relatorio."""

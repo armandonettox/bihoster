@@ -24,11 +24,16 @@ export const SUBSCRIPTIONS_AREA_KEYS: string[] = ["assinatura.todas"];
 /** O item que abre a pagina de Alertas (a visao de todos os alertas), que fica fora da Administracao */
 export const ALERTS_AREA_KEYS: string[] = ["alerta.todas"];
 
-/** Os itens que abrem a pagina do Catalogo (lista de relatorios e de modelos importados do Power BI), fora da Administracao */
-export const CATALOG_AREA_KEYS: string[] = ["relatorio.catalogo", "modelo.catalogo", "modelo.seguranca"];
-
-/** Os itens que abrem a pagina de Acessos aos relatorios (quem pode o que em cada relatorio), fora da Administracao */
-export const REPORT_ACCESS_AREA_KEYS: string[] = ["permissoes.editar", "membros.ver", "grupos.ver"];
+/** Os itens que abrem o modulo Relatorios (workspaces do tenant, relatorios e modelos), fora da Administracao. Une o antigo
+ * Catalogo e a tela de acessos aos relatorios. Quem so recebeu itens soltos tambem entra (ver `hasItemGrants`). */
+export const REPORTS_AREA_KEYS: string[] = [
+  "relatorio.catalogo",
+  "modelo.catalogo",
+  "modelo.seguranca",
+  "permissoes.editar",
+  "membros.ver",
+  "grupos.ver",
+];
 
 /** Todos os itens que abrem alguma aba da Administracao (para saber se a pessoa tem algo a administrar) */
 export const ADMIN_AREA_KEYS: string[] = ADMIN_TABS.flatMap((tab) => tab.keys);

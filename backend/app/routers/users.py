@@ -18,6 +18,7 @@ from app.models.access_extension import AccessExtensionRequest
 from app.models.access_schedule import AccessScheduleRange
 from app.models.audit_log import AuditLog
 from app.models.catalog_sync import DatasetRoleGrant
+from app.models.dataset_grant import DatasetGrant
 from app.models.report_grant import ReportGrant
 from app.models.favorite import Favorite
 from app.models.invite import GroupInvite
@@ -275,6 +276,7 @@ def delete_user(
     db.query(AccessGrant).filter(AccessGrant.user_id == user_id).delete(synchronize_session=False)
     db.query(ReportGrant).filter(ReportGrant.user_id == user_id).delete(synchronize_session=False)
     db.query(DatasetRoleGrant).filter(DatasetRoleGrant.user_id == user_id).delete(synchronize_session=False)
+    db.query(DatasetGrant).filter(DatasetGrant.user_id == user_id).delete(synchronize_session=False)
     db.query(AccessScheduleRange).filter(AccessScheduleRange.user_id == user_id).delete(synchronize_session=False)
     db.query(AccessExtensionRequest).filter(AccessExtensionRequest.user_id == user_id).delete(synchronize_session=False)
     db.query(AccessExtensionRequest).filter(AccessExtensionRequest.decided_by_id == user_id).update(

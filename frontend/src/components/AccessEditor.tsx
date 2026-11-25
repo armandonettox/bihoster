@@ -10,6 +10,7 @@ import type { Draft } from "../utils/accessDraft";
 import { inheritedFromReport } from "../utils/accessInherited";
 import type { Inherited } from "../utils/accessInherited";
 import AccessForm from "./AccessForm";
+import SubjectItemGrants from "./SubjectItemGrants";
 
 interface Props {
   kind: SubjectKind;
@@ -112,6 +113,8 @@ export default function AccessEditor({ kind, id, intro, onOpenGroups, readOnly =
         subjectLabel={kind === "group" ? "o grupo" : "a pessoa"}
         allowed={allowed}
       />
+
+      {editable && <SubjectItemGrants subjectKind={kind} subjectId={id} readOnly={readOnly} />}
 
       {editable && !readOnly && (dirty || saving) && (
         <div className="settings-savebar" role="region" aria-label="Salvar permissões">

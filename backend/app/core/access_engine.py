@@ -15,17 +15,22 @@ from app.core.access_catalog import (
     COLLECTION_VIEW,
     GLOBAL,
     GLOBAL_KEYS,
+    DATASET_CAPABLE,
+    DATASET_SECURITY,
+    DATASET_VIEW,
     REPORT_CAPABLE,
     REPORT_VIEW,
     WORKSPACE,
     WORKSPACE_KEYS,
     scope_of,
     with_implied,
+    with_implied_dataset,
     with_implied_report,
 )
 from app.core.folder_tree import inherit_keys, load_parent_map
 from app.core.workspace_deps import is_platform_admin
 from app.models.access_grant import AccessGrant
+from app.models.dataset_grant import DatasetGrant
 from app.models.report_grant import ReportGrant
 from app.models.workspace import GroupMember, Workspace
 
@@ -40,6 +45,8 @@ class EffectiveAccess:
     # O que foi dado direto a um relatorio (id do relatorio para as chaves), de grupos e da pessoa. Nao inclui o que ele
     # recebe da colecao: isso se soma em report_keys().
     by_report: dict[int, set[str]] = field(default_factory=dict)
+    # O que foi dado direto a um modelo semantico (id do modelo para as chaves); soma-se ao que as permissoes gerais dao
+    by_dataset: dict[int, set[str]] = field(default_factory=dict)
 
     def has_global(self, key: str) -> bool:
         return self.is_admin or key in self.global_keys
@@ -66,6 +73,23 @@ class EffectiveAccess:
 
     def has_in_report(self, key: str, report_id: int, collection_id: int | None, also_in: Iterable[int] = ()) -> bool:
         return self.is_admin or key in self.report_keys(report_id, collection_id, also_in)
+
+    def dataset_keys(self, dataset_id: int) -> set[str]:
+        """Tudo o que a pessoa pode num modelo: o dado direto nele somado ao que as permissoes gerais dao (quem tem
+        "configurar a seguranca dos modelos" a tem em todos; quem tem o catalogo de modelos ve todos). So soma."""
+        keys = set(self.by_dataset.get(dataset_id, ()))
+        if DATASET_SECURITY in self.global_keys:
+            keys |= {DATASET_SECURITY, DATASET_VIEW}
+        if "modelo.catalogo" in self.global_keys:
+            keys.add(DATASET_VIEW)
+        return keys
+
+    def has_in_dataset(self, key: str, dataset_id: int) -> bool:
+        return self.is_admin or key in self.dataset_keys(dataset_id)
+
+    def datasets_with(self, key: str) -> set[int]:
+        """Modelos em que a pessoa tem o item por concessao direta (nao inclui o que vem das permissoes gerais)."""
+        return {did for did, keys in self.by_dataset.items() if key in keys}
 
     def reports_with(self, key: str) -> set[int]:
         """Relatorios em que a pessoa tem o item por concessao direta (nao inclui o que vem da colecao)."""
@@ -122,6 +146,17 @@ def effective_access(db: Session, user_id: int) -> EffectiveAccess:
         if key in REPORT_CAPABLE:  # linha com item que nao vale num relatorio e ignorada
             raw_report.setdefault(report_id, set()).add(key)
     result.by_report = {rid: set(with_implied_report(keys)) for rid, keys in raw_report.items()}
+
+    # Concessoes dadas direto a modelos semanticos
+    raw_dataset: dict[int, set[str]] = {}
+    for dataset_id, key in (
+        db.query(DatasetGrant.dataset_id, DatasetGrant.permission_key)
+        .filter(or_(DatasetGrant.user_id == user_id, DatasetGrant.group_id.in_(my_groups)))
+        .all()
+    ):
+        if key in DATASET_CAPABLE:
+            raw_dataset.setdefault(dataset_id, set()).add(key)
+    result.by_dataset = {did: set(with_implied_dataset(keys)) for did, keys in raw_dataset.items()}
     return result
 
 

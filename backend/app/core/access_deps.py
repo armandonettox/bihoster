@@ -81,6 +81,25 @@ def require_report_permission(key: str):
     return dependency
 
 
+def require_dataset_permission(key: str):
+    """Para as rotas de um modelo semantico (`.../datasets/{dataset_id}/...`): passa quem tem o item nesse modelo, seja por
+    permissao dada direto nele, seja pelas permissoes gerais (`modelo.seguranca` geral vale em todos; `modelo.catalogo`
+    da "ver"). Quem nao passa recebe 403 antes de qualquer consulta ao modelo, igual a um modelo que nao existe."""
+    if key not in access_catalog.DATASET_CAPABLE:
+        raise ValueError(f"A permissao {key} nao vale num modelo")
+
+    def dependency(
+        dataset_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        if not effective_access(db, current_user.id).has_in_dataset(key, dataset_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_GLOBAL)
+        return current_user
+
+    return dependency
+
+
 def require_global_permission(key: str):
     _checked(key, access_catalog.GLOBAL)
 
