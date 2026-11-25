@@ -184,7 +184,7 @@ export default function PermissionsPanel({
   return (
     <>
       <div className="rpt-drawer-backdrop" onClick={onClose} aria-hidden="true" />
-      <aside className="rpt-drawer" role="dialog" aria-modal="true" aria-label={`Gerenciar permissões do ${title} ${itemName}`}>
+      <aside className="rpt-drawer" role="dialog" aria-modal="true" aria-label={`Gerenciar permissões ${kind === "connection" ? "da" : "do"} ${title} ${itemName}`}>
         <header>
           <div>
             <h2>Gerenciar permissões</h2>
