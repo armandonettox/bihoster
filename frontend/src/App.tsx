@@ -29,6 +29,7 @@ const Collections = lazy(() => import("./pages/Collections"));
 const Subscriptions = lazy(() => import("./pages/Subscriptions"));
 const Alerts = lazy(() => import("./pages/Alerts"));
 const Catalog = lazy(() => import("./pages/Catalog"));
+const ReportAccess = lazy(() => import("./pages/ReportAccess"));
 const Account = lazy(() => import("./pages/Account"));
 const Audit = lazy(() => import("./pages/Audit"));
 const ChatPage = lazy(() => import("./pages/ChatPage"));
@@ -112,6 +113,7 @@ function RoutedContent() {
             <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="alerts" element={<Alerts />} />
             <Route path="catalog" element={<Catalog />} />
+            <Route path="report-access" element={<ReportAccess />} />
             <Route path="tv" element={<Tvs />} />
             <Route path="tv/:tvId" element={<TvEditor />} />
             <Route path="users" element={<ManageUsers />} />

@@ -39,6 +39,8 @@ export interface MyAccess {
   is_admin: boolean;
   global_permissions: string[];
   workspace_permissions: Record<string, string[]>;
+  /** O que a pessoa recebeu direto em cada relatorio (id do relatorio para as chaves) */
+  report_permissions?: Record<string, string[]>;
   /** Cria TVs ou tem acesso a alguma: mostra o modulo Modo TV (o acesso de cada TV e por TV) */
   tv_access?: boolean;
 }

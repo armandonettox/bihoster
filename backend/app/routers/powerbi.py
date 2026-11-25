@@ -11,7 +11,7 @@ from app.core import powerbi
 from app.core.audit import log_view_once
 from app.core.database import get_db
 from app.core.db_helpers import get_or_404
-from app.core.access_deps import require_workspace_permission
+from app.core.access_deps import require_report_permission, require_workspace_permission
 from app.core.workspace_deps import require_workspace_member
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
@@ -190,9 +190,9 @@ def get_embed_config(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_member),
+    current_user: User = Depends(require_report_permission("relatorio.ver")),
 ):
-    # A checagem de que a pessoa pertence a colecao (dependencia acima) e a do relatorio na
+    # A checagem de que a pessoa tem acesso ao relatorio (dependencia acima, vale por permissao no relatorio ou pela colecao) e a do relatorio na
     # colecao rodam ANTES de qualquer cache: o token compartilhado nunca chega a quem nao tem acesso.
     report = _get_report_or_404(db, workspace_id, report_id)
 
@@ -226,7 +226,7 @@ def trigger_refresh(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_permission("powerbi.atualizar")),
+    _=Depends(require_report_permission("powerbi.atualizar")),
 ):
     report = _get_report_or_404(db, workspace_id, report_id)
     if not report.pbi_dataset_id:
@@ -242,7 +242,7 @@ def refresh_history(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_member),
+    _=Depends(require_report_permission("relatorio.ver")),
 ):
     report = _get_report_or_404(db, workspace_id, report_id)
     if not report.pbi_dataset_id:
@@ -269,7 +269,7 @@ def refresh_info(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_member),
+    _=Depends(require_report_permission("relatorio.ver")),
 ):
     report = _get_report_or_404(db, workspace_id, report_id)
     if not report.pbi_dataset_id or not report.powerbi_connection_id:

@@ -62,6 +62,7 @@ def my_access(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         is_admin=access.is_admin,
         global_permissions=sorted(access.global_keys),
         workspace_permissions={wid: sorted(keys) for wid, keys in access.by_workspace.items()},
+        report_permissions={rid: sorted(keys) for rid, keys in access.by_report.items()},
         tv_access=tv_access.has_any_access(db, current_user.id),
     )
 

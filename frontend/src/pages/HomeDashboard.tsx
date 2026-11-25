@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import * as homeApi from "../api/home";
+import * as reportAccessApi from "../api/reportAccess";
+import type { SharedReport } from "../api/reportAccess";
 import type { HomeCollectionEntry } from "../api/home";
 import type { Report } from "../api/reports";
 import { useAccess } from "../context/AccessContext";
@@ -18,7 +20,7 @@ import ListFilter from "../components/ListFilter";
 import { filterByName } from "../utils/filterByName";
 import { safeStorage } from "../utils/safeStorage";
 
-type Tab = "collections" | "recommended" | "recent" | "favorites";
+type Tab = "collections" | "recommended" | "recent" | "favorites" | "shared";
 const HOME_VIEW_MODE_KEY = "home_view_mode";
 
 const TABS: { key: Tab; label: string }[] = [
@@ -26,6 +28,7 @@ const TABS: { key: Tab; label: string }[] = [
   { key: "recommended", label: "Recomendado" },
   { key: "recent", label: "Recentes" },
   { key: "favorites", label: "Favoritos" },
+  { key: "shared", label: "Compartilhados" },
 ];
 
 const TAB_KEYS = TABS.map((t) => t.key);
@@ -42,6 +45,8 @@ export default function HomeDashboard() {
 
   const [recommended, setRecommended] = useState<HomeCollectionEntry[]>([]);
   const [recent, setRecent] = useState<HomeCollectionEntry[]>([]);
+  // Relatorios que a pessoa recebeu direto, sem entrar na colecao inteira
+  const [shared, setShared] = useState<SharedReport[]>([]);
   // Lista compartilhada com a barra lateral: favoritar/desfavoritar em qualquer lugar atualiza aqui
   const { favorites } = useFavorites();
   const [loading, setLoading] = useState(true);
@@ -71,6 +76,13 @@ export default function HomeDashboard() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
+    // Falhar aqui nao atrapalha a tela inicial: a aba so aparece quando ha relatorios compartilhados
+    reportAccessApi
+      .listSharedWithMe()
+      .then((list) => {
+        if (!cancelled) setShared(Array.isArray(list) ? list : []);
+      })
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -104,7 +116,7 @@ export default function HomeDashboard() {
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <div className="settings-tabs">
-          {TABS.map((t) => (
+          {TABS.filter((t) => t.key !== "shared" || shared.length > 0).map((t) => (
             <button
               key={t.key}
               className={`settings-tab ${tab === t.key ? "settings-tab-active" : ""}`}
@@ -198,6 +210,27 @@ export default function HomeDashboard() {
               viewMode={viewMode}
               onOpen={openReportCollection}
             />
+          )}
+
+          {tab === "shared" && (
+            <div key={viewMode} className={`view-mode-fade ${viewMode === "icon" ? "settings-grid" : ""}`} style={viewMode === "list" ? { display: "flex", flexDirection: "column", gap: 8 } : undefined}>
+              {shared.length === 0 ? (
+                <p style={{ color: "var(--color-text-muted)", fontSize: 14 }}>Nenhum relatório foi compartilhado com você.</p>
+              ) : (
+                shared.map((report) => (
+                  <button
+                    key={report.id}
+                    className="card home-collection-item"
+                    onClick={() => navigate(`/collection/${report.collection_id}/report/${report.id}`)}
+                  >
+                    <div style={{ flex: 1, minWidth: 0, textAlign: "left" }}>
+                      <div style={{ fontWeight: 700 }}>{report.name}</div>
+                      <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>Compartilhado com você</div>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
           )}
         </>
       )}

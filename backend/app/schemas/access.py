@@ -126,6 +126,8 @@ class MyAccessOut(BaseModel):
     is_admin: bool
     global_permissions: list[str]
     workspace_permissions: dict[int, list[str]]
+    # O que a pessoa recebeu direto em cada relatorio (id do relatorio para as chaves); o que vem da colecao esta em workspace_permissions
+    report_permissions: dict[int, list[str]] = {}
     # Cria TVs ou tem acesso a alguma: mostra o modulo Modo TV (o acesso de cada TV e por TV, nao entra nas listas acima)
     tv_access: bool = False
 
@@ -144,7 +146,9 @@ def catalog_out(presets: dict[str, tuple[str, ...]]) -> CatalogOut:
                 feature_description=p.feature_description,
                 requires=list(p.requires),
             )
+            # Os itens que so existem num relatorio ficam de fora: o editor de colecoes e globais nao os conhece (ver /access/reports/catalog)
             for p in CATALOG
+            if p.scope in ("workspace", "global")
         ],
         presets={name: list(keys) for name, keys in presets.items()},
     )

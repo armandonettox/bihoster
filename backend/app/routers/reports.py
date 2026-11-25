@@ -10,8 +10,9 @@ from app.core.audit import log_action
 from app.core.audit_revert import PAGE_NAMES_FIELD, REPORT_UPDATE
 from app.core.audit_revert import changed_fields as audit_changed_fields
 from app.core.database import get_db
-from app.core.access_deps import require_workspace_permission
+from app.core.access_deps import require_report_permission, require_workspace_permission
 from app.core.workspace_deps import require_workspace_member
+from app.models.report_grant import ReportGrant, ReportInviteGrant
 from app.models.favorite import Favorite
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
@@ -57,7 +58,7 @@ def get_report(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_member),
+    _=Depends(require_report_permission("relatorio.ver")),
 ):
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
     if not report:
@@ -94,7 +95,7 @@ def update_report(
     report_id: int,
     data: ReportUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("relatorio.editar")),
+    current_user: User = Depends(require_report_permission("relatorio.editar")),
 ):
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
     if not report:
@@ -192,7 +193,7 @@ def list_report_pages(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _=Depends(require_workspace_member),
+    _=Depends(require_report_permission("relatorio.ver")),
 ):
     """Paginas (abas) publicadas no relatorio -- usado para escolher de qual pagina gerar o thumbnail."""
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
@@ -222,7 +223,7 @@ def refresh_thumbnail(
     report_id: int,
     data: ThumbnailRefresh,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("relatorio.miniatura")),
+    current_user: User = Depends(require_report_permission("relatorio.miniatura")),
 ):
     """Inicia a geracao do thumbnail em background via ExportTo PNG do Power BI. Devolve o job_id."""
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
@@ -255,7 +256,7 @@ def get_thumbnail_job(
     workspace_id: int,
     report_id: int,
     job_id: str,
-    current_user: User = Depends(require_workspace_permission("relatorio.miniatura")),
+    current_user: User = Depends(require_report_permission("relatorio.miniatura")),
 ):
     """Consulta o status de uma geracao de thumbnail em andamento."""
     job = report_delivery.get_job(job_id, current_user.id)
@@ -269,7 +270,7 @@ def clear_thumbnail(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_workspace_permission("relatorio.miniatura")),
+    _: User = Depends(require_report_permission("relatorio.miniatura")),
 ):
     """Remove o thumbnail estatico do relatorio (volta a mostrar o embed ao vivo)."""
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
@@ -287,7 +288,7 @@ def delete_report(
     workspace_id: int,
     report_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("relatorio.excluir")),
+    current_user: User = Depends(require_report_permission("relatorio.excluir")),
 ):
     report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
     if not report:
@@ -295,6 +296,8 @@ def delete_report(
 
     report_name = report.name
     db.query(Favorite).filter(Favorite.report_id == report_id).delete(synchronize_session=False)
+    db.query(ReportGrant).filter(ReportGrant.report_id == report_id).delete(synchronize_session=False)
+    db.query(ReportInviteGrant).filter(ReportInviteGrant.report_id == report_id).delete(synchronize_session=False)
     delete_subscriptions_of_reports(db, [report_id])
     delete_settings_of_reports(db, [report_id])
     db.delete(report)

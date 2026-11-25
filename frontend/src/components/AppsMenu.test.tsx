@@ -57,6 +57,15 @@ describe("AppsMenu", () => {
     expect(mocks.navigate).toHaveBeenCalledWith("/catalog");
   });
 
+  it("quem pode ver membros ve Acessos aos relatorios, que abre a pagina dele", () => {
+    renderMenu(["membros.ver"]);
+    openMenu();
+
+    fireEvent.click(screen.getByRole("button", { name: "Acessos aos relatórios" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/report-access");
+  });
+
   it("quem tem uma aba da Administracao ve Administracao, que abre Configuracoes", () => {
     renderMenu(["sistema.geral"]);
     openMenu();

@@ -7,19 +7,24 @@ Administradores (ver L-314)."""
 
 from dataclasses import dataclass, field
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.access_catalog import (
     COLLECTION_VIEW,
     GLOBAL,
     GLOBAL_KEYS,
+    REPORT_CAPABLE,
+    REPORT_VIEW,
     WORKSPACE,
     WORKSPACE_KEYS,
     scope_of,
     with_implied,
+    with_implied_report,
 )
 from app.core.workspace_deps import is_platform_admin
 from app.models.access_grant import AccessGrant
+from app.models.report_grant import ReportGrant
 from app.models.workspace import GroupMember, Workspace
 
 
@@ -30,6 +35,9 @@ class EffectiveAccess:
     is_admin: bool = False
     global_keys: set[str] = field(default_factory=set)
     by_workspace: dict[int, set[str]] = field(default_factory=dict)
+    # O que foi dado direto a um relatorio (id do relatorio para as chaves), de grupos e da pessoa. Nao inclui o que ele
+    # recebe da colecao: isso se soma em report_keys().
+    by_report: dict[int, set[str]] = field(default_factory=dict)
 
     def has_global(self, key: str) -> bool:
         return self.is_admin or key in self.global_keys
@@ -39,6 +47,24 @@ class EffectiveAccess:
 
     def workspace_ids_with(self, key: str) -> set[int]:
         return {wid for wid, keys in self.by_workspace.items() if key in keys}
+
+    def report_keys(self, report_id: int, collection_id: int | None) -> set[str]:
+        """Tudo o que a pessoa pode num relatorio: o que foi dado direto nele somado ao que a colecao em que ele esta
+        da para os relatorios (ver a colecao vale ver o relatorio; exportar, assinar... da colecao valem em cada
+        relatorio dela). So soma. O administrador tem tudo."""
+        keys = set(self.by_report.get(report_id, ()))
+        from_collection = self.by_workspace.get(collection_id, set()) if collection_id is not None else set()
+        keys |= {key for key in from_collection if key in REPORT_CAPABLE}
+        if COLLECTION_VIEW in from_collection:
+            keys.add(REPORT_VIEW)
+        return keys
+
+    def has_in_report(self, key: str, report_id: int, collection_id: int | None) -> bool:
+        return self.is_admin or key in self.report_keys(report_id, collection_id)
+
+    def reports_with(self, key: str) -> set[int]:
+        """Relatorios em que a pessoa tem o item por concessao direta (nao inclui o que vem da colecao)."""
+        return {rid for rid, keys in self.by_report.items() if key in keys}
 
 
 def effective_access(db: Session, user_id: int) -> EffectiveAccess:
@@ -77,6 +103,18 @@ def effective_access(db: Session, user_id: int) -> EffectiveAccess:
 
     result.global_keys = set(with_implied(raw_global))
     result.by_workspace = {wid: set(with_implied(keys)) for wid, keys in raw_workspace.items()}
+
+    # Concessoes dadas direto a relatorios (uma consulta so: da pessoa ou de qualquer grupo dela)
+    my_groups = db.query(GroupMember.group_id).filter(GroupMember.user_id == user_id)
+    raw_report: dict[int, set[str]] = {}
+    for report_id, key in (
+        db.query(ReportGrant.report_id, ReportGrant.permission_key)
+        .filter(or_(ReportGrant.user_id == user_id, ReportGrant.group_id.in_(my_groups)))
+        .all()
+    ):
+        if key in REPORT_CAPABLE:  # linha com item que nao vale num relatorio e ignorada
+            raw_report.setdefault(report_id, set()).add(key)
+    result.by_report = {rid: set(with_implied_report(keys)) for rid, keys in raw_report.items()}
     return result
 
 
@@ -86,6 +124,11 @@ def can_in_workspace(db: Session, user_id: int, key: str, workspace_id: int) -> 
 
 def can_global(db: Session, user_id: int, key: str) -> bool:
     return effective_access(db, user_id).has_global(key)
+
+
+def can_in_report(db: Session, user_id: int, key: str, report) -> bool:
+    """`report` e a linha de Report (precisa de id e collection_id)."""
+    return effective_access(db, user_id).has_in_report(key, report.id, report.collection_id)
 
 
 def can_see_workspace(db: Session, user_id: int, workspace_id: int) -> bool:

@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core import access_catalog
 from app.core.access_engine import can_global, can_in_workspace, effective_access
 from app.core.database import get_db
+from app.models.report import Report
 from app.models.user import User
 from app.routers.auth import get_current_user
 
@@ -41,6 +42,38 @@ def require_workspace_permission(key: str):
         current_user: User = Depends(get_current_user),
     ) -> User:
         if not can_in_workspace(db, current_user.id, key, workspace_id):
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_WORKSPACE)
+        return current_user
+
+    return dependency
+
+
+def require_report_permission(key: str):
+    """Para as rotas de um relatorio (`/workspaces/{workspace_id}/.../reports/{report_id}/...`): passa quem tem o item
+    nesse relatorio, seja por permissao dada direto nele, seja pela colecao em que ele esta. `relatorio.ver` equivale a
+    "ver a colecao" quando a permissao vem da colecao. O relatorio precisa mesmo estar na colecao do caminho.
+
+    Quem so recebeu um relatorio nao passa nas rotas da colecao (que continuam exigindo a colecao): ela nao enxerga os
+    outros relatorios dela."""
+    permission = access_catalog.get(key)
+    if permission is None or key not in access_catalog.REPORT_CAPABLE:
+        raise ValueError(f"A permissao {key} nao vale num relatorio")
+    # Se o relatorio nao existe, a resposta e a mesma de antes: so quem tem o item na colecao chega ao 404
+    workspace_key = access_catalog.COLLECTION_VIEW if key == access_catalog.REPORT_VIEW else key
+
+    def dependency(
+        workspace_id: int,
+        report_id: int,
+        db: Session = Depends(get_db),
+        current_user: User = Depends(get_current_user),
+    ) -> User:
+        access = effective_access(db, current_user.id)
+        report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+        if report is None:
+            allowed = access.has_in_workspace(workspace_key, workspace_id)
+        else:
+            allowed = access.has_in_report(key, report.id, report.collection_id)
+        if not allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_WORKSPACE)
         return current_user
 

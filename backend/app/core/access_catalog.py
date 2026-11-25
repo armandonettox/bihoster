@@ -34,8 +34,13 @@ from app.core.permission_keys import ANALYTICS_CREATE, ANALYTICS_DELETE, ANALYTI
 
 WORKSPACE = "workspace"
 GLOBAL = "global"
+# Escopo dos itens que so existem num relatorio (ver e compartilhar). Os itens de colecao que tambem valem num
+# relatorio (exportar, editar, assinar, alertar...) continuam com escopo "workspace" e entram em REPORT_CAPABLE.
+REPORT = "report"
 
 COLLECTION_VIEW = "colecao.ver"
+REPORT_VIEW = "relatorio.ver"
+REPORT_SHARE = "relatorio.compartilhar"
 
 
 @dataclass(frozen=True)
@@ -196,9 +201,36 @@ CATALOG: tuple[Permission, ...] = (
     _global("sistema.email", "E-mail do sistema", "Configurar o servidor de e-mail e enviar um teste.", "Administração: sistema", feature=_SYSTEM),
     _global("sistema.cache", "Cache", "Ver o uso e limpar o cache.", "Administração: sistema", feature=_SYSTEM),
     _global("sistema.versao", "Ver a versão e as atualizações", "Ver a versão instalada, o histórico e os registros de atualização (aplicar a atualização fica só com o administrador).", "Administração: sistema", feature=_SYSTEM),
+    Permission(
+        REPORT_VIEW,
+        "Ver o relatório",
+        "Abrir este relatório, sem dar acesso a outros relatórios da mesma coleção.",
+        REPORT,
+        "Relatório",
+    ),
+    Permission(
+        REPORT_SHARE,
+        "Compartilhar o relatório",
+        "Dar este relatório a outras pessoas e grupos, só com permissões que a pessoa já tem nele.",
+        REPORT,
+        "Relatório",
+        requires=(REPORT_VIEW,),
+    ),
 )
 
 _BY_KEY = {p.key: p for p in CATALOG}
+
+# Itens de colecao que tambem podem ser dados so num relatorio: o que se faz com um relatorio que ja existe. Publicar,
+# reordenar e tudo o que e da colecao em si (nome, exclusao, auditoria) fica de fora. Os globais (assinatura.todas...)
+# tambem: a visao de todo o portal nao se da por relatorio.
+_REPORT_CAPABLE_EXPLICIT = frozenset(
+    {"relatorio.editar", "relatorio.miniatura", "relatorio.excluir", "relatorio.exportar", "powerbi.atualizar"}
+)
+REPORT_CAPABLE: frozenset[str] = frozenset(
+    p.key
+    for p in CATALOG
+    if p.scope == WORKSPACE and (p.key in _REPORT_CAPABLE_EXPLICIT or p.key.startswith(("assinatura.", "alerta.")))
+) | frozenset({REPORT_VIEW, REPORT_SHARE})
 
 WORKSPACE_KEYS: tuple[str, ...] = tuple(p.key for p in CATALOG if p.scope == WORKSPACE)
 GLOBAL_KEYS: tuple[str, ...] = tuple(p.key for p in CATALOG if p.scope == GLOBAL)
@@ -249,6 +281,28 @@ PRESETS: dict[str, tuple[str, ...]] = {
 LEGACY_EXPANSIONS: dict[str, tuple[str, ...]] = {
     "ia.gerenciar": _items_of("ia-gerenciar"),
 }
+
+
+def report_requires(key: str) -> tuple[str, ...]:
+    """O que um item exige quando e dado num relatorio: "ver a colecao" vira "ver o relatorio"."""
+    permission = _BY_KEY.get(key)
+    if permission is None:
+        return ()
+    return tuple(REPORT_VIEW if required == COLLECTION_VIEW else required for required in permission.requires)
+
+
+def with_implied_report(keys: set[str] | list[str] | tuple[str, ...]) -> list[str]:
+    """Como with_implied, mas para as permissoes de um relatorio: junta o que cada uma exige (exportar exige ver o
+    relatorio, nao a colecao inteira). Sem repetidos e na ordem do catalogo."""
+    result = set(keys)
+    pending = list(result)
+    while pending:
+        for required in report_requires(pending.pop()):
+            if required not in result:
+                result.add(required)
+                pending.append(required)
+    order = {p.key: index for index, p in enumerate(CATALOG)}
+    return sorted(result, key=lambda key: order.get(key, len(order)))
 
 
 def scope_of(key: str) -> str | None:

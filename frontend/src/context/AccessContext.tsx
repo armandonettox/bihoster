@@ -13,6 +13,8 @@ export interface AccessValue {
   canIn: (key: string, workspaceId: number | null | undefined) => boolean;
   /** Tem esta permissão em alguma coleção? */
   canInAny: (key: string) => boolean;
+  /** Tem esta permissão neste relatório? Vale o que foi dado direto nele ou o que vem da coleção dele */
+  canInReport: (key: string, reportId: number | null | undefined, workspaceId: number | null | undefined) => boolean;
   /** Tem alguma destas permissões do sistema todo? */
   canAny: (...keys: string[]) => boolean;
   /** Tem esta permissão neste escopo do rascunho de permissões ("global" ou o id da coleção)? Só se dá e se tira o que se tem */
@@ -35,6 +37,9 @@ export function buildAccess(
   const byWorkspace = new Map<number, Set<string>>(
     Object.entries(me?.workspace_permissions ?? {}).map(([id, keys]) => [Number(id), new Set(keys)]),
   );
+  const byReport = new Map<number, Set<string>>(
+    Object.entries(me?.report_permissions ?? {}).map(([id, keys]) => [Number(id), new Set(keys)]),
+  );
   const can = (key: string) => isAdmin || globalKeys.has(key);
   return {
     loading,
@@ -42,6 +47,10 @@ export function buildAccess(
     can,
     canIn: (key, workspaceId) => isAdmin || (workspaceId != null && (byWorkspace.get(workspaceId)?.has(key) ?? false)),
     canInAny: (key) => isAdmin || [...byWorkspace.values()].some((keys) => keys.has(key)),
+    canInReport: (key, reportId, workspaceId) =>
+      isAdmin ||
+      (workspaceId != null && (byWorkspace.get(workspaceId)?.has(key) ?? false)) ||
+      (reportId != null && (byReport.get(reportId)?.has(key) ?? false)),
     canAny: (...keys) => keys.some(can),
     hasTvAccess: isAdmin || can("tv.criar") || (me?.tv_access ?? false),
     holds: (scope, key) => (scope === "global" ? can(key) : isAdmin || (byWorkspace.get(Number(scope))?.has(key) ?? false)),

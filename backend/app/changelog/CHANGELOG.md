@@ -12,6 +12,19 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.48.0 - 2026-11-25 - Acesso por relatório
+- Agora dá para dar acesso a **um relatório só**, a grupos e a pessoas, sem abrir a coleção inteira. Quem recebe um relatório abre esse relatório e **nenhum outro** da mesma coleção: a coleção não aparece para ela e a lista dela continua escondida.
+- O acesso a um relatório é a **soma** do que foi dado nele com o que a coleção dele já dá. Tudo o que foi dado por coleção até hoje **continua valendo, sem nenhuma ação sua**.
+- Itens que valem num relatório: **ver**, **compartilhar**, exportar, editar os dados, excluir, atualizar os dados no Power BI, assinaturas e alertas. Cada item já traz o que ele exige (exportar exige ver). Tirar o **ver** de um relatório tira também o que depende dele.
+- Nova página **Acessos aos relatórios** (menu de módulos): uma matriz **relatório por grupo**, com o que cada grupo tem direto e o que vem da coleção, busca, filtro de **Raiz** ou coleções e paginação. Dá para marcar vários relatórios e **dar ou tirar o mesmo acesso a um grupo ou a uma pessoa de uma vez**. Antes de gravar, a tela avisa quando entre os escolhidos há relatórios da Raiz: **dar acesso a um relatório da Raiz é a forma de publicar o que veio do tenant**.
+- Na mesma página, a aba **O que uma pessoa vê** mostra cada relatório que ela abre e **de onde vem o acesso**: direto na pessoa, por um grupo ou pela coleção.
+- Na tela inicial, quem recebeu relatórios soltos ganha a aba **Compartilhados**, que só aparece quando há algum.
+- Só se dá e só se tira o que se tem: quem tem **Compartilhar** num relatório dá a outros só o que ele mesmo tem **naquele relatório**, e nunca mexe em outro. O grupo Administradores não recebe linhas (já vê tudo).
+- Dá para **convidar por e-mail já com acesso a relatórios**: quem já tem conta recebe na hora, e quem ainda não tem fica reservado no convite.
+- Os botões de exportar, atualizar dados e a abertura do relatório passam a conferir o acesso **ao relatório**, e não só à coleção.
+- Excluir um relatório, uma coleção, um grupo ou uma pessoa apaga também os acessos por relatório que eles tinham. Cada mudança de acesso entra na auditoria.
+- **Ainda não** vale por relatório: assinaturas e alertas (continuam pela coleção), horário de acesso por relatório e permissão por conta do Power BI. Ficam para uma versão seguinte.
+
 ## 1.47.0 - 2026-11-25 - Catálogo do Power BI e sincronização do tenant
 - Cada conta do Power BI ganhou o botão **Sincronizar** (Administração, Contas do Power BI). Ele traz para o portal os relatórios e os **modelos semânticos** publicados no tenant, em segundo plano e com andamento na tela. Rodar duas vezes seguidas não duplica nada.
 - O que vem do tenant entra numa coleção interna chamada **Raiz**, que **só administradores enxergam**. Ela não aparece como coleção em lista nenhuma, não pode ser editada nem excluída, e **ninguém recebe acesso a um relatório importado** até você dar a permissão: importar não publica nada.

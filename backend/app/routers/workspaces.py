@@ -20,6 +20,7 @@ from app.models.access_grant import AccessGrant, AccessInviteGrant
 from app.models.audit_log import AuditLog
 from app.models.favorite import Favorite
 from app.models.report import Report
+from app.models.report_grant import ReportGrant, ReportInviteGrant
 from app.models.settings import AppSettings
 from app.core.ai_report_settings import delete_settings_of_reports
 from app.models.subscription import delete_subscriptions_of_reports
@@ -174,6 +175,8 @@ def delete_workspace(
     report_ids = [r.id for r in db.query(Report.id).filter(Report.collection_id == workspace_id).all()]
     if report_ids:
         db.query(Favorite).filter(Favorite.report_id.in_(report_ids)).delete(synchronize_session=False)
+        db.query(ReportGrant).filter(ReportGrant.report_id.in_(report_ids)).delete(synchronize_session=False)
+        db.query(ReportInviteGrant).filter(ReportInviteGrant.report_id.in_(report_ids)).delete(synchronize_session=False)
         delete_subscriptions_of_reports(db, report_ids)
         delete_settings_of_reports(db, report_ids)
 
