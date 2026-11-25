@@ -110,7 +110,8 @@ def get_effective_roles_map(db: Session, user_id: int) -> dict[int, UserRole]:
     if is_platform_admin(db, user_id):
         from app.models.workspace import Workspace
 
-        return {w.id: UserRole.admin for w in db.query(Workspace.id).all()}
+        # Sem a Raiz (colecao interna do catalogo): ela nao aparece como colecao em lista nenhuma
+        return {w.id: UserRole.admin for w in db.query(Workspace.id).filter(Workspace.system_key.is_(None)).all()}
 
     from app.core.access_engine import effective_access
     from app.core.access_roles import role_from_keys

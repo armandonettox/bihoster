@@ -47,6 +47,16 @@ describe("AppsMenu", () => {
     expect(screen.queryByRole("button", { name: "Módulos" })).toBeNull();
   });
 
+  it("quem tem so a permissao do catalogo ve Catalogo, que abre a pagina dele", () => {
+    renderMenu(["relatorio.catalogo"]);
+    openMenu();
+
+    expect(screen.queryByRole("button", { name: "Administração" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Catálogo" }));
+
+    expect(mocks.navigate).toHaveBeenCalledWith("/catalog");
+  });
+
   it("quem tem uma aba da Administracao ve Administracao, que abre Configuracoes", () => {
     renderMenu(["sistema.geral"]);
     openMenu();

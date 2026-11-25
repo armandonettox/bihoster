@@ -78,7 +78,7 @@ def _blocks(rows) -> list[GrantBlock]:
 def _replace(db: Session, subject: dict, update: GrantsUpdate) -> None:
     workspace_ids = {b.workspace_id for b in update.blocks if b.workspace_id is not None}
     if workspace_ids:
-        found = {row.id for row in db.query(Workspace.id).filter(Workspace.id.in_(workspace_ids)).all()}
+        found = {row.id for row in db.query(Workspace.id).filter(Workspace.id.in_(workspace_ids), Workspace.system_key.is_(None)).all()}
         missing = workspace_ids - found
         if missing:
             raise HTTPException(status_code=404, detail="Colecao nao encontrada")
@@ -105,7 +105,7 @@ def grant_by_email(
     ainda, só aceita se houver convite pendente para o e-mail, e as permissões ficam reservadas nele."""
     workspace_ids = {b.workspace_id for b in data.blocks if b.workspace_id is not None}
     if workspace_ids:
-        found = {row.id for row in db.query(Workspace.id).filter(Workspace.id.in_(workspace_ids)).all()}
+        found = {row.id for row in db.query(Workspace.id).filter(Workspace.id.in_(workspace_ids), Workspace.system_key.is_(None)).all()}
         if workspace_ids - found:
             raise HTTPException(status_code=404, detail="Coleção não encontrada")
 

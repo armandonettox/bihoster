@@ -16,6 +16,10 @@ class Workspace(Base):
     color = Column(String, nullable=True)  # cor hex de fundo do icone/iniciais
     # Tempo de revezamento (segundos) entre os relatorios "Modo TV" desta colecao
     tv_interval_seconds = Column(Integer, default=15, nullable=False)
+    # Marca uma colecao interna do sistema (hoje so a "Raiz", system_key="root"): ela guarda os
+    # relatorios importados do Power BI, nao aparece como pasta e nao recebe acesso padrao.
+    # Nulavel de proposito (a migracao automatica do boot so adiciona colunas nulaveis).
+    system_key = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     reports = relationship("Report", cascade="all, delete-orphan", passive_deletes=False)

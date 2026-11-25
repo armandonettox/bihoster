@@ -134,6 +134,16 @@ def list_reports(connection: PowerBIConnection, workspace_id: str) -> list[dict]
     return response.json().get("value", [])
 
 
+def list_datasets(connection: PowerBIConnection, workspace_id: str) -> list[dict]:
+    """Lista os modelos semanticos (datasets) de um workspace do Power BI (API "Datasets - Get
+    Datasets In Group"). Cada item traz id, name e isEffectiveIdentityRequired."""
+    url = f"{POWERBI_API_BASE}/groups/{workspace_id}/datasets"
+    response = _http.get(url, headers=_headers(connection))
+    if response.status_code != 200:
+        raise PowerBIError(f"Falha ao listar modelos semanticos do Power BI: {_error_detail(response)}")
+    return response.json().get("value", [])
+
+
 def get_report_details(connection: PowerBIConnection, workspace_id: str, report_id: str) -> dict:
     url = f"{POWERBI_API_BASE}/groups/{workspace_id}/reports/{report_id}"
     response = _http.get(url, headers=_headers(connection))

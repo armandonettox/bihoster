@@ -12,6 +12,17 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.47.0 - 2026-11-25 - Catálogo do Power BI e sincronização do tenant
+- Cada conta do Power BI ganhou o botão **Sincronizar** (Administração, Contas do Power BI). Ele traz para o portal os relatórios e os **modelos semânticos** publicados no tenant, em segundo plano e com andamento na tela. Rodar duas vezes seguidas não duplica nada.
+- O que vem do tenant entra numa coleção interna chamada **Raiz**, que **só administradores enxergam**. Ela não aparece como coleção em lista nenhuma, não pode ser editada nem excluída, e **ninguém recebe acesso a um relatório importado** até você dar a permissão: importar não publica nada.
+- Relatórios que já estavam cadastrados à mão **ficam onde estão, com o mesmo nome e as mesmas permissões**: o sistema só anota a data da sincronização e o workspace de origem.
+- Relatório que deixa de aparecer no Power BI fica marcado como **Não encontrado**, mas continua no portal com as permissões. Nada é apagado. Se uma leitura falhar (sem permissão no workspace, por exemplo), os relatórios daquele workspace **não** são marcados como removidos.
+- Na janela do botão dá para **escolher quais workspaces importar** (por padrão, todos) e ligar a **sincronização automática** (a cada hora, 6, 12 horas, todos os dias ou toda semana). Por padrão ela vem **desligada**: só roda quando você clicar. Quando o Power BI limita as chamadas, a sincronização espera e tenta de novo.
+- Novo módulo **Catálogo** no menu de módulos, com a lista de **relatórios** (workspace de origem, onde está, estado e data da última sincronização) e a lista de **modelos semânticos** (quantos relatórios usam e se exigem segurança por linha). Tem busca, filtros e paginação.
+- Três permissões novas, que só somam: **Sincronizar o catálogo** (`conexao.sincronizar`), **Ver o catálogo de relatórios** (`relatorio.catalogo`) e **Ver o catálogo de modelos semânticos** (`modelo.catalogo`). Nenhuma delas dá acesso ao conteúdo dos relatórios.
+- O aquecimento de cache **não** aquece os relatórios importados: o catálogo pode ter centenas e ninguém os abriu ainda.
+- Cada sincronização e cada mudança de configuração entram na auditoria.
+
 ## 1.46.0 - 2026-11-24 - Modo TV sem recarregar
 - Na TV, páginas seguidas do mesmo relatório agora só trocam de página: o relatório não recarrega mais a cada troca.
 - Novo campo **Atualizar os dados** no cadastro da TV: de quanto em quanto tempo (de 1 minuto a 1 hora) o relatório que está na tela busca os dados novos, sem recarregar e sem perder a página. O padrão é não atualizar sozinho.

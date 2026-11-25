@@ -2,11 +2,13 @@ import { useEffect, useState, type FormEvent } from "react";
 import * as powerbiConnectionsApi from "../api/powerbiConnections";
 import type { PowerBIConnection } from "../api/powerbiConnections";
 import * as powerbiApi from "../api/powerbi";
+import { useAccess } from "../context/AccessContext";
 import { useToast } from "../context/ToastContext";
 import { extractErrorMessage } from "../api/client";
 import KebabMenu from "./KebabMenu";
 import MenuIcon from "./MenuIcon";
 import Modal from "./Modal";
+import CatalogSyncModal from "./CatalogSyncModal";
 import ConfirmDialog from "./ConfirmDialog";
 import { SkeletonList } from "./Skeleton";
 
@@ -131,7 +133,9 @@ export default function PowerBiConnectionsSection() {
   const [editingConnection, setEditingConnection] = useState<PowerBIConnection | null>(null);
   const [confirmingDelete, setConfirmingDelete] = useState<PowerBIConnection | null>(null);
   const [testingId, setTestingId] = useState<number | null>(null);
+  const [syncing, setSyncing] = useState<PowerBIConnection | null>(null);
   const { showToast } = useToast();
+  const canSync = useAccess().can("conexao.sincronizar");
 
   async function load() {
     setConnections(await powerbiConnectionsApi.listConnections());
@@ -205,6 +209,11 @@ export default function PowerBiConnectionsSection() {
                 >
                   {testingId === connection.id ? "Testando..." : "Testar conexao"}
                 </button>
+                {canSync && (
+                  <button className="btn btn-secondary btn-sm" onClick={() => setSyncing(connection)}>
+                    Sincronizar
+                  </button>
+                )}
                 <KebabMenu>
                   {(close) => (
                     <>
@@ -237,6 +246,7 @@ export default function PowerBiConnectionsSection() {
         </div>
       )}
 
+      {syncing && <CatalogSyncModal connection={syncing} onClose={() => setSyncing(null)} />}
       {creating && <ConnectionForm onSaved={load} onClose={() => setCreating(false)} />}
       {editingConnection && (
         <ConnectionForm connection={editingConnection} onSaved={load} onClose={() => setEditingConnection(null)} />

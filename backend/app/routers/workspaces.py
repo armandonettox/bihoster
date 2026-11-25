@@ -7,6 +7,7 @@ from app.core.access_roles import give_user_role
 from app.core.audit import log_action
 from app.core.audit_revert import WORKSPACE_UPDATE, changed_fields
 from app.core.database import get_db
+from app.core.root_collection import is_system_workspace
 from app.core.slug import slugify
 from app.core.workspace_deps import (
     ensure_default_group_access,
@@ -69,7 +70,7 @@ def list_my_workspaces(db: Session = Depends(get_db), current_user: User = Depen
 def list_all_workspaces(db: Session = Depends(get_db), current_user: User = Depends(require_global_permission("colecao.todas"))):
     """Todas as colecoes do sistema -- usado no painel de gestao (quem tem 'ver todas as coleções').
     O papel devolvido e sempre admin: a tela de gestao so usa a lista, o papel de verdade vem de /workspaces/."""
-    workspaces = db.query(Workspace).order_by(Workspace.name).all()
+    workspaces = db.query(Workspace).filter(Workspace.system_key.is_(None)).order_by(Workspace.name).all()
     return [_to_out(w, UserRole.admin) for w in workspaces]
 
 
@@ -135,6 +136,9 @@ def update_workspace(
     if not workspace:
         raise HTTPException(status_code=404, detail="Colecao nao encontrada")
 
+    if is_system_workspace(workspace):
+        raise HTTPException(status_code=400, detail="A Raiz e uma colecao interna e nao pode ser alterada")
+
     updates = data.model_dump(exclude_unset=True)
     before = {field: getattr(workspace, field) for field in updates}
     for field, value in updates.items():
@@ -164,6 +168,8 @@ def delete_workspace(
     workspace = db.query(Workspace).get(workspace_id)
     if not workspace:
         raise HTTPException(status_code=404, detail="Colecao nao encontrada")
+    if is_system_workspace(workspace):
+        raise HTTPException(status_code=400, detail="A Raiz e uma colecao interna e nao pode ser excluida")
 
     report_ids = [r.id for r in db.query(Report.id).filter(Report.collection_id == workspace_id).all()]
     if report_ids:

@@ -24,5 +24,8 @@ export const SUBSCRIPTIONS_AREA_KEYS: string[] = ["assinatura.todas"];
 /** O item que abre a pagina de Alertas (a visao de todos os alertas), que fica fora da Administracao */
 export const ALERTS_AREA_KEYS: string[] = ["alerta.todas"];
 
+/** Os itens que abrem a pagina do Catalogo (lista de relatorios e de modelos importados do Power BI), fora da Administracao */
+export const CATALOG_AREA_KEYS: string[] = ["relatorio.catalogo", "modelo.catalogo"];
+
 /** Todos os itens que abrem alguma aba da Administracao (para saber se a pessoa tem algo a administrar) */
 export const ADMIN_AREA_KEYS: string[] = ADMIN_TABS.flatMap((tab) => tab.keys);

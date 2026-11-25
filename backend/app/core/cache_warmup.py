@@ -64,6 +64,8 @@ def _load_db_settings() -> tuple[bool, int]:
 def warm_once(renew_before: timedelta) -> dict:
     """Um ciclo de aquecimento: relatorios (dados estaticos e token compartilhado) e info de
     atualizacao dos datasets. Falha de um item e registrada e nao interrompe os outros."""
+    from sqlalchemy import or_
+
     from app.core.database import SessionLocal
     from app.models.powerbi_connection import PowerBIConnection
     from app.models.report import Report
@@ -71,7 +73,12 @@ def warm_once(renew_before: timedelta) -> dict:
 
     db = SessionLocal()
     try:
-        reports = db.query(Report).filter(Report.powerbi_connection_id.isnot(None)).all()
+        # Relatorio importado do tenant (source="sync") nao e aquecido: o catalogo pode ter centenas e ninguem os abriu
+        reports = (
+            db.query(Report)
+            .filter(Report.powerbi_connection_id.isnot(None), or_(Report.source.is_(None), Report.source != "sync"))
+            .all()
+        )
         connections = {c.id: embed_router._connection_snapshot(c) for c in db.query(PowerBIConnection).all()}
     finally:
         db.close()

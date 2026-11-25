@@ -44,7 +44,8 @@ class EffectiveAccess:
 def effective_access(db: Session, user_id: int) -> EffectiveAccess:
     """Todas as permissoes da pessoa, em duas consultas. Administrador recebe tudo."""
     if is_platform_admin(db, user_id):
-        workspace_ids = [row.id for row in db.query(Workspace.id).all()]
+        # A Raiz (colecao interna do catalogo) nao entra: nao aparece como colecao em nenhuma lista
+        workspace_ids = [row.id for row in db.query(Workspace.id).filter(Workspace.system_key.is_(None)).all()]
         return EffectiveAccess(
             is_admin=True,
             global_keys=set(GLOBAL_KEYS),

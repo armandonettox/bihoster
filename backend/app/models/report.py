@@ -40,6 +40,13 @@ class Report(Base):
     # URL do thumbnail estatico gerado a partir da API do Power BI (PNG em /static/uploads/).
     # Nulavel de proposito -- migracao automatica do boot so adiciona colunas nulaveis.
     thumbnail_url = Column(String, nullable=True)
+    # Catalogo do tenant (sincronizacao): origem do cadastro ("sync" = veio do Power BI; nulo =
+    # cadastrado a mao), quando foi visto pela ultima vez no tenant, quando deixou de aparecer
+    # la e o nome do workspace de origem. Tudo nulavel de proposito (ver regra 1 do AGENTS.md).
+    source = Column(String, nullable=True)
+    synced_at = Column(DateTime(timezone=True), nullable=True)
+    sync_missing_at = Column(DateTime(timezone=True), nullable=True)
+    pbi_workspace_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     @property

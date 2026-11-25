@@ -165,7 +165,7 @@ def update_settings(
     # A colecao padrao precisa existir: um id solto deixava o redirecionamento da home apontando
     # pra uma colecao inexistente (404/403 na tela inicial de todo mundo).
     default_workspace_id = changed_fields.get("default_workspace_id")
-    if default_workspace_id is not None and not db.query(Workspace).get(default_workspace_id):
+    if default_workspace_id is not None and not db.query(Workspace).filter(Workspace.id == default_workspace_id, Workspace.system_key.is_(None)).first():
         raise HTTPException(status_code=400, detail="A colecao padrao escolhida nao existe")
 
     cache_fields_changed = {"cache_warmup_enabled", "cache_warmup_interval_seconds"} & changed_fields.keys()

@@ -23,7 +23,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - assinatura.todas: GET /subscriptions (visão do portal todo);  alerta.todas: GET /alerts e /alerts/reports (módulo Alertas);  sistema.versao: GET /system/version, /history e /logs
 - membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.liberar-horario: /access-extensions; membros.adicionar: /users/welcome-email)
 - grupos.*: rotas de /groups (grupos.participantes: /groups/{id}/members);  permissoes.editar: PUT de /access/*
-- conexao.*: /powerbi-connections;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
+- conexao.*: /powerbi-connections (conexao.sincronizar: /sync, /sync-settings e o histórico da conta);  relatorio.catalogo e modelo.catalogo: /catalog/reports e /catalog/datasets;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
 - sistema.*: /settings (geral, marca, cache), autenticação e /email-settings
 Fica só com o administrador da plataforma, sem permissão: atualizar a versão do sistema e conceder administrador (L-314).
 """
@@ -168,6 +168,26 @@ CATALOG: tuple[Permission, ...] = (
     _global("conexao.criar", "Cadastrar conexões", "Adicionar uma conexão nova com o Power BI.", "Administração: Power BI", feature=_CONNECTIONS, requires=("conexao.ver",)),
     _global("conexao.editar", "Editar conexões", "Mudar os dados de uma conexão.", "Administração: Power BI", feature=_CONNECTIONS, requires=("conexao.ver",)),
     _global("conexao.excluir", "Excluir conexões", "Remover uma conexão.", "Administração: Power BI", feature=_CONNECTIONS, requires=("conexao.ver",)),
+    _global(
+        "conexao.sincronizar",
+        "Sincronizar o catálogo",
+        "Importar para a Raiz os relatórios e modelos do tenant do Power BI, na hora ou em horários agendados, e escolher quais workspaces entram.",
+        "Administração: Power BI",
+        feature=_CONNECTIONS,
+        requires=("conexao.ver",),
+    ),
+    _global(
+        "relatorio.catalogo",
+        "Ver o catálogo de relatórios",
+        "Abrir a lista completa de relatórios importados do Power BI. Não dá acesso ao conteúdo dos relatórios.",
+        "Catálogo do Power BI",
+    ),
+    _global(
+        "modelo.catalogo",
+        "Ver o catálogo de modelos semânticos",
+        "Abrir a lista completa de modelos semânticos importados do Power BI. Não dá acesso ao conteúdo dos modelos.",
+        "Catálogo do Power BI",
+    ),
     _global("auditoria.ver", "Ver o log de atividades", "Abrir a auditoria geral e pesquisar as ações de todo o portal.", "Administração: auditoria", feature=_AUDIT),
     _global("auditoria.reverter", "Reverter ações", "Desfazer uma ação registrada na auditoria.", "Administração: auditoria", feature=_AUDIT, requires=("auditoria.ver",)),
     _global("sistema.geral", "Configurações gerais", "Mudar nome do portal e demais opções da aba Geral.", "Administração: sistema", feature=_SYSTEM),
