@@ -511,7 +511,7 @@ class TestConexaoDaTv:
         token = self._conectar(client, db_session, tvs).json()["token"]
         resp = client.get("/tv-player/playlist", headers={"Authorization": f"Bearer {token}"})
 
-        assert resp.status_code == 200 and resp.json() == {"name": "Recepcao", "items": []}
+        assert resp.status_code == 200 and resp.json() == {"name": "Recepcao", "items": [], "refresh_minutes": None}
 
     def test_desconectar_derruba_o_token_e_a_tv_precisa_do_codigo_de_novo(self, client, db_session, tvs):
         token = self._conectar(client, db_session, tvs).json()["token"]
