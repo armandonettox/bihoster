@@ -6146,4 +6146,5 @@ table.table tr:last-child td {
 .rpt-schedule { margin-top: 20px; border-top: 1px solid var(--color-border); padding-top: 12px; }
 .rpt-schedule > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
 .rpt-schedule[open] > summary { margin-bottom: 10px; }
+.rpt-schedule .schedule-editor > h3 { display: none; } /* o resumo da secao ja diz o que e */
 
