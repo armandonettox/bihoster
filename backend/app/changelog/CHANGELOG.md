@@ -12,6 +12,11 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.46.0 - 2026-11-24 - Modo TV sem recarregar
+- Na TV, páginas seguidas do mesmo relatório agora só trocam de página: o relatório não recarrega mais a cada troca.
+- Novo campo **Atualizar os dados** no cadastro da TV: de quanto em quanto tempo (de 1 minuto a 1 hora) o relatório que está na tela busca os dados novos, sem recarregar e sem perder a página. O padrão é não atualizar sozinho.
+- O fundo preto da tela da TV não aparece mais atrás dos visuais do relatório: o fundo agora é o mesmo do portal.
+
 ## 1.45.1 - 2026-11-24 - Imagens no histórico e passeio refeito
 - O histórico de versões ganhou imagens das telas de várias versões: o novo **Modo TV**, o botão **Exportar**, os módulos na barra lateral e no topo, o menu de 3 pontinhos, **Alertas**, **Assinaturas**, **Gerenciar usuários**, **Auditoria** e as abas **Cache** e **IA**. Clique numa imagem para ampliar.
 - O GIF do passeio pelo sistema foi refeito com as telas novas e sem os rótulos que a ferramenta de gravação deixava nos quadros.
