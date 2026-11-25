@@ -93,6 +93,8 @@ class TvUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1, max_length=120)
     # Vazio (null) = a TV fica conectada para sempre
     session_hours: Optional[int] = Field(default=None, ge=tv_core.MIN_SESSION_HOURS, le=tv_core.MAX_SESSION_HOURS)
+    # Vazio (null) = a TV nao atualiza os dados sozinha
+    refresh_minutes: Optional[int] = Field(default=None, ge=tv_core.MIN_REFRESH_MINUTES, le=tv_core.MAX_REFRESH_MINUTES)
 
     @field_validator("name")
     @classmethod
@@ -112,6 +114,7 @@ class TvSummary(BaseModel):
     items_count: int
     total_seconds: int
     session_hours: Optional[int]
+    refresh_minutes: Optional[int]
     online: bool
     last_seen_at: Optional[datetime]
 
@@ -179,6 +182,7 @@ class ConnectOut(BaseModel):
 
 class PlayerItem(BaseModel):
     id: int
+    report_id: Optional[int] = None
     kind: ItemKind
     seconds: int
     report_name: Optional[str] = None
@@ -190,6 +194,7 @@ class PlayerItem(BaseModel):
 
 class PlaylistOut(BaseModel):
     name: str
+    refresh_minutes: Optional[int] = None
     items: list[PlayerItem]
 
 
@@ -215,6 +220,7 @@ def _summary(tv: Tv, level: str) -> dict:
         "items_count": len(tv.items),
         "total_seconds": sum(item.seconds for item in tv.items),
         "session_hours": tv.session_hours,
+        "refresh_minutes": tv.refresh_minutes,
         "online": _is_online(tv),
         "last_seen_at": _utc(tv.last_seen_at),
     }
@@ -388,6 +394,8 @@ def update_tv(tv_id: int, data: TvUpdate, db: Session = Depends(get_db), current
         tv.name = changes["name"]
     if "session_hours" in changes:
         tv.session_hours = changes["session_hours"]
+    if "refresh_minutes" in changes:
+        tv.refresh_minutes = changes["refresh_minutes"]
     db.commit()
     db.refresh(tv)
     _audit(db, current_user, "update_tv", tv)
@@ -598,6 +606,7 @@ def playlist(db: Session = Depends(get_db), tv: Tv = Depends(_device_tv)):
         items.append(
             PlayerItem(
                 id=item.id,
+                report_id=item.report_id if item.kind == "report_page" else None,
                 kind=item.kind,
                 seconds=item.seconds,
                 report_name=report_name,
@@ -607,7 +616,7 @@ def playlist(db: Session = Depends(get_db), tv: Tv = Depends(_device_tv)):
                 sound=bool(item.sound),
             )
         )
-    return PlaylistOut(name=tv.name, items=items)
+    return PlaylistOut(name=tv.name, items=items, refresh_minutes=tv.refresh_minutes)
 
 
 @player_router.get("/items/{item_id}/embed", response_model=EmbedConfig)

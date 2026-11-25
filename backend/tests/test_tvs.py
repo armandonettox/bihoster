@@ -195,6 +195,23 @@ class TestConfiguracao:
         for horas in (0, -1, 24 * 365 + 1):
             assert client.put(f"/tvs/{tvs.tv['id']}", json={"session_hours": horas}, headers=tvs.admin).status_code == 422
 
+    def test_atualizacao_dos_dados_vazia_significa_nao_atualizar(self, client, tvs):
+        tv_id = tvs.tv["id"]
+        assert client.get(f"/tvs/{tv_id}", headers=tvs.admin).json()["refresh_minutes"] is None
+
+        resp = client.put(f"/tvs/{tv_id}", json={"refresh_minutes": 15}, headers=tvs.admin)
+        assert resp.json()["refresh_minutes"] == 15
+
+        resp = client.put(f"/tvs/{tv_id}", json={"name": "Outro nome"}, headers=tvs.admin)
+        assert resp.json()["refresh_minutes"] == 15
+
+        resp = client.put(f"/tvs/{tv_id}", json={"refresh_minutes": None}, headers=tvs.admin)
+        assert resp.json()["refresh_minutes"] is None
+
+    def test_atualizacao_dos_dados_fora_do_limite_e_recusada(self, client, tvs):
+        for minutos in (0, -5, 24 * 60 + 1):
+            assert client.put(f"/tvs/{tvs.tv['id']}", json={"refresh_minutes": minutos}, headers=tvs.admin).status_code == 422
+
     def test_excluir_a_tv_leva_itens_e_permissoes(self, client, tvs, db_session):
         tv_id = tvs.tv["id"]
         _dar(client, tvs, tv_id, [{"user_id": tvs.outra_id, "level": "ver"}])

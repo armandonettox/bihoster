@@ -29,6 +29,7 @@ const TV = (patch: Partial<tvsApi.TvSummary> = {}): tvsApi.TvSummary => ({
   items_count: 3,
   total_seconds: 150,
   session_hours: null,
+  refresh_minutes: null,
   online: false,
   last_seen_at: null,
   ...patch,

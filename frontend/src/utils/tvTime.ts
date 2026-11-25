@@ -17,6 +17,23 @@ export const SESSION_OPTIONS: { hours: number | null; label: string }[] = [
   { hours: null, label: "Para sempre" },
 ];
 
+/** Opcoes de quanto em quanto tempo a TV atualiza os dados dos relatorios (null = nao atualiza sozinha). */
+export const REFRESH_OPTIONS: { minutes: number | null; label: string }[] = [
+  { minutes: null, label: "Não atualizar" },
+  { minutes: 1, label: "1 minuto" },
+  { minutes: 5, label: "5 minutos" },
+  { minutes: 10, label: "10 minutos" },
+  { minutes: 15, label: "15 minutos" },
+  { minutes: 30, label: "30 minutos" },
+  { minutes: 60, label: "1 hora" },
+];
+
+export function refreshLabel(minutes: number | null): string {
+  const known = REFRESH_OPTIONS.find((o) => o.minutes === minutes);
+  if (known) return known.label;
+  return minutes === 1 ? "1 minuto" : `${minutes} minutos`;
+}
+
 export function sessionLabel(hours: number | null): string {
   const known = SESSION_OPTIONS.find((o) => o.hours === hours);
   if (known) return known.label;

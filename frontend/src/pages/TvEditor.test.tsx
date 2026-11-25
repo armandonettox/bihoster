@@ -46,6 +46,7 @@ const TV = (patch: Partial<tvsApi.TvDetail> = {}): tvsApi.TvDetail => ({
   items_count: 2,
   total_seconds: 120,
   session_hours: null,
+  refresh_minutes: null,
   online: false,
   last_seen_at: null,
   link_secret: "segredo-abc",
@@ -118,6 +119,18 @@ describe("TvEditor - quem pode modificar", () => {
 
     await waitFor(() => expect(updateTv).toHaveBeenCalledWith(4, { name: "Sala nova" }));
     expect(showToast).toHaveBeenCalledWith("Nome da TV salvo.");
+  });
+
+  it("a atualizacao dos dados vem em 'Nao atualizar' e muda para o intervalo escolhido", async () => {
+    updateTv.mockResolvedValue(TV({ refresh_minutes: 15 }));
+    abrir();
+    const campo = (await screen.findByLabelText(/Atualizar os dados/)) as HTMLSelectElement;
+    expect(campo.value).toBe("never");
+
+    fireEvent.change(campo, { target: { value: "15" } });
+
+    await waitFor(() => expect(updateTv).toHaveBeenCalledWith(4, { refresh_minutes: 15 }));
+    expect(campo.value).toBe("15");
   });
 
   it("o tempo de conexao vem com 'Para sempre' marcado e muda para o escolhido", async () => {

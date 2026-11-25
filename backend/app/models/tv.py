@@ -19,6 +19,8 @@ class Tv(Base):
     link_secret = Column(String, nullable=False, unique=True, index=True)
     code_secret = Column(String, nullable=False)
     session_hours = Column(Integer, nullable=True)
+    # De quantos em quantos minutos a TV atualiza os dados dos relatorios (vazio = nao atualiza sozinha)
+    refresh_minutes = Column(Integer, nullable=True)
     sessions_revoked_at = Column(DateTime(timezone=True), nullable=True)
     last_seen_at = Column(DateTime(timezone=True), nullable=True)
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)

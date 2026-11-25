@@ -12,6 +12,8 @@ export interface TvSummary {
   total_seconds: number;
   /** Vazio = a TV fica conectada para sempre */
   session_hours: number | null;
+  /** De quantos em quantos minutos a TV atualiza os dados dos relatorios; vazio = nao atualiza sozinha */
+  refresh_minutes: number | null;
   online: boolean;
   last_seen_at: string | null;
 }
@@ -103,7 +105,7 @@ export async function getTv(id: number): Promise<TvDetail> {
   return data;
 }
 
-export async function updateTv(id: number, changes: { name?: string; session_hours?: number | null }): Promise<TvDetail> {
+export async function updateTv(id: number, changes: { name?: string; session_hours?: number | null; refresh_minutes?: number | null }): Promise<TvDetail> {
   const { data } = await api.put(`/tvs/${id}`, changes);
   return data;
 }

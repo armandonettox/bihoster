@@ -1140,6 +1140,11 @@ table.table tr:last-child td {
   min-height: 0;
 }
 
+/* Mesmo fundo do relatorio no portal: o preto da tela da TV nao pode aparecer atras dos visuais */
+.tv-player-stage-report {
+  background-color: var(--color-bg);
+}
+
 .tv-player-image {
   width: 100%;
   height: 100%;

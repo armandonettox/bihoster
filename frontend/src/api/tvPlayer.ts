@@ -10,6 +10,7 @@ const player = axios.create({ baseURL: `${API_URL}/tv-player` });
 
 export interface PlayerItem {
   id: number;
+  report_id: number | null;
   kind: "report_page" | "image" | "youtube";
   seconds: number;
   report_name: string | null;
@@ -21,6 +22,7 @@ export interface PlayerItem {
 
 export interface Playlist {
   name: string;
+  refresh_minutes?: number | null;
   items: PlayerItem[];
 }
 

@@ -11,7 +11,7 @@ import {
   type PlayerItem,
   type Playlist,
 } from "../api/tvPlayer";
-import ReportEmbed from "../components/ReportEmbed";
+import ReportEmbed, { type ReportEmbedHandle } from "../components/ReportEmbed";
 import SlideshowProgress from "../components/SlideshowProgress";
 import { NoWorkspaceProvider } from "../context/WorkspaceContext";
 
@@ -83,7 +83,7 @@ export default function TvPlayer() {
     const timer = setInterval(async () => {
       try {
         const list = await fetchPlaylist(token);
-        setPlaylist((current) => (current && current.name === list.name && sameItems(current.items, list.items) ? current : list));
+        setPlaylist((current) => (current && current.name === list.name && (current.refresh_minutes ?? null) === (list.refresh_minutes ?? null) && sameItems(current.items, list.items) ? current : list));
       } catch (err: any) {
         if (err?.response?.status === 401) askForCode("A conexão desta TV foi encerrada. Digite o código para conectar de novo.");
         // Outra falha (rede): segue mostrando o que ja tem
@@ -123,7 +123,7 @@ export default function TvPlayer() {
 
   return (
     <NoWorkspaceProvider>
-      <Rotation token={token} items={playlist.items} onExpired={() => askForCode("A conexão desta TV foi encerrada. Digite o código para conectar de novo.")} />
+      <Rotation token={token} items={playlist.items} refreshMinutes={playlist.refresh_minutes ?? null} onExpired={() => askForCode("A conexão desta TV foi encerrada. Digite o código para conectar de novo.")} />
     </NoWorkspaceProvider>
   );
 }
@@ -196,7 +196,7 @@ function CodeScreen({
 }
 
 /** Passa os itens um a um, cada um pelo seu tempo, e volta ao primeiro no fim. As setas trocam de item e o espaco pausa. */
-function Rotation({ token, items, onExpired }: { token: string; items: PlayerItem[]; onExpired: () => void }) {
+function Rotation({ token, items, refreshMinutes, onExpired }: { token: string; items: PlayerItem[]; refreshMinutes: number | null; onExpired: () => void }) {
   const [index, setIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const [epoch, setEpoch] = useState(0);
@@ -204,6 +204,16 @@ function Rotation({ token, items, onExpired }: { token: string; items: PlayerIte
   const current = count > 0 ? items[index % count] : null;
   const onExpiredRef = useRef(onExpired);
   onExpiredRef.current = onExpired;
+  const embedRef = useRef<ReportEmbedHandle>(null);
+
+  // Atualiza os dados do relatorio que esta na tela de tempos em tempos, sem recarregar a pagina
+  useEffect(() => {
+    if (!refreshMinutes) return;
+    const timer = setInterval(() => {
+      embedRef.current?.refreshData();
+    }, refreshMinutes * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [refreshMinutes]);
 
   // Se a lista encolheu, volta ao primeiro
   useEffect(() => {
@@ -255,14 +265,21 @@ function Rotation({ token, items, onExpired }: { token: string; items: PlayerIte
   return (
     <div className="tv-player">
       {count > 1 && <SlideshowProgress countdown={{ key: epoch, durationMs: current.seconds * 1000, from: 0 }} paused={paused} />}
-      <div className="tv-player-stage">
-        <ItemView key={`${current.id}-${epoch}`} token={token} item={current} onExpired={() => onExpiredRef.current()} />
+      <div className={current.kind === "report_page" ? "tv-player-stage tv-player-stage-report" : "tv-player-stage"}>
+        {/* Paginas seguidas do mesmo relatorio ficam no mesmo embed: so a pagina troca, o relatorio nao recarrega */}
+        <ItemView
+          key={current.kind === "report_page" && current.report_id ? `report-${current.report_id}` : `${current.id}-${epoch}`}
+          token={token}
+          item={current}
+          embedRef={embedRef}
+          onExpired={() => onExpiredRef.current()}
+        />
       </div>
     </div>
   );
 }
 
-function ItemView({ token, item, onExpired }: { token: string; item: PlayerItem; onExpired: () => void }) {
+function ItemView({ token, item, embedRef, onExpired }: { token: string; item: PlayerItem; embedRef: React.RefObject<ReportEmbedHandle | null>; onExpired: () => void }) {
   const loadConfig = useCallback(
     () =>
       fetchItemEmbed(token, item.id).catch((err) => {
@@ -290,7 +307,7 @@ function ItemView({ token, item, onExpired }: { token: string; item: PlayerItem;
     );
   }
   if (item.kind === "report_page" && item.page_name) {
-    return <ReportEmbed reportId={item.id} height="100%" loadConfig={loadConfig} forcePage={item.page_name} />;
+    return <ReportEmbed ref={embedRef} reportId={item.report_id ?? item.id} height="100%" loadConfig={loadConfig} forcePage={item.page_name} />;
   }
   return null;
 }

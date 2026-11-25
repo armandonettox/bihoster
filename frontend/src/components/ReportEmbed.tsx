@@ -54,6 +54,8 @@ export interface ReportEmbedHandle {
   getActivePageName: () => Promise<string | null>;
   /** Pagina ativa com os campos de cada grafico; null se o relatorio ainda nao carregou */
   getPageContext: () => Promise<PageContextInfo | null>;
+  /** Busca os dados novos do relatorio aberto, sem recarregar a pagina nem perder a pagina atual */
+  refreshData: () => Promise<void>;
 }
 
 const TABLE_VISUAL_TYPES = ["tableEx", "pivotTable"];
@@ -102,6 +104,10 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   zoomRef.current = zoom;
   const loadConfigRef = useRef(loadConfig);
   loadConfigRef.current = loadConfig;
+  // A pagina da TV pode mudar sem reabrir o relatorio: o embed so le o valor mais recente
+  const forcePageRef = useRef(forcePage);
+  forcePageRef.current = forcePage;
+  const forcePageOn = Boolean(forcePage);
 
   // As tabelas da pagina aberta, lidas com antecedencia (quando a pagina desenha) para o Exportar abrir na hora, sem
   // esperar a ida e volta ao Power BI. Zera ao trocar de pagina.
@@ -147,6 +153,15 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
   }
 
   useImperativeHandle(ref, () => ({
+    refreshData: async () => {
+      const report = embeddedRef.current;
+      if (!report) return;
+      try {
+        await report.refresh();
+      } catch {
+        // Sem como atualizar agora: a proxima volta tenta de novo
+      }
+    },
     peekTableVisuals: () => tableCacheRef.current,
     peekPages: () => pagesCacheRef.current,
     getReportPages: async () => {
@@ -346,7 +361,8 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
 
         // Abas escolhidas na hora de adicionar (nomes tecnicos do Power BI, nao os titulos).
         // Backend antigo so manda page_name.
-        const selectedPages = forcePage ? [forcePage] : (config.page_names ?? (config.page_name ? [config.page_name] : []));
+        const firstForced = forcePageRef.current;
+        const selectedPages = firstForced ? [firstForced] : (config.page_names ?? (config.page_name ? [config.page_name] : []));
         allowedPagesRef.current = selectedPages;
 
         timer.mark("embed");
@@ -360,14 +376,14 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
           // Abre direto na primeira aba escolhida
           pageName: selectedPages[0],
           settings: {
-            background: pbi.models.BackgroundType.Transparent,
+            background: firstForced ? pbi.models.BackgroundType.Default : pbi.models.BackgroundType.Transparent,
             bars: { actionBar: { visible: false } },
             panes: {
-              filters: { visible: forcePage ? false : (config.show_filter_pane ?? false) },
+              filters: { visible: firstForced ? false : (config.show_filter_pane ?? false) },
               // Com abas escolhidas e show_page_nav desativado, a navegacao nativa some:
               // a barra propria abaixo assume quando ha multiplas abas selecionadas.
               pageNavigation: {
-                visible: forcePage ? false : (config.show_page_nav ?? (selectedPages.length === 0)),
+                visible: firstForced ? false : (config.show_page_nav ?? (selectedPages.length === 0)),
               },
             },
             // Cabecalho do visual (menu "..."): so visivel quando habilitado no relatorio.
@@ -460,7 +476,19 @@ const ReportEmbed = forwardRef<ReportEmbedHandle, {
         getPowerBiService().reset(container);
       }
     };
-  }, [reportId, effectiveWorkspaceId, forcePage]);
+  }, [reportId, effectiveWorkspaceId, forcePageOn]);
+
+  // Na TV a pagina muda sem reabrir o relatorio: so troca a pagina, e nada recarrega
+  useEffect(() => {
+    const report = embeddedRef.current;
+    if (!report || !forcePage) return;
+    report
+      .getActivePage()
+      .then((page) => (page.name === forcePage ? undefined : report.setPage(forcePage)))
+      .catch(() => {
+        // Ainda carregando: a pagina certa ja entra na abertura
+      });
+  }, [forcePage]);
 
   useEffect(() => {
     const report = embeddedRef.current;

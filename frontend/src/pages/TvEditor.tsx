@@ -19,7 +19,7 @@ import TvGrantsEditor from "../components/tv/TvGrantsEditor";
 import TvItemsEditor, { draftsFromItems, inputsFromDrafts, type DraftItem } from "../components/tv/TvItemsEditor";
 import { useToast } from "../context/ToastContext";
 import { copyText } from "../utils/clipboard";
-import { SESSION_OPTIONS, sessionLabel } from "../utils/tvTime";
+import { REFRESH_OPTIONS, refreshLabel, SESSION_OPTIONS, sessionLabel } from "../utils/tvTime";
 
 type Confirm = "disconnect" | "regenerate" | "delete" | null;
 
@@ -85,6 +85,17 @@ export default function TvEditor() {
     } catch (err) {
       setName(tv!.name);
       showToast(extractErrorMessage(err) || "Nao foi possivel salvar o nome.", "error");
+    }
+  }
+
+  async function changeRefresh(value: string) {
+    const minutes = value === "never" ? null : Number(value);
+    try {
+      const detail = await updateTv(id, { refresh_minutes: minutes });
+      setTv((current) => (current ? { ...current, refresh_minutes: detail.refresh_minutes } : current));
+      showToast("Atualização dos dados salva.");
+    } catch (err) {
+      showToast(extractErrorMessage(err) || "Nao foi possivel salvar a atualizacao dos dados.", "error");
     }
   }
 
@@ -220,6 +231,25 @@ export default function TvEditor() {
               )}
             </select>
             <small className="tv-muted">Depois desse tempo a TV pede o código de novo. Toda nova conexão sempre pede o código.</small>
+          </label>
+          <label className="tv-field">
+            <span className="tv-label">Atualizar os dados</span>
+            <select
+              className="input"
+              value={tv.refresh_minutes === null ? "never" : String(tv.refresh_minutes)}
+              disabled={!canEdit}
+              onChange={(e) => changeRefresh(e.target.value)}
+            >
+              {REFRESH_OPTIONS.map((option) => (
+                <option key={option.label} value={option.minutes === null ? "never" : String(option.minutes)}>
+                  {option.label}
+                </option>
+              ))}
+              {tv.refresh_minutes !== null && !REFRESH_OPTIONS.some((o) => o.minutes === tv.refresh_minutes) && (
+                <option value={String(tv.refresh_minutes)}>{refreshLabel(tv.refresh_minutes)}</option>
+              )}
+            </select>
+            <small className="tv-muted">De quanto em quanto tempo os relatórios buscam os dados novos, sem recarregar a página.</small>
           </label>
         </div>
         <div className="tv-actions">

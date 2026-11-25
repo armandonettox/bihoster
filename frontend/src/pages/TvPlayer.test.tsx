@@ -13,11 +13,19 @@ vi.mock("../api/tvPlayer", () => ({
   savedTvToken: vi.fn(),
   forgetTvToken: vi.fn(),
 }));
-vi.mock("../components/ReportEmbed", () => ({
-  default: ({ forcePage, reportId }: { forcePage?: string; reportId: number }) => (
-    <div data-testid="embed">{`embed ${reportId} pagina ${forcePage}`}</div>
-  ),
-}));
+const embedMontagens = vi.hoisted(() => ({ count: 0, refresh: (() => {}) as () => void }));
+vi.mock("../components/ReportEmbed", async () => {
+  const React = await import("react");
+  return {
+    default: React.forwardRef(function Embed({ forcePage, reportId }: { forcePage?: string; reportId: number }, ref: any) {
+      React.useEffect(() => {
+        embedMontagens.count += 1;
+      }, []);
+      React.useImperativeHandle(ref, () => ({ refreshData: async () => embedMontagens.refresh() }));
+      return <div data-testid="embed">{`embed ${reportId} pagina ${forcePage}`}</div>;
+    }),
+  };
+});
 
 const linkExists = vi.mocked(playerApi.linkExists);
 const connectTv = vi.mocked(playerApi.connectTv);
@@ -27,6 +35,7 @@ const forgetTvToken = vi.mocked(playerApi.forgetTvToken);
 
 const RELATORIO: PlayerItem = {
   id: 10,
+  report_id: 7,
   kind: "report_page",
   seconds: 20,
   report_name: "Vendas",
@@ -35,8 +44,8 @@ const RELATORIO: PlayerItem = {
   video_id: null,
   sound: false,
 };
-const IMAGEM: PlayerItem = { id: 11, kind: "image", seconds: 5, report_name: null, page_name: null, image_url: "/static/uploads/tv/a.png", video_id: null, sound: false };
-const VIDEO: PlayerItem = { id: 12, kind: "youtube", seconds: 40, report_name: null, page_name: null, image_url: null, video_id: "dQw4w9WgXcQ", sound: true };
+const IMAGEM: PlayerItem = { id: 11, report_id: null, kind: "image", seconds: 5, report_name: null, page_name: null, image_url: "/static/uploads/tv/a.png", video_id: null, sound: false };
+const VIDEO: PlayerItem = { id: 12, report_id: null, kind: "youtube", seconds: 40, report_name: null, page_name: null, image_url: null, video_id: "dQw4w9WgXcQ", sound: true };
 
 function abrir() {
   return render(
@@ -55,6 +64,8 @@ const enviar = () => fireEvent.click(screen.getByRole("button", { name: "Conecta
 
 beforeEach(() => {
   vi.resetAllMocks();
+  embedMontagens.count = 0;
+  embedMontagens.refresh = () => {};
   savedTvToken.mockReturnValue(null);
   linkExists.mockResolvedValue(true);
 });
@@ -124,7 +135,7 @@ describe("TvPlayer - entrar", () => {
     digitar("123456");
     enviar();
 
-    expect((await screen.findByTestId("embed")).textContent).toBe("embed 10 pagina ReportSection2");
+    expect((await screen.findByTestId("embed")).textContent).toBe("embed 7 pagina ReportSection2");
     expect(connectTv).toHaveBeenCalledWith("segredo123", "123456");
     expect(fetchPlaylist).toHaveBeenCalledWith("token-novo");
   });
@@ -165,8 +176,8 @@ describe("TvPlayer - passar a programacao", () => {
     savedTvToken.mockReturnValue("tk");
   });
 
-  async function comItens(items: PlayerItem[]) {
-    fetchPlaylist.mockResolvedValue({ name: "Recepcao", items });
+  async function comItens(items: PlayerItem[], refreshMinutes: number | null = null) {
+    fetchPlaylist.mockResolvedValue({ name: "Recepcao", items, refresh_minutes: refreshMinutes });
     vi.useFakeTimers({ shouldAdvanceTime: true });
     abrir();
     await waitFor(() => expect(fetchPlaylist).toHaveBeenCalled());
@@ -193,6 +204,49 @@ describe("TvPlayer - passar a programacao", () => {
 
     await avancar(40_200);
     expect(screen.getByTestId("embed")).toBeTruthy(); // voltou ao primeiro
+  });
+
+  it("paginas seguidas do mesmo relatorio trocam so a pagina, sem abrir o relatorio de novo", async () => {
+    const outraPagina = { ...RELATORIO, id: 13, page_name: "ReportSection3" };
+    await comItens([RELATORIO, outraPagina]);
+    expect(screen.getByTestId("embed").textContent).toContain("ReportSection2");
+
+    await avancar(20_500);
+
+    expect(screen.getByTestId("embed").textContent).toContain("ReportSection3");
+    expect(embedMontagens.count).toBe(1);
+  });
+
+  it("relatorios diferentes abrem cada um o seu", async () => {
+    const outro = { ...RELATORIO, id: 14, report_id: 8 };
+    await comItens([RELATORIO, outro]);
+
+    await avancar(20_500);
+
+    expect(embedMontagens.count).toBe(2);
+  });
+
+  it("atualiza os dados do relatorio no intervalo configurado, sem recarregar", async () => {
+    const atualizar = vi.fn();
+    embedMontagens.refresh = atualizar;
+    await comItens([RELATORIO], 5);
+
+    await avancar(4 * 60_000);
+    expect(atualizar).not.toHaveBeenCalled();
+    await avancar(70_000);
+
+    expect(atualizar).toHaveBeenCalledTimes(1);
+    expect(embedMontagens.count).toBe(1);
+  });
+
+  it("sem intervalo configurado nao atualiza sozinha", async () => {
+    const atualizar = vi.fn();
+    embedMontagens.refresh = atualizar;
+    await comItens([RELATORIO], null);
+
+    await avancar(30 * 60_000);
+
+    expect(atualizar).not.toHaveBeenCalled();
   });
 
   it("o video do YouTube toca mudo ou com som conforme a configuracao do item", async () => {
