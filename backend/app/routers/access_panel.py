@@ -13,8 +13,8 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
-from app.core import access_catalog, dataset_access, report_access
-from app.core.access_catalog import COLLECTION_VIEW, DATASET_CAPABLE, REPORT_CAPABLE, REPORT_VIEW
+from app.core import access_catalog, connection_access, dataset_access, report_access
+from app.core.access_catalog import COLLECTION_VIEW, CONNECTION_CAPABLE, DATASET_CAPABLE, REPORT_CAPABLE, REPORT_VIEW
 from app.core.access_engine import effective_access, folders_of_report
 from app.core.access_presets import LABELS, PRESETS, preset_of
 from app.core.audit import log_action
@@ -23,6 +23,8 @@ from app.core.folder_tree import ancestors, load_parent_map
 from app.core.workspace_deps import get_or_create_default_group, is_platform_admin
 from app.models.access_grant import AccessGrant
 from app.models.catalog_sync import PbiDataset
+from app.models.connection_grant import ConnectionGrant
+from app.models.powerbi_connection import PowerBIConnection
 from app.models.dataset_grant import DatasetGrant, DatasetInviteGrant
 from app.models.invite import GroupInvite
 from app.models.report import Report
@@ -33,7 +35,7 @@ from app.routers.auth import get_current_user
 
 router = APIRouter(prefix="/access-panel", tags=["access-panel"])
 
-Kind = Literal["report", "dataset"]
+Kind = Literal["report", "dataset", "connection"]
 SubjectKind = Literal["user", "group"]
 MAX_SUBJECTS = 20
 
@@ -110,9 +112,20 @@ class InviteIn(BaseModel):
         return value.strip().lower()
 
 
+def _mod(kind: Kind):
+    """O modulo que grava e confere o acesso de cada tipo de item."""
+    return {"report": report_access, "dataset": dataset_access, "connection": connection_access}[kind]
+
+
+def _capable(kind: Kind) -> frozenset[str]:
+    return {"report": REPORT_CAPABLE, "dataset": DATASET_CAPABLE, "connection": CONNECTION_CAPABLE}[kind]
+
+
 def _item(db: Session, kind: Kind, item_id: int):
     if kind == "report":
         item = db.query(Report).get(item_id)
+    elif kind == "connection":
+        item = db.query(PowerBIConnection).get(item_id)
     else:
         item = db.query(PbiDataset).get(item_id)
     if item is None:
@@ -129,14 +142,15 @@ def _keys_for(kind: Kind, preset: Optional[str], permissions: Optional[list[str]
 
 
 def _require_manage(db: Session, user: User, kind: Kind, item):
-    if kind == "report":
-        return report_access.require_can_manage(db, user, item)
-    return dataset_access.require_can_manage(db, user, item)
+    return _mod(kind).require_can_manage(db, user, item)
 
 
 def _grants(db: Session, kind: Kind, item_id: int) -> list[tuple[Optional[int], Optional[int], str]]:
-    model = ReportGrant if kind == "report" else DatasetGrant
-    column = ReportGrant.report_id if kind == "report" else DatasetGrant.dataset_id
+    model, column = {
+        "report": (ReportGrant, ReportGrant.report_id),
+        "dataset": (DatasetGrant, DatasetGrant.dataset_id),
+        "connection": (ConnectionGrant, ConnectionGrant.connection_id),
+    }[kind]
     return [(row[0], row[1], row[2]) for row in db.query(model.user_id, model.group_id, model.permission_key).filter(column == item_id)]
 
 
@@ -179,7 +193,7 @@ class KindCatalog(BaseModel):
 @router.get("/catalog/{kind}", response_model=KindCatalog)
 def kind_catalog(kind: Kind, _: User = Depends(get_current_user)):
     """Os presets e os itens de permissao de um tipo (relatorio ou modelo), para as telas montarem "Personalizar"."""
-    capable = REPORT_CAPABLE if kind == "report" else DATASET_CAPABLE
+    capable = _capable(kind)
     return KindCatalog(
         presets=[PresetOut(key=key, label=LABELS[kind][key], permissions=list(keys)) for key, keys in PRESETS[kind].items()],
         permissions=[PermissionItem(key=p.key, label=p.label, description=p.description) for p in access_catalog.CATALOG if p.key in capable],
@@ -214,7 +228,7 @@ def _folder_origins(db: Session, report: Report) -> dict[tuple[str, int], tuple[
 def get_panel(kind: Kind, item_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     item = _item(db, kind, item_id)
     access = _require_manage(db, current_user, kind, item)
-    capable = REPORT_CAPABLE if kind == "report" else DATASET_CAPABLE
+    capable = _capable(kind)
 
     direct: dict[tuple[str, int], set[str]] = {}
     for user_id, group_id, key in _grants(db, kind, item_id):
@@ -268,7 +282,7 @@ def get_panel(kind: Kind, item_id: int, db: Session = Depends(get_db), current_u
 
 def _audit(db: Session, actor: User, kind: Kind, item, details: str) -> None:
     workspace_id = report_access.collection_name_for_audit(db, item) if kind == "report" else None
-    log_action(db, action="update", entity="report_access" if kind == "report" else "dataset_access", user_id=actor.id, workspace_id=workspace_id, entity_id=str(item.id), details=details[:300])
+    log_action(db, action="update", entity={"report": "report_access", "dataset": "dataset_access", "connection": "connection_access"}[kind], user_id=actor.id, workspace_id=workspace_id, entity_id=str(item.id), details=details[:300])
 
 
 @router.put("/{kind}/{item_id}/{subject_kind}/{subject_id}")
@@ -301,7 +315,7 @@ def put_subject(
         column, label = "user_id", subject.email
 
     wanted = _keys_for(kind, data.preset, data.permissions)
-    mod = report_access if kind == "report" else dataset_access
+    mod = _mod(kind)
     after = set(mod.validate_keys(wanted)) if wanted else set()
     before = mod.subject_keys(db, item.id, column, subject_id)
     if kind == "report":
@@ -319,9 +333,11 @@ def invite_by_email(kind: Kind, item_id: int, data: InviteIn, db: Session = Depe
     """Compartilha por e-mail. Quem ja tem conta recebe na hora. Para um e-mail sem conta, o acesso fica reservado num convite
     (que entra no grupo "Todos os usuarios"); criar o convite e adicionar um membro, entao pede a permissao de adicionar
     membros. Nenhum e-mail e enviado daqui: avise a pessoa para se cadastrar com este endereco."""
+    if kind == "connection":
+        raise HTTPException(status_code=400, detail="Contas do Power BI nao tem convite por e-mail: a pessoa precisa ja ter conta no portal")
     item = _item(db, kind, item_id)
     access = _require_manage(db, current_user, kind, item)
-    mod = report_access if kind == "report" else dataset_access
+    mod = _mod(kind)
     keys = set(mod.validate_keys(_keys_for(kind, data.preset, data.permissions)))
     if not keys:
         raise HTTPException(status_code=422, detail="Escolha o que a pessoa pode fazer")
@@ -395,6 +411,8 @@ def items_of_subject(
     column = "group_id" if subject_kind == "group" else "user_id"
     if kind == "report":
         rows = db.query(ReportGrant.report_id, ReportGrant.permission_key).filter(getattr(ReportGrant, column) == subject_id).all()
+    elif kind == "connection":
+        rows = db.query(ConnectionGrant.connection_id, ConnectionGrant.permission_key).filter(getattr(ConnectionGrant, column) == subject_id).all()
     else:
         rows = db.query(DatasetGrant.dataset_id, DatasetGrant.permission_key).filter(getattr(DatasetGrant, column) == subject_id).all()
     keys_by_item: dict[int, set[str]] = {}
@@ -403,6 +421,9 @@ def items_of_subject(
     if kind == "report":
         found = db.query(Report, Workspace).join(Workspace, Workspace.id == Report.collection_id).filter(Report.id.in_(list(keys_by_item) or [-1])).all()
         entries = [(r.id, r.name, r.pbi_workspace_name, w.system_key is not None) for r, w in found]
+    elif kind == "connection":
+        found = db.query(PowerBIConnection).filter(PowerBIConnection.id.in_(list(keys_by_item) or [-1])).all()
+        entries = [(c.id, c.name, None, False) for c in found]
     else:
         found = db.query(PbiDataset).filter(PbiDataset.id.in_(list(keys_by_item) or [-1])).all()
         entries = [(d.id, d.name, d.pbi_workspace_name, False) for d in found]
@@ -460,11 +481,11 @@ def bulk_share(data: BulkShareIn, db: Session = Depends(get_db), current_user: U
         kind, item_id = entry
         item = _item(db, kind, item_id)
         access = _require_manage(db, current_user, kind, item)
-        mod = report_access if kind == "report" else dataset_access
+        mod = _mod(kind)
         wanted = _keys_for(kind, data.preset, data.permissions)
         if not wanted:
             raise HTTPException(status_code=422, detail="Escolha o que dar ou tirar")
-        keys = set(mod.validate_keys(wanted)) if data.mode == "add" else mod.with_dependents(set(wanted) & (REPORT_CAPABLE if kind == "report" else DATASET_CAPABLE))
+        keys = set(mod.validate_keys(wanted)) if data.mode == "add" else mod.with_dependents(set(wanted) & _capable(kind))
         if kind == "report":
             mod.check_can_change(access, item, keys, folders_of_report(db, item.id))
         else:

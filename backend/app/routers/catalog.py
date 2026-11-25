@@ -14,7 +14,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core import catalog_sync, powerbi
-from app.core.access_deps import require_global_permission
+from app.core.access_deps import require_connection_permission, require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
@@ -67,6 +67,8 @@ class SyncStatusOut(BaseModel):
     last_sync: Optional[SyncRecordOut] = None
     workspace_ids: list[str]
     interval_hours: Optional[int] = None
+    # Quando a rotina agendada sincroniza de novo (nulo se desligada ou se ainda nao houve rodada)
+    next_run_at: Optional[datetime] = None
     running_job_id: Optional[str] = None
 
 
@@ -104,7 +106,7 @@ def start_sync(
     request: Request,
     connection_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_global_permission("conexao.sincronizar")),
+    current_user: User = Depends(require_connection_permission("conexao.sincronizar")),
 ):
     """Sincroniza o catalogo da conta em segundo plano e devolve o id do trabalho. Se a conta ja
     esta sincronizando, devolve o trabalho que esta rodando."""
@@ -117,7 +119,7 @@ def start_sync(
 def get_sync_job(
     connection_id: int,
     job_id: str,
-    _: User = Depends(require_global_permission("conexao.sincronizar")),
+    _: User = Depends(require_connection_permission("conexao.sincronizar")),
 ):
     job = catalog_sync.get_job(job_id)
     if job is None or job.connection_id != connection_id:
@@ -129,7 +131,7 @@ def get_sync_job(
 def get_sync_status(
     connection_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_global_permission("conexao.sincronizar")),
+    _: User = Depends(require_connection_permission("conexao.sincronizar")),
 ):
     connection = _connection_or_404(db, connection_id)
     last = db.query(CatalogSync).filter(CatalogSync.connection_id == connection_id).order_by(CatalogSync.id.desc()).first()
@@ -138,6 +140,7 @@ def get_sync_status(
         last_sync=_record_out(last) if last else None,
         workspace_ids=catalog_sync.selected_workspace_ids(connection),
         interval_hours=connection.sync_interval_hours,
+        next_run_at=catalog_sync.next_scheduled_at(connection.sync_interval_hours, last.started_at if last else None),
         running_job_id=running.id if running else None,
     )
 
@@ -147,7 +150,7 @@ def update_sync_settings(
     connection_id: int,
     data: SyncSettingsIn,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_global_permission("conexao.sincronizar")),
+    current_user: User = Depends(require_connection_permission("conexao.sincronizar")),
 ):
     """Escolhe quais workspaces importar (vazio = todos) e de quantas em quantas horas sincronizar
     sozinho (nulo = so pelo botao)."""
@@ -173,7 +176,7 @@ def update_sync_settings(
 def list_tenant_workspaces(
     connection_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_global_permission("conexao.sincronizar")),
+    _: User = Depends(require_connection_permission("conexao.sincronizar")),
 ):
     """Os workspaces do tenant, para escolher quais importar na janela da sincronizacao."""
     connection = _connection_or_404(db, connection_id)

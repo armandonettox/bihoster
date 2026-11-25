@@ -15,6 +15,7 @@ from app.core.access_catalog import (
     COLLECTION_VIEW,
     GLOBAL,
     GLOBAL_KEYS,
+    CONNECTION_CAPABLE,
     DATASET_CAPABLE,
     DATASET_SECURITY,
     DATASET_VIEW,
@@ -30,6 +31,7 @@ from app.core.access_catalog import (
 from app.core.folder_tree import inherit_keys, load_parent_map
 from app.core.workspace_deps import is_platform_admin
 from app.models.access_grant import AccessGrant
+from app.models.connection_grant import ConnectionGrant
 from app.models.dataset_grant import DatasetGrant
 from app.models.report_grant import ReportGrant
 from app.models.workspace import GroupMember, Workspace
@@ -47,6 +49,8 @@ class EffectiveAccess:
     by_report: dict[int, set[str]] = field(default_factory=dict)
     # O que foi dado direto a um modelo semantico (id do modelo para as chaves); soma-se ao que as permissoes gerais dao
     by_dataset: dict[int, set[str]] = field(default_factory=dict)
+    # O que foi dado direto a uma conta do Power BI (id da conta para as chaves); soma-se ao que as permissoes gerais dao
+    by_connection: dict[int, set[str]] = field(default_factory=dict)
 
     def has_global(self, key: str) -> bool:
         return self.is_admin or key in self.global_keys
@@ -86,6 +90,20 @@ class EffectiveAccess:
 
     def has_in_dataset(self, key: str, dataset_id: int) -> bool:
         return self.is_admin or key in self.dataset_keys(dataset_id)
+
+    def connection_keys(self, connection_id: int) -> set[str]:
+        """O que a pessoa pode numa conta: o dado direto nela somado ao que as permissoes gerais dao (quem tem
+        "sincronizar" geral sincroniza todas). So soma."""
+        keys = set(self.by_connection.get(connection_id, ()))
+        keys |= {key for key in self.global_keys if key in CONNECTION_CAPABLE}
+        return keys
+
+    def has_in_connection(self, key: str, connection_id: int) -> bool:
+        return self.is_admin or key in self.connection_keys(connection_id)
+
+    def connections_with(self, key: str) -> set[int]:
+        """Contas em que a pessoa tem o item por concessao direta (nao inclui o que vem das permissoes gerais)."""
+        return {cid for cid, keys in self.by_connection.items() if key in keys}
 
     def datasets_with(self, key: str) -> set[int]:
         """Modelos em que a pessoa tem o item por concessao direta (nao inclui o que vem das permissoes gerais)."""
@@ -157,6 +175,17 @@ def effective_access(db: Session, user_id: int) -> EffectiveAccess:
         if key in DATASET_CAPABLE:
             raw_dataset.setdefault(dataset_id, set()).add(key)
     result.by_dataset = {did: set(with_implied_dataset(keys)) for did, keys in raw_dataset.items()}
+
+    # Concessoes dadas direto a contas do Power BI
+    raw_connection: dict[int, set[str]] = {}
+    for connection_id, key in (
+        db.query(ConnectionGrant.connection_id, ConnectionGrant.permission_key)
+        .filter(or_(ConnectionGrant.user_id == user_id, ConnectionGrant.group_id.in_(my_groups)))
+        .all()
+    ):
+        if key in CONNECTION_CAPABLE:
+            raw_connection.setdefault(connection_id, set()).add(key)
+    result.by_connection = raw_connection
     return result
 
 

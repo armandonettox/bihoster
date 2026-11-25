@@ -213,6 +213,7 @@ export default function CatalogSyncModal({
 
         <div className="card" style={{ padding: 12, fontSize: 13 }}>
           <div style={{ fontWeight: 600 }}>Última sincronização</div>
+          {status?.next_run_at && <div className="rpt-muted">Próxima automática: {formatDateTime(status.next_run_at)}</div>}
           {last ? (
             <>
               <div>

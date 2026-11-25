@@ -64,6 +64,7 @@ def my_access(db: Session = Depends(get_db), current_user: User = Depends(get_cu
         workspace_permissions={wid: sorted(keys) for wid, keys in access.by_workspace.items()},
         report_permissions={rid: sorted(keys) for rid, keys in access.by_report.items()},
         dataset_permissions={did: sorted(keys) for did, keys in access.by_dataset.items()},
+        connection_permissions={cid: sorted(keys) for cid, keys in access.by_connection.items()},
         tv_access=tv_access.has_any_access(db, current_user.id),
     )
 

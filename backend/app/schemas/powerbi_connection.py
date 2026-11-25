@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Optional
 
 from pydantic import BaseModel, Field
@@ -25,6 +26,11 @@ class PowerBIConnectionOut(BaseModel):
     tenant_id: str
     client_id: str
     client_secret_configured: bool
+    # Sincronizacao automatica do catalogo: de quantas em quantas horas (nulo = so pelo botao, o padrao), quando foi a ultima
+    # rodada e quando e a proxima (nulo se desligada ou se ainda nao houve rodada)
+    sync_interval_hours: Optional[int] = None
+    last_sync_at: Optional[datetime] = None
+    next_sync_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

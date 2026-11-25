@@ -130,6 +130,8 @@ class MyAccessOut(BaseModel):
     report_permissions: dict[int, list[str]] = {}
     # O mesmo para modelos semanticos (id do modelo para as chaves)
     dataset_permissions: dict[int, list[str]] = {}
+    # O mesmo para contas do Power BI (id da conta para as chaves)
+    connection_permissions: dict[int, list[str]] = {}
     # Cria TVs ou tem acesso a alguma: mostra o modulo Modo TV (o acesso de cada TV e por TV, nao entra nas listas acima)
     tv_access: bool = False
 

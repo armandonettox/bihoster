@@ -6,6 +6,11 @@ export interface PowerBIConnection {
   tenant_id: string;
   client_id: string;
   client_secret_configured: boolean;
+  /** Sincronizacao automatica do catalogo: de quantas em quantas horas (nulo = so pelo botao, o padrao) */
+  sync_interval_hours?: number | null;
+  last_sync_at?: string | null;
+  /** Nulo se desligada ou se ainda nao houve rodada */
+  next_sync_at?: string | null;
 }
 
 export interface PowerBIConnectionInput {
@@ -55,6 +60,7 @@ export interface SyncStatus {
   workspace_ids: string[];
   /** Nulo = so pelo botao */
   interval_hours: number | null;
+  next_run_at?: string | null;
   running_job_id: string | null;
 }
 

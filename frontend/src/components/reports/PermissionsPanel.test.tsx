@@ -201,3 +201,20 @@ describe("PermissionsPanel", () => {
     expect(screen.getByRole("dialog").getAttribute("aria-label")).toMatch(/do modelo Modelo 1/);
   });
 });
+
+
+describe("PermissionsPanel de uma conta do Power BI", () => {
+  it("nao oferece convite por e-mail e usa o nome da conta no dialogo", async () => {
+    mocks.getPanel.mockResolvedValue({ ...panel([]), item: { kind: "connection", id: 4, name: "Conta A", subtitle: null } });
+    render(<PermissionsPanel kind="connection" itemId={4} itemName="Conta A" onClose={() => {}} />);
+    const campo = await screen.findByRole("combobox", { name: "Adicionar pessoas ou grupos" });
+    await waitFor(() => expect((campo as HTMLInputElement).disabled).toBe(false));
+
+    fireEvent.change(campo, { target: { value: "nova@example.com" } });
+    await waitFor(() => expect(mocks.searchSubjects).toHaveBeenCalled());
+
+    expect(screen.queryByRole("option", { name: /Convidar/ })).toBeNull();
+    expect(screen.getByRole("dialog").getAttribute("aria-label")).toMatch(/da conta Conta A/);
+    expect(mocks.getPanel).toHaveBeenCalledWith("connection", 4);
+  });
+});

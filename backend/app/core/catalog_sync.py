@@ -19,7 +19,7 @@ import threading
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
 from sqlalchemy.orm import Session
@@ -374,6 +374,15 @@ def _run_job(job: SyncJob) -> None:
             job.status, job.message = "error", f"Erro inesperado: {type(exc).__name__}"
         finally:
             db.close()
+
+
+def next_scheduled_at(interval_hours: int | None, last_started_at: datetime | None) -> datetime | None:
+    """Quando a rotina agendada deve sincronizar de novo: a ultima rodada somada ao intervalo. Sem intervalo (o padrao) nunca
+    sincroniza sozinha; com intervalo e sem rodada nenhuma, e na proxima verificacao da rotina (devolve None)."""
+    if not interval_hours or interval_hours < 1 or last_started_at is None:
+        return None
+    started = last_started_at if last_started_at.tzinfo else last_started_at.replace(tzinfo=timezone.utc)
+    return started + timedelta(hours=interval_hours)
 
 
 def run_scheduled_once() -> int:

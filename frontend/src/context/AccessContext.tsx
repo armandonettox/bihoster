@@ -13,6 +13,8 @@ export interface AccessValue {
   canIn: (key: string, workspaceId: number | null | undefined) => boolean;
   /** Tem esta permissão em alguma coleção? */
   canInAny: (key: string) => boolean;
+  /** Tem esta permissão nesta conta do Power BI? Vale o que foi dado direto nela ou a permissão geral */
+  canInConnection: (key: string, connectionId: number | null | undefined) => boolean;
   /** Tem esta permissão neste relatório? Vale o que foi dado direto nele ou o que vem da coleção dele */
   canInReport: (key: string, reportId: number | null | undefined, workspaceId: number | null | undefined) => boolean;
   /** Tem alguma destas permissões do sistema todo? */
@@ -45,6 +47,9 @@ export function buildAccess(
   const hasItemGrants =
     Object.values(me?.report_permissions ?? {}).some((keys) => keys.includes("relatorio.ver")) ||
     Object.values(me?.dataset_permissions ?? {}).some((keys) => keys.includes("modelo.ver"));
+  const byConnection = new Map<number, Set<string>>(
+    Object.entries(me?.connection_permissions ?? {}).map(([id, keys]) => [Number(id), new Set(keys)]),
+  );
   const can = (key: string) => isAdmin || globalKeys.has(key);
   return {
     loading,
@@ -52,6 +57,7 @@ export function buildAccess(
     can,
     canIn: (key, workspaceId) => isAdmin || (workspaceId != null && (byWorkspace.get(workspaceId)?.has(key) ?? false)),
     canInAny: (key) => isAdmin || [...byWorkspace.values()].some((keys) => keys.has(key)),
+    canInConnection: (key, connectionId) => can(key) || (connectionId != null && (byConnection.get(connectionId)?.has(key) ?? false)),
     canInReport: (key, reportId, workspaceId) =>
       isAdmin ||
       (workspaceId != null && (byWorkspace.get(workspaceId)?.has(key) ?? false)) ||

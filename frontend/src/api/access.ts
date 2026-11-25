@@ -43,6 +43,8 @@ export interface MyAccess {
   report_permissions?: Record<string, string[]>;
   /** O mesmo para modelos semanticos (id do modelo para as chaves) */
   dataset_permissions?: Record<string, string[]>;
+  /** O mesmo para contas do Power BI (id da conta para as chaves) */
+  connection_permissions?: Record<string, string[]>;
   /** Cria TVs ou tem acesso a alguma: mostra o modulo Modo TV (o acesso de cada TV e por TV) */
   tv_access?: boolean;
 }

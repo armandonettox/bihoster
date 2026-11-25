@@ -1,6 +1,6 @@
 import { api } from "./client";
 
-export type PanelKind = "report" | "dataset";
+export type PanelKind = "report" | "dataset" | "connection";
 export type SubjectKind = "user" | "group";
 
 export interface Origin {

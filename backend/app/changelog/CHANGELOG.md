@@ -12,6 +12,12 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.52.0 - 2026-11-25 - Permissão por conta do Power BI e agenda da sincronização à vista
+- A permissão **Sincronizar o catálogo** agora pode ser dada **só numa conta do Power BI**, a grupos e a pessoas, além de continuar valendo em todas as contas quando é dada no geral. Quem recebe numa conta só sincroniza **aquela** conta: o botão Sincronizar, o acompanhamento, a escolha dos workspaces e a agenda dessa conta passam a conferir a permissão dela, e as outras contas continuam fechadas.
+- Dá para gerenciar isso no cartão da conta (menu **"..." > Gerenciar permissões**, para quem edita permissões) e também em **Gerenciar usuários**, na seção nova **Contas do Power BI** de cada pessoa e de cada grupo, com **Adicionar conta** por busca. É o mesmo dado nos dois lugares. Só se dá o que se tem, e o grupo Administradores não precisa de linhas. Contas **não** têm convite por e-mail: a pessoa precisa já ter conta no portal.
+- Cada cartão de conta mostra a **agenda da sincronização automática**: "desligada" (o padrão) ou "a cada 6 horas · próxima em ... · última em ...". A janela Sincronizar mostra a **próxima rodada automática**. A rotina de fundo continua **desligada por padrão**: só sincroniza sozinha a conta em que alguém escolheu um intervalo, e um erro numa rodada não derruba a rotina.
+- Excluir uma conta, uma pessoa ou um grupo apaga as permissões de conta que eles tinham.
+
 ## 1.51.0 - 2026-11-25 - Módulo Relatórios refeito, com permissões de modelo semântico
 - O **Catálogo** e a tela **Acessos aos relatórios** viraram **um módulo só, Relatórios**, parecido com o Power BI Service. A entrada é a **lista dos workspaces do tenant** (nome, quantos relatórios e modelos, última sincronização) com busca; ao abrir um, aparecem os **relatórios e os modelos semânticos** dele numa tabela só. O endereço `/catalog` continua valendo e `/report-access` leva para ele.
 - Dentro do workspace há **um botão principal, Sincronizar**, filtros por tipo (Todos, Relatórios, Modelos semânticos), busca instantânea e as colunas Nome, Tipo, Pastas, Atualizado, **Acesso** (pilha de rostos com a contagem) e **RLS**. A coluna de próxima atualização só aparece quando o sistema já tem a informação. Ao passar o mouse numa linha surgem **Abrir** e **Compartilhar**, e o menu **"..."** tem Gerenciar permissões, Segurança dos dados, Pastas, **Atualizar agora** e **Histórico de atualização** (nos modelos).

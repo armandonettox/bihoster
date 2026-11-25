@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   putSubject: vi.fn(),
   getKindCatalog: vi.fn(),
   listItems: vi.fn(),
+  listConnections: vi.fn(),
   getPerson: vi.fn(),
   showToast: vi.fn(),
 }));
@@ -17,6 +18,7 @@ vi.mock("../api/accessPanel", () => ({
   getKindCatalog: mocks.getKindCatalog,
 }));
 vi.mock("../api/workspaceCatalog", () => ({ listItems: mocks.listItems }));
+vi.mock("../api/powerbiConnections", () => ({ listConnections: mocks.listConnections }));
 vi.mock("../api/reportAccess", () => ({ getPerson: mocks.getPerson }));
 vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 
@@ -126,5 +128,38 @@ describe("SubjectItemGrants", () => {
 
     expect(await screen.findByText("Segunda pagina")).toBeTruthy();
     expect(screen.getByLabelText("Buscar em Relatórios")).toBeTruthy();
+  });
+});
+
+
+describe("SubjectItemGrants: contas do Power BI", () => {
+  it("tem a secao de contas e adicionar uma busca na lista de contas e da o preset da conta", async () => {
+    mocks.getKindCatalog.mockImplementation(async (kind: string) => ({
+      presets: kind === "connection" ? [{ key: "sincronizar", label: "Sincronizar", permissions: ["conexao.sincronizar"] }] : presets,
+      permissions: [],
+    }));
+    mocks.listConnections.mockResolvedValue([
+      { id: 4, name: "Empresa Principal", tenant_id: "tenant-x", client_id: "c", client_secret_configured: true },
+      { id: 5, name: "Outra", tenant_id: "tenant-y", client_id: "c", client_secret_configured: true },
+    ]);
+    render(<SubjectItemGrants subjectKind="user" subjectId={5} />);
+    await screen.findByLabelText("Acesso a Resultado");
+
+    expect(screen.getByText("Nenhuma conta dada direto.")).toBeTruthy();
+    fireEvent.change(screen.getByRole("combobox", { name: "Adicionar conta" }), { target: { value: "empres" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Empresa Principal/ }));
+
+    await waitFor(() => expect(mocks.putSubject).toHaveBeenCalledWith("connection", 4, "user", 5, { preset: "sincronizar" }));
+    expect(mocks.listItems).not.toHaveBeenCalledWith(expect.objectContaining({ kind: "connection" }));
+  });
+
+  it("sem acesso a lista de contas avisa em vez de falhar calado", async () => {
+    mocks.listConnections.mockRejectedValue(new Error("403"));
+    render(<SubjectItemGrants subjectKind="user" subjectId={5} />);
+    await screen.findByLabelText("Acesso a Resultado");
+
+    fireEvent.change(screen.getByRole("combobox", { name: "Adicionar conta" }), { target: { value: "x" } });
+
+    expect(await screen.findByText(/lista de contas/)).toBeTruthy();
   });
 });

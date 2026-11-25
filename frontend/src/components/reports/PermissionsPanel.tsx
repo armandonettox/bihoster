@@ -150,7 +150,8 @@ export default function PermissionsPanel({
   }
 
   const trimmed = query.trim();
-  const emailOption = EMAIL.test(trimmed) && !suggestions.some((s) => s.email?.toLowerCase() === trimmed.toLowerCase());
+  // Contas do Power BI nao tem convite por e-mail: a pessoa precisa ja ter conta no portal
+  const emailOption = kind !== "connection" && EMAIL.test(trimmed) && !suggestions.some((s) => s.email?.toLowerCase() === trimmed.toLowerCase());
   const options: { key: string; label: string; sub?: string; subject?: Subject; email?: string }[] = [
     ...suggestions.map((s) => ({ key: `${s.kind}:${s.id}`, label: s.name, sub: s.kind === "group" ? "Grupo" : s.email ?? "", subject: s })),
     ...(emailOption ? [{ key: `email:${trimmed}`, label: `Convidar ${trimmed}`, sub: "Cria um convite com este acesso", email: trimmed }] : []),
@@ -178,7 +179,7 @@ export default function PermissionsPanel({
     void apply(entry, { permissions: next }, `Acesso de ${entry.name} mudou.`);
   }
 
-  const title = kind === "report" ? "relatório" : "modelo";
+  const title = kind === "report" ? "relatório" : kind === "dataset" ? "modelo" : "conta";
 
   return (
     <>
@@ -201,7 +202,7 @@ export default function PermissionsPanel({
               role="combobox"
               aria-expanded={options.length > 0}
               aria-label="Adicionar pessoas ou grupos"
-              placeholder="Adicionar pessoas ou grupos (nome ou e-mail)"
+              placeholder={kind === "connection" ? "Adicionar pessoas ou grupos" : "Adicionar pessoas ou grupos (nome ou e-mail)"}
               value={query}
               disabled={busy || !panel}
               onChange={(e) => setQuery(e.target.value)}

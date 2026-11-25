@@ -27,3 +27,20 @@ describe("canInReport", () => {
     expect(acesso({}).canInReport("relatorio.exportar", null, null)).toBe(false);
   });
 });
+
+
+describe("canInConnection", () => {
+  it("vale o que foi dado direto na conta e so nela", () => {
+    const access = acesso({ connection_permissions: { "3": ["conexao.sincronizar"] } });
+
+    expect(access.canInConnection("conexao.sincronizar", 3)).toBe(true);
+    expect(access.canInConnection("conexao.sincronizar", 4)).toBe(false);
+    expect(access.can("conexao.sincronizar")).toBe(false);
+  });
+
+  it("a permissao geral vale em qualquer conta e o administrador pode tudo", () => {
+    expect(acesso({ global_permissions: ["conexao.sincronizar"] }).canInConnection("conexao.sincronizar", 9)).toBe(true);
+    expect(acesso({ is_admin: true }).canInConnection("conexao.sincronizar", 9)).toBe(true);
+    expect(acesso({}).canInConnection("conexao.sincronizar", null)).toBe(false);
+  });
+});

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import * as panelApi from "../api/accessPanel";
 import type { KindCatalog, PanelKind, SubjectItem, SubjectKind } from "../api/accessPanel";
 import { extractErrorMessage } from "../api/client";
+import * as connectionsApi from "../api/powerbiConnections";
 import * as reportAccessApi from "../api/reportAccess";
 import type { Person } from "../api/reportAccess";
 import * as catalogApi from "../api/workspaceCatalog";
@@ -29,6 +30,7 @@ function useDebounced<T>(value: T, delayMs: number): T {
 const TITLES: Record<PanelKind, { section: string; add: string; empty: string }> = {
   report: { section: "Relatórios", add: "Adicionar relatório", empty: "Nenhum relatório dado direto." },
   dataset: { section: "Modelos semânticos", add: "Adicionar modelo", empty: "Nenhum modelo dado direto." },
+  connection: { section: "Contas do Power BI", add: "Adicionar conta", empty: "Nenhuma conta dada direto." },
 };
 
 function ItemSection({
@@ -92,14 +94,23 @@ function ItemSection({
       return;
     }
     let cancelled = false;
-    catalogApi
-      .listItems({ kind, search: text, pageSize: 8 })
-      .then((result) => {
+    // Contas vem da lista de contas (precisa ver as conexoes); relatorios e modelos, do catalogo
+    const source: Promise<CatalogItem[]> =
+      kind === "connection"
+        ? connectionsApi.listConnections().then((list) =>
+            list
+              .filter((c) => c.name.toLowerCase().includes(text.toLowerCase()))
+              .slice(0, 8)
+              .map((c) => ({ id: c.id, name: c.name, pbi_workspace_name: c.tenant_id }) as CatalogItem),
+          )
+        : catalogApi.listItems({ kind, search: text, pageSize: 8 }).then((result) => result.items);
+    source
+      .then((found) => {
         if (cancelled) return;
-        setOptions(result.items);
+        setOptions(found);
         setAddError(null);
       })
-      .catch(() => !cancelled && setAddError("Você não tem acesso ao catálogo para buscar."));
+      .catch(() => !cancelled && setAddError(kind === "connection" ? "Você não tem acesso à lista de contas para buscar." : "Você não tem acesso ao catálogo para buscar."));
     return () => {
       cancelled = true;
     };
@@ -295,9 +306,9 @@ export default function SubjectItemGrants({ subjectKind, subjectId, readOnly = f
 
   return (
     <div className="subject-item-grants">
-      <h3 style={{ margin: "18px 0 0", fontSize: 15 }}>Relatórios e modelos</h3>
+      <h3 style={{ margin: "18px 0 0", fontSize: 15 }}>Relatórios, modelos e contas</h3>
       <p className="access-intro" style={{ margin: "4px 0 0" }}>
-        O que foi dado direto num relatório ou modelo. É o mesmo que o painel Gerenciar permissões do módulo Relatórios mostra.
+        O que foi dado direto num relatório, modelo ou conta do Power BI. É o mesmo que o painel Gerenciar permissões mostra.
       </p>
       {undo && (
         <div className="rpt-undo" role="status" style={{ marginTop: 8 }}>
@@ -321,6 +332,7 @@ export default function SubjectItemGrants({ subjectKind, subjectId, readOnly = f
       )}
       <ItemSection kind="report" subjectKind={subjectKind} subjectId={subjectId} readOnly={readOnly} onUndo={offer} />
       <ItemSection kind="dataset" subjectKind={subjectKind} subjectId={subjectId} readOnly={readOnly} onUndo={offer} />
+      <ItemSection kind="connection" subjectKind={subjectKind} subjectId={subjectId} readOnly={readOnly} onUndo={offer} />
       {subjectKind === "user" && <PersonVision userId={subjectId} />}
     </div>
   );

@@ -71,7 +71,7 @@ export default function WorkspaceView({ workspace, onBack, onChanged }: { worksp
   const debouncedSearch = useDebounced(search, 250);
   const requestId = useRef(0);
 
-  const canSync = access.can("conexao.sincronizar") && workspace.connection_id != null;
+  const canSync = workspace.connection_id != null && access.canInConnection("conexao.sincronizar", workspace.connection_id);
 
   const reload = useCallback(() => setReloadKey((n) => n + 1), []);
 

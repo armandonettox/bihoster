@@ -40,6 +40,8 @@ REPORT = "report"
 # Escopo dos itens que so existem num modelo semantico (ver, atualizar, historico, compartilhar). `modelo.seguranca` e global E
 # pode ser dado so num modelo (DATASET_CAPABLE).
 DATASET = "dataset"
+# `conexao.sincronizar` e global E pode ser dado so numa conta do Power BI (CONNECTION_CAPABLE).
+CONNECTION = "connection"
 
 COLLECTION_VIEW = "colecao.ver"
 REPORT_VIEW = "relatorio.ver"
@@ -335,6 +337,9 @@ def report_requires(key: str) -> tuple[str, ...]:
         return ()
     return tuple(REPORT_VIEW if required == COLLECTION_VIEW else required for required in permission.requires)
 
+
+CONNECTION_SYNC = "conexao.sincronizar"
+CONNECTION_CAPABLE: frozenset[str] = frozenset({CONNECTION_SYNC})
 
 DATASET_CAPABLE: frozenset[str] = frozenset({DATASET_VIEW, "modelo.atualizar", "modelo.historico", DATASET_SECURITY, DATASET_SHARE})
 

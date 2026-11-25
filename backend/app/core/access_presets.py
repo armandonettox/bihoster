@@ -19,11 +19,15 @@ PRESETS: dict[str, dict[str, tuple[str, ...]]] = {
         "atualizar": ("modelo.ver", "modelo.atualizar", "modelo.historico"),
         "gerenciar": ("modelo.ver", "modelo.atualizar", "modelo.historico", "modelo.seguranca", "modelo.compartilhar"),
     },
+    "connection": {
+        "sincronizar": ("conexao.sincronizar",),
+    },
 }
 
 LABELS: dict[str, dict[str, str]] = {
     "report": {"ver": "Ver", "exportar": "Ver e exportar", "gerenciar": "Gerenciar"},
     "dataset": {"ver": "Ver", "atualizar": "Ver e atualizar", "gerenciar": "Gerenciar"},
+    "connection": {"sincronizar": "Sincronizar"},
 }
 
 

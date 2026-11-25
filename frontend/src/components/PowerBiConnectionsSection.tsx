@@ -9,8 +9,21 @@ import KebabMenu from "./KebabMenu";
 import MenuIcon from "./MenuIcon";
 import Modal from "./Modal";
 import CatalogSyncModal from "./CatalogSyncModal";
+import PermissionsPanel from "./reports/PermissionsPanel";
+import { formatDateTime } from "../utils/datetime";
 import ConfirmDialog from "./ConfirmDialog";
 import { SkeletonList } from "./Skeleton";
+
+/** "Sincronização automática: desligada" ou "a cada 6 horas · próxima em 25/11 14:00": a agenda aparece no cartão, sem abrir
+ * a janela. Fica desligada por padrão; quem liga é a janela Sincronizar. */
+function scheduleText(connection: PowerBIConnection): string {
+  const hours = connection.sync_interval_hours;
+  if (!hours) return "Sincronização automática: desligada";
+  const every = hours === 1 ? "a cada hora" : hours === 24 ? "todos os dias" : hours === 168 ? "toda semana" : `a cada ${hours} horas`;
+  const next = connection.next_sync_at ? `próxima em ${formatDateTime(connection.next_sync_at)}` : "próxima na verificação seguinte";
+  const last = connection.last_sync_at ? ` · última em ${formatDateTime(connection.last_sync_at)}` : "";
+  return `Sincronização automática: ${every} · ${next}${last}`;
+}
 
 function ConnectionForm({
   connection,
@@ -135,7 +148,9 @@ export default function PowerBiConnectionsSection() {
   const [testingId, setTestingId] = useState<number | null>(null);
   const [syncing, setSyncing] = useState<PowerBIConnection | null>(null);
   const { showToast } = useToast();
-  const canSync = useAccess().can("conexao.sincronizar");
+  const access = useAccess();
+  const canManageAccess = access.can("permissoes.editar");
+  const [managing, setManaging] = useState<PowerBIConnection | null>(null);
 
   async function load() {
     setConnections(await powerbiConnectionsApi.listConnections());
@@ -200,6 +215,9 @@ export default function PowerBiConnectionsSection() {
                 <div style={{ fontSize: 12, color: "var(--color-text-muted)" }}>
                   Tenant {connection.tenant_id} · Client {connection.client_id}
                 </div>
+                <div style={{ fontSize: 12, color: "var(--color-text-muted)", marginTop: 2 }} data-testid={`agenda-${connection.id}`}>
+                  {scheduleText(connection)}
+                </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <button
@@ -209,7 +227,7 @@ export default function PowerBiConnectionsSection() {
                 >
                   {testingId === connection.id ? "Testando..." : "Testar conexao"}
                 </button>
-                {canSync && (
+                {access.canInConnection("conexao.sincronizar", connection.id) && (
                   <button className="btn btn-secondary btn-sm" onClick={() => setSyncing(connection)}>
                     Sincronizar
                   </button>
@@ -227,6 +245,18 @@ export default function PowerBiConnectionsSection() {
                         <MenuIcon name="edit" />
                         Editar
                       </button>
+                      {canManageAccess && (
+                        <button
+                          className="kebab-menu-item kebab-menu-item-with-icon"
+                          onClick={() => {
+                            close();
+                            setManaging(connection);
+                          }}
+                        >
+                          <MenuIcon name="visibility" />
+                          Gerenciar permissões
+                        </button>
+                      )}
                       <button
                         className="kebab-menu-item kebab-menu-item-with-icon kebab-menu-item-danger"
                         onClick={() => {
@@ -246,7 +276,8 @@ export default function PowerBiConnectionsSection() {
         </div>
       )}
 
-      {syncing && <CatalogSyncModal connection={syncing} onClose={() => setSyncing(null)} />}
+      {syncing && <CatalogSyncModal connection={syncing} onClose={() => setSyncing(null)} onFinished={load} />}
+      {managing && <PermissionsPanel kind="connection" itemId={managing.id} itemName={managing.name} onClose={() => setManaging(null)} />}
       {creating && <ConnectionForm onSaved={load} onClose={() => setCreating(false)} />}
       {editingConnection && (
         <ConnectionForm connection={editingConnection} onSaved={load} onClose={() => setEditingConnection(null)} />

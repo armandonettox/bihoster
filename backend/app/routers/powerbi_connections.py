@@ -5,6 +5,11 @@ from sqlalchemy.orm import Session
 from app.core import powerbi
 from app.core.database import get_db
 from app.core.access_deps import require_global_permission
+from sqlalchemy import func
+
+from app.core.catalog_sync import next_scheduled_at
+from app.models.catalog_sync import CatalogSync
+from app.models.connection_grant import ConnectionGrant
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.routers import powerbi as embed_router
@@ -28,20 +33,29 @@ def _invalidate_connection_caches(db: Session, connection_id: int) -> None:
         embed_router.invalidate_embed_cache(report.collection_id, report.id)
 
 
-def _to_out(connection: PowerBIConnection) -> PowerBIConnectionOut:
+def _to_out(connection: PowerBIConnection, last_sync_at=None) -> PowerBIConnectionOut:
     return PowerBIConnectionOut(
         id=connection.id,
         name=connection.name,
         tenant_id=connection.tenant_id,
         client_id=connection.client_id,
         client_secret_configured=bool(connection.client_secret),
+        sync_interval_hours=connection.sync_interval_hours,
+        last_sync_at=last_sync_at,
+        next_sync_at=next_scheduled_at(connection.sync_interval_hours, last_sync_at),
     )
+
+
+def _last_syncs(db: Session) -> dict[int, object]:
+    """Quando comecou a ultima rodada de cada conta (uma consulta so)."""
+    return {cid: started for cid, started in db.query(CatalogSync.connection_id, func.max(CatalogSync.started_at)).group_by(CatalogSync.connection_id)}
 
 
 @router.get("/", response_model=list[PowerBIConnectionOut])
 def list_connections(db: Session = Depends(get_db), _=Depends(require_global_permission("conexao.ver"))):
     connections = db.query(PowerBIConnection).order_by(PowerBIConnection.name).all()
-    return [_to_out(c) for c in connections]
+    last = _last_syncs(db)
+    return [_to_out(c, last.get(c.id)) for c in connections]
 
 
 @router.post("/", response_model=PowerBIConnectionOut, status_code=status.HTTP_201_CREATED)
@@ -87,6 +101,7 @@ def delete_connection(connection_id: int, db: Session = Depends(get_db), _=Depen
             status_code=400,
             detail=f"Essa conta esta em uso por {in_use} relatorio(s) -- edite ou exclua esses relatorios primeiro",
         )
+    db.query(ConnectionGrant).filter(ConnectionGrant.connection_id == connection_id).delete(synchronize_session=False)
     db.delete(connection)
     try:
         db.commit()
