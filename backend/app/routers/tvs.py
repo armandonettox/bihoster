@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, UploadFi
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.orm import Session
 
-from app.core import powerbi, tv as tv_core, tv_access
+from app.core import powerbi, rls_output, tv as tv_core, tv_access
 from app.core.access_deps import require_global_permission
 from app.core.access_engine import effective_access
 from app.core.audit import log_action
@@ -57,6 +57,8 @@ class ItemIn(BaseModel):
     image_url: Optional[str] = None
     video_url: Optional[str] = None
     sound: bool = False
+    # Relatorio com RLS: a funcao que a TV usa (so vale com a chave geral ligada, e a pessoa precisa te-la)
+    rls_role: Optional[str] = Field(default=None, max_length=200)
 
 
 class ItemsIn(BaseModel):
@@ -75,6 +77,7 @@ class ItemOut(BaseModel):
     image_url: Optional[str] = None
     video_id: Optional[str] = None
     sound: bool = False
+    rls_role: Optional[str] = None
 
 
 class TvCreate(BaseModel):
@@ -240,6 +243,7 @@ def _item_out(db: Session, item: TvItem) -> ItemOut:
         image_url=item.image_url,
         video_id=item.video_id,
         sound=bool(item.sound),
+        rls_role=item.rls_role,
     )
 
 
@@ -414,10 +418,31 @@ def delete_tv(tv_id: int, db: Session = Depends(get_db), current_user: User = De
     log_action(db, action="delete_tv", entity="tv", user_id=current_user.id, entity_id=str(tv_id), details=name)
 
 
+class ReportRlsOut(BaseModel):
+    rls: bool
+    switch_on: bool
+    roles: list[str]
+
+
+@router.get("/report-rls/{report_id}", response_model=ReportRlsOut)
+def report_rls(report_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """Para a tela de montar a TV: o relatorio tem RLS? a chave geral esta ligada? e quais funcoes a pessoa tem nele (a TV so
+    pode usar uma delas)."""
+    report = db.query(Report).get(report_id)
+    visible = _visible_workspace_ids(db, current_user)
+    if report is None or (visible is not None and report.collection_id not in visible):
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    if not _is_rls(db, report):
+        return ReportRlsOut(rls=False, switch_on=rls_output.switch_on(db), roles=[])
+    return ReportRlsOut(rls=True, switch_on=rls_output.switch_on(db), roles=rls_output.roles_held_by(db, current_user, report))
+
+
 @router.put("/{tv_id}/items", response_model=TvOut)
 def replace_items(tv_id: int, data: ItemsIn, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     tv, level = _require_level(db, current_user, tv_id, tv_access.MODIFY)
     already = {item.report_id for item in tv.items if item.report_id}
+    # (relatorio, funcao) que ja estavam na TV e quem os escolheu: manter o mesmo item nao exige que quem edita tenha a funcao
+    kept_roles = {(item.report_id, item.rls_role): item.rls_role_user_id for item in tv.items if item.rls_role}
     visible = _visible_workspace_ids(db, current_user)
     old_images = {item.image_url for item in tv.items if item.image_url}
 
@@ -435,11 +460,23 @@ def replace_items(tv_id: int, data: ItemsIn, db: Session = Depends(get_db), curr
             if report.id not in already:
                 if visible is not None and report.collection_id not in visible:
                     raise HTTPException(status_code=403, detail="Voce nao tem acesso ao relatorio escolhido")
-                if _is_rls(db, report):
+            if _is_rls(db, report):
+                role = (entry.rls_role or "").strip()
+                if not rls_output.switch_on(db):
                     raise HTTPException(
                         status_code=400,
-                        detail=f"O relatorio {report.name} tem seguranca por linha (RLS) e nao pode passar na TV.",
+                        detail=f"O relatorio {report.name} tem seguranca por linha (RLS) e nao pode passar na TV. " + rls_output.SWITCH_OFF_MESSAGE,
                     )
+                if not role:
+                    raise HTTPException(status_code=400, detail=f"Escolha a funcao de seguranca que a TV usa para o relatorio {report.name}.")
+                if (report.id, role) in kept_roles and kept_roles[(report.id, role)] is not None:
+                    builder_id = kept_roles[(report.id, role)]  # o mesmo item de antes: continua com quem o escolheu
+                else:
+                    # Funcao nova: so entre as que quem monta tem (administrador tambem: a TV nunca mostra mais que o montador ve)
+                    if role not in rls_output.roles_held_by(db, current_user, report):
+                        raise HTTPException(status_code=403, detail=f"Voce nao tem a funcao {role} neste relatorio, entao nao pode escolhe-la para a TV.")
+                    builder_id = current_user.id
+                row.rls_role, row.rls_role_user_id = role, builder_id
             row.report_id, row.page_name = report.id, entry.page_name
         elif entry.kind == "image":
             url = entry.image_url or ""
@@ -628,6 +665,10 @@ def item_embed(item_id: int, db: Session = Depends(get_db), tv: Tv = Depends(_de
         raise HTTPException(status_code=404, detail="Item nao encontrado")
     workspace_id = report.collection_id
     embed_router._prune_expired(embed_router._embed_cache)
+    # Item com funcao de RLS: a TV so mostra com a chave geral ligada, a funcao escolhida e quem a escolheu ainda a tendo.
+    # O token leva essa funcao e um nome neutro (nunca o e-mail de ninguem), e a funcao faz parte da chave do cache.
+    if item.rls_role:
+        return _rls_item_embed(db, tv, item, report)
     cached = embed_router._cached_embed_config(workspace_id, report.id, 0)
     if cached:
         return cached
@@ -636,4 +677,32 @@ def item_embed(item_id: int, db: Session = Depends(get_db), tv: Tv = Depends(_de
     if needs_identity:
         raise HTTPException(status_code=400, detail="Relatorios com seguranca por linha (RLS) nao podem passar na TV.")
     embed_router._store_embed_config(workspace_id, report.id, 0, config, needs_identity)
+    return config
+
+
+def _rls_item_embed(db: Session, tv: Tv, item: TvItem, report: Report) -> EmbedConfig:
+    """O embed de um item de TV com RLS. Falha fechada: qualquer condicao que faltar responde 403 e nao gera token."""
+    from app.core import dataset_security
+    from app.models.user import User as UserModel
+
+    if not rls_output.switch_on(db):
+        raise HTTPException(status_code=403, detail="Relatorio com seguranca por linha nao passa na TV com a chave desligada.")
+    builder = db.get(UserModel, item.rls_role_user_id) if item.rls_role_user_id else None
+    if builder is None or item.rls_role not in rls_output.roles_held_by(db, builder, report):
+        raise HTTPException(status_code=403, detail="Quem escolheu a funcao deste item nao a tem mais: o item nao passa na TV.")
+    connection = embed_router._get_connection_or_error(db, report)
+    key = (report.collection_id, report.id, ("tv", item.rls_role))
+    cached = embed_router._embed_cache.get(key)
+    if cached:
+        return cached[1]
+    config, needs_identity = embed_router._generate_embed_config(
+        connection, report.collection_id, report, dataset_security.SHARED_USERNAME, [item.rls_role]
+    )
+    if not needs_identity:  # o Power BI diz que nao ha mais RLS: o token comum serve, sem funcao
+        return config
+    embed_router._store_embed_config_keyed(key, config)
+    log_action(
+        db, action="rls_output_tv", entity="tv", user_id=None, entity_id=str(tv.id),
+        details=f"item {item.id}: funcao {item.rls_role}, escolhida pelo usuario {item.rls_role_user_id}",
+    )
     return config

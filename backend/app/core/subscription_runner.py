@@ -20,7 +20,7 @@ import time
 from datetime import datetime, timedelta, timezone
 from typing import Callable, Optional
 
-from app.core import email_templates, powerbi, report_delivery
+from app.core import email_templates, powerbi, report_delivery, rls_output
 from app.core import subscription_schedule as sched
 from app.core.account_emails import site_base_url
 from app.core.audit import log_action
@@ -129,6 +129,10 @@ class _Plan:
     def __init__(self, **kwargs):
         self.error: Optional[str] = None
         self.permanent = False
+        # RLS (v1.55.0): [(e-mail, identidade)] quando o relatorio tem RLS e a chave geral esta ligada; vazio = caminho de sempre
+        self.recipient_identities: list = []
+        self.rls_audit: str = ""
+        self.skipped_count = 0
         self.__dict__.update(kwargs)
 
 
@@ -202,8 +206,19 @@ def _prepare(session_factory: Callable, sub_id: int) -> Optional[_Plan]:
             plan.error = f"Nao foi possivel consultar o Power BI: {exc}"
             return plan
         if static["needs_identity"]:
-            plan.error = "O relatorio passou a ter seguranca por linha (RLS), que ainda nao pode ser enviada por e-mail."
-            plan.permanent = True
+            if not rls_output.switch_on(db):
+                plan.error = "O relatorio passou a ter seguranca por linha (RLS), que ainda nao pode ser enviada por e-mail."
+                plan.permanent = True
+                return plan
+            # Com RLS (chave geral ligada): um arquivo por destinatario, com as funcoes DELE. Quem nao tem conta no portal ou
+            # nenhuma funcao mapeada nao recebe nada; sem ninguem para receber, nada sai (falha fechada).
+            deliverable, skipped = rls_output.identities_for_recipients(db, report, list(plan.recipients))
+            plan.skipped_count = len(skipped)
+            if not deliverable:
+                plan.error = "Nenhum destinatario pode receber este relatorio com seguranca por linha (precisa ter conta no portal e uma funcao mapeada)."
+                return plan
+            plan.recipient_identities = deliverable
+            plan.rls_audit = rls_output.audit_details([item for _, item in deliverable], len(skipped))
         return plan
     finally:
         db.close()
@@ -232,6 +247,8 @@ def _finish(session_factory: Callable, plan: _Plan, *, ok: bool, message: str, a
                     sub.next_run_at = None
                     paused = True
         details = f"{plan.fmt}, {len(plan.recipients)} destinatario(s)"  # so a contagem, nunca os enderecos
+        if plan.rls_audit:
+            details += f" | RLS ({plan.rls_audit})"  # quem recebeu (id da pessoa) e as funcoes usadas
         if paused:
             action, details = "subscription_paused", f"{details}: {message}"[:300]
         else:
@@ -279,7 +296,46 @@ def run_subscription(
             return True
         started = now_fn()
         ok, message, attempts = False, plan.error or "", 0
-        if plan.error is None:
+        if plan.error is None and plan.recipient_identities:
+            # RLS: um envio por destinatario, cada um com o proprio arquivo e as proprias funcoes
+            max_attempts = MAX_ATTEMPTS if trigger == "schedule" else 1
+            failures = []
+            for email, identity in plan.recipient_identities:
+                delivered = False
+                for attempt in range(1, max_attempts + 1):
+                    attempts += 1
+                    attempt_job = job or report_delivery.create_job(plan.user_id)
+                    deliver(
+                        job=attempt_job,
+                        connection=plan.connection,
+                        pbi_workspace_id=plan.pbi_workspace_id,
+                        pbi_report_id=plan.pbi_report_id,
+                        page_names=plan.page_names,
+                        fmt=plan.fmt,
+                        report_name=plan.report_name,
+                        smtp=plan.smtp,
+                        recipients=[email],
+                        subject=plan.subject,
+                        body=plan.body,
+                        html=plan.html,
+                        page_display_names=plan.page_display_names,
+                        identities=[identity.as_export_identity()],
+                    )
+                    if attempt_job.status == "done":
+                        delivered = True
+                        break
+                    if attempt < max_attempts:
+                        sleep(RETRY_DELAYS_SECONDS[min(attempt - 1, len(RETRY_DELAYS_SECONDS) - 1)])
+                if not delivered:
+                    failures.append(identity.user_id)
+            ok = not failures
+            sent = len(plan.recipient_identities) - len(failures)
+            message = f"RLS: {sent} de {len(plan.recipient_identities)} destinatario(s) receberam" + (
+                f" ({plan.skipped_count} sem saida por falta de conta ou funcao)" if plan.skipped_count else ""
+            )
+            if failures:
+                message += f"; falhou para o(s) usuario(s) {', '.join(str(i) for i in failures)}"
+        elif plan.error is None:
             # Envio manual: uma tentativa so (a pessoa esta olhando); agendado: tenta de novo se falhar
             max_attempts = MAX_ATTEMPTS if trigger == "schedule" else 1
             while attempts < max_attempts:

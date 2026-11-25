@@ -4,7 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from sqlalchemy.orm import Session
 
-from app.core import report_delivery, subscription_runner
+from app.core import report_delivery, rls_output, subscription_runner
 from app.core import subscription_schedule as sched
 from app.core.audit import log_action
 from app.core.database import get_db
@@ -125,10 +125,10 @@ def _check_report_ready(db: Session, workspace_id: int, report: Report, row: Opt
         raise HTTPException(status_code=400, detail="Configure o servidor de e-mail antes de criar assinaturas.")
     connection = embed_router._get_connection_or_error(db, report)
     static = embed_router.get_report_static_fresh(embed_router._connection_snapshot(connection), workspace_id, report)
-    if static["needs_identity"]:
+    if static["needs_identity"] and not rls_output.switch_on(db):
         raise HTTPException(
             status_code=400,
-            detail="Relatorios com seguranca por linha (RLS) ainda nao podem ser enviados por e-mail.",
+            detail="Relatorios com seguranca por linha (RLS) ainda nao podem ser enviados por e-mail. " + rls_output.SWITCH_OFF_MESSAGE,
         )
 
 

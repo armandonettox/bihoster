@@ -189,6 +189,13 @@ def _store_embed_config(
         _embed_cache[key] = (cache_until, config)
 
 
+def _store_embed_config_keyed(key: tuple, config: EmbedConfig) -> None:
+    """Guarda o config numa chave pronta (usado pelo Modo TV com funcao de RLS), com a mesma margem de validade."""
+    cache_until = config.expires_at - _EMBED_CACHE_MARGIN
+    if cache_until > datetime.now(timezone.utc):
+        _embed_cache[key] = (cache_until, config)
+
+
 def _cached_embed_config(workspace_id: int, report_id: int, user_id: int) -> Optional[EmbedConfig]:
     """Procura primeiro a entrada compartilhada (relatorio sem RLS) e depois a do usuario."""
     for key in ((workspace_id, report_id, None), (workspace_id, report_id, user_id)):

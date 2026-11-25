@@ -77,6 +77,8 @@ class AppSettings(Base):
     cache_warmup_only_recent = Column(Boolean, nullable=True)
     cache_warmup_recent_hours = Column(Integer, nullable=True)
     capacity_control_enabled = Column(Boolean, nullable=True)
+    # v1.55.0: deixa relatorio com RLS sair por e-mail, arquivo e TV (core/rls_output.py). Nulo = desligado.
+    rls_output_enabled = Column(Boolean, nullable=True)
 
     # Chat de IA (ver core/ai_options.py). Nullable: a migracao automatica so adiciona colunas
     # nulaveis; nulo vale o padrao de cada opcao.

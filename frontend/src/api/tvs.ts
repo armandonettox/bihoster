@@ -29,6 +29,8 @@ export interface TvItem {
   image_url: string | null;
   video_id: string | null;
   sound: boolean;
+  /** Relatorio com RLS: a funcao de seguranca que a TV usa */
+  rls_role?: string | null;
 }
 
 export interface TvDetail extends TvSummary {
@@ -46,6 +48,7 @@ export interface TvItemInput {
   image_url?: string | null;
   video_url?: string | null;
   sound?: boolean;
+  rls_role?: string | null;
 }
 
 export interface TvCode {
@@ -164,3 +167,16 @@ export async function listTvReportPages(reportId: number): Promise<TvPageChoice[
   const { data } = await api.get(`/tvs/report-pages/${reportId}`);
   return data;
 }
+
+/** Para a tela de montar a TV: o relatorio tem RLS, a chave geral esta ligada e quais funcoes a pessoa tem nele. */
+export interface ReportRlsInfo {
+  rls: boolean;
+  switch_on: boolean;
+  roles: string[];
+}
+
+export async function getReportRls(reportId: number): Promise<ReportRlsInfo> {
+  const { data } = await api.get(`/tvs/report-rls/${reportId}`);
+  return data;
+}
+

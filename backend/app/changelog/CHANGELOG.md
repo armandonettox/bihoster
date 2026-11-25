@@ -12,6 +12,12 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.55.0 - 2026-11-25 - Saída de relatório com RLS (desligada por padrão)
+- Nova chave em **Administração > Geral: Permitir saída de relatório com RLS**. Ela vem **desligada** e, desligada, tudo continua como antes: relatório com segurança por linha (RLS) não sai por e-mail, arquivo nem TV.
+- Ligada, a identidade de cada saída é a de **quem recebe**, nunca a de quem criou: **assinaturas e envio por e-mail** geram **um arquivo por destinatário**, com as funções de cada um, e só recebe quem tem conta no portal e função mapeada no modelo; a **exportação** (PowerPoint, PDF e imagem) usa as funções de **quem exporta**; no **Modo TV** quem monta a lista escolhe uma **função de segurança** entre as que ele mesmo tem, e a TV confere de novo, na hora de passar, se essa pessoa ainda a tem.
+- **Falha fechada**: sem função mapeada no modelo, ou com a pessoa sem nenhuma função, nada sai. O chat de IA continua fora.
+- Cada envio ou exportação com RLS vai para a **auditoria**, com o id de quem recebeu e as funções usadas (nunca os endereços de e-mail).
+
 ## 1.54.0 - 2026-11-25 - Cache e capacidade: aberturas por hora, aquecimento só do que é usado e pausa da capacidade (desligada)
 - A aba **Cache** virou **Cache e capacidade**. Ela mostra as **aberturas por hora** de cada relatório (só a contagem; nunca quem abriu) e tem a opção **Aquecer só os relatórios abertos recentemente** (nas últimas 72 horas, ajustável). Ela vem **desligada**: por padrão tudo continua sendo aquecido, como antes.
 - O token de embed e os dados do relatório agora são guardados **por relatório**, e não pela pasta por onde a pessoa chegou. O mesmo relatório em várias pastas deixa de gerar um token por pasta, e quando o modelo tem funções de segurança mapeadas elas continuam fazendo parte da chave. O acesso continua sendo conferido antes de qualquer cache.

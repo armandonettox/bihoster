@@ -82,6 +82,7 @@ def _to_out(settings_row: AppSettings) -> SettingsOut:
         cache_warmup_only_recent=bool(settings_row.cache_warmup_only_recent),
         cache_warmup_recent_hours=settings_row.cache_warmup_recent_hours or 72,
         capacity_control_enabled=bool(settings_row.capacity_control_enabled),
+        rls_output_enabled=bool(settings_row.rls_output_enabled),
     )
 
 
@@ -121,6 +122,7 @@ FIELD_PERMISSIONS: dict[str, tuple[str, ...]] = {
     "cache_warmup_only_recent": ("sistema.cache",),
     "cache_warmup_recent_hours": ("sistema.cache",),
     "capacity_control_enabled": ("sistema.cache",),
+    "rls_output_enabled": ("sistema.geral",),
 }
 
 

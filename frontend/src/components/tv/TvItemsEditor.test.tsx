@@ -8,12 +8,14 @@ vi.mock("../../api/tvs", () => ({
   listTvReports: vi.fn(),
   listTvReportPages: vi.fn(),
   uploadTvImage: vi.fn(),
+  getReportRls: vi.fn(),
 }));
 vi.mock("../../context/ToastContext", () => ({ useToast: () => ({ showToast: vi.fn() }) }));
 
 const listTvReports = vi.mocked(tvsApi.listTvReports);
 const listTvReportPages = vi.mocked(tvsApi.listTvReportPages);
 const uploadTvImage = vi.mocked(tvsApi.uploadTvImage);
+const getReportRls = vi.mocked(tvsApi.getReportRls);
 
 const ITENS: tvsApi.TvItem[] = [
   { id: 1, kind: "report_page", seconds: 30, report_id: 7, report_name: "Vendas", collection_name: "Comercial", page_name: "P1", image_url: null, video_id: null, sound: false },
@@ -40,6 +42,7 @@ const ordem = () => screen.getAllByRole("listitem").map((li) => li.querySelector
 
 beforeEach(() => {
   vi.resetAllMocks();
+  getReportRls.mockResolvedValue({ rls: false, switch_on: false, roles: [] });
   listTvReports.mockResolvedValue([
     { id: 7, name: "Vendas", collection_id: 1, collection_name: "Comercial" },
     { id: 8, name: "Estoque", collection_id: 2, collection_name: "Logistica" },
@@ -138,8 +141,8 @@ describe("TvItemsEditor - a lista", () => {
     const entrada = inputsFromDrafts(draftsFromItems(ITENS));
 
     expect(entrada).toEqual([
-      { kind: "report_page", seconds: 30, report_id: 7, page_name: "P1", image_url: null, video_url: null, sound: false },
-      { kind: "youtube", seconds: 60, report_id: null, page_name: null, image_url: null, video_url: "https://youtu.be/dQw4w9WgXcQ", sound: false },
+      { kind: "report_page", seconds: 30, report_id: 7, page_name: "P1", image_url: null, video_url: null, sound: false, rls_role: null },
+      { kind: "youtube", seconds: 60, report_id: null, page_name: null, image_url: null, video_url: "https://youtu.be/dQw4w9WgXcQ", sound: false, rls_role: null },
     ]);
   });
 });
@@ -220,3 +223,67 @@ describe("TvItemsEditor - adicionar", () => {
     expect(screen.getByText(/Nenhum item ainda/)).toBeTruthy();
   });
 });
+
+describe("TvItemsEditor - relatorio com RLS", () => {
+  async function escolherRelatorio() {
+    render(<Editor inicial={[]} />);
+    fireEvent.click(screen.getByRole("button", { name: /Página de relatório/ }));
+    fireEvent.change(await screen.findByLabelText("Relatório"), { target: { value: "8" } });
+    const pagina = await screen.findByLabelText("Página");
+    await waitFor(() => expect(within(pagina).getAllByRole("option").length).toBe(3));
+    fireEvent.change(pagina, { target: { value: "P2" } });
+  }
+
+  it("com RLS, so deixa adicionar depois de escolher uma das funcoes que a pessoa tem, e grava a funcao", async () => {
+    getReportRls.mockResolvedValue({ rls: true, switch_on: true, roles: ["Gerente", "Vendedor"] });
+    await escolherRelatorio();
+    const botao = screen.getByRole("button", { name: "Adicionar à lista" }) as HTMLButtonElement;
+    await screen.findByLabelText(/Função de segurança da TV/);
+    expect(botao.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText(/Função de segurança da TV/), { target: { value: "Vendedor" } });
+    expect(botao.disabled).toBe(false);
+    fireEvent.click(botao);
+
+    expect(ordem()).toEqual(["Estoque"]);
+    expect(screen.getByText("Logistica · Detalhe · função Vendedor")).toBeTruthy();
+  });
+
+  it("uma so funcao ja vem escolhida", async () => {
+    getReportRls.mockResolvedValue({ rls: true, switch_on: true, roles: ["Gerente"] });
+    await escolherRelatorio();
+
+    await waitFor(() => expect((screen.getByLabelText(/Função de segurança da TV/) as HTMLSelectElement).value).toBe("Gerente"));
+  });
+
+  it("chave geral desligada: avisa e nao deixa adicionar", async () => {
+    getReportRls.mockResolvedValue({ rls: true, switch_on: false, roles: [] });
+    await escolherRelatorio();
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/permitir a saída de relatório com RLS/);
+    expect((screen.getByRole("button", { name: "Adicionar à lista" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("sem funcao nenhuma na pessoa: avisa e nao deixa adicionar", async () => {
+    getReportRls.mockResolvedValue({ rls: true, switch_on: true, roles: [] });
+    await escolherRelatorio();
+
+    expect((await screen.findByRole("alert")).textContent).toMatch(/você não tem função de segurança nele/);
+    expect((screen.getByRole("button", { name: "Adicionar à lista" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("relatorio sem RLS segue como sempre, sem funcao", async () => {
+    getReportRls.mockResolvedValue({ rls: false, switch_on: false, roles: [] });
+    await escolherRelatorio();
+
+    await waitFor(() => expect((screen.getByRole("button", { name: "Adicionar à lista" }) as HTMLButtonElement).disabled).toBe(false));
+    expect(screen.queryByLabelText(/Função de segurança da TV/)).toBeNull();
+  });
+
+  it("o item salvo leva a funcao e a lista mostra qual e", () => {
+    const itens: tvsApi.TvItem[] = [{ ...ITENS[0], rls_role: "Gerente" }];
+
+    expect(inputsFromDrafts(draftsFromItems(itens))[0].rls_role).toBe("Gerente");
+  });
+});
+

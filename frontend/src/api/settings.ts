@@ -44,6 +44,8 @@ export interface AppSettings {
   cache_warmup_recent_hours: number;
   /** Chave geral do controle da capacidade do Power BI (vem desligada) */
   capacity_control_enabled: boolean;
+  /** Deixa relatorio com RLS sair por e-mail, arquivo e TV (vem desligado) */
+  rls_output_enabled: boolean;
 }
 
 export interface CacheStats {

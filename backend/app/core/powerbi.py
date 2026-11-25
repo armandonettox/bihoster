@@ -382,8 +382,10 @@ def start_export(
     fmt: str = "PDF",
     page_names: Optional[list[str]] = None,
     bookmark_state: Optional[str] = None,
+    identities: Optional[list[dict]] = None,
 ) -> str:
-    """Pede ao Power BI que exporte o relatorio e devolve o id da exportacao. `page_names` limita
+    """Pede ao Power BI que exporte o relatorio e devolve o id da exportacao. `identities` (RLS) vai em
+    `powerBIReportConfiguration.identities`, como na documentacao do ExportTo. `page_names` limita
     as abas exportadas (vazio = o relatorio inteiro). `bookmark_state` e o estado capturado do relatorio aberto
     (filtros e selecoes atuais); sem ele, o Power BI exporta com os valores padrao."""
     if fmt not in EXPORT_FORMATS:
@@ -395,6 +397,8 @@ def start_export(
         config["pages"] = [{"pageName": name} for name in page_names]
     if bookmark_state:
         config["defaultBookmark"] = {"state": bookmark_state}
+    if identities:
+        config["identities"] = identities
     if config:
         body["powerBIReportConfiguration"] = config
     response = _http.post(url, headers=_headers(connection), json=body)
@@ -441,10 +445,14 @@ def export_report(
     sleep: Callable[[float], None] = time.sleep,
     clock: Callable[[], float] = time.monotonic,
     bookmark_state: Optional[str] = None,
+    identities: Optional[list[dict]] = None,
 ) -> bytes:
     """Exporta o relatorio e devolve o arquivo. Espera o Power BI terminar (a exportacao leva de
     segundos a minutos) e para com erro se falhar ou passar de `timeout_seconds`."""
-    export_id = start_export(connection, workspace_id, report_id, fmt, page_names, bookmark_state)
+    if identities:
+        export_id = start_export(connection, workspace_id, report_id, fmt, page_names, bookmark_state, identities)
+    else:  # o caminho de sempre, sem RLS, fica exatamente como era
+        export_id = start_export(connection, workspace_id, report_id, fmt, page_names, bookmark_state)
     deadline = clock() + timeout_seconds
     while True:
         status = get_export_status(connection, workspace_id, report_id, export_id)

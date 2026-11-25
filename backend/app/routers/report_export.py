@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
-from app.core import email_templates, powerbi, report_delivery
+from app.core import email_templates, powerbi, report_delivery, rls_output
 from app.core.account_emails import site_base_url
 from app.core.audit import log_action
 from app.core.database import SessionLocal, get_db
@@ -89,11 +89,19 @@ def export_and_email(
 
     connection = embed_router._get_connection_or_error(db, report)
     static = embed_router.get_report_static_fresh(connection, workspace_id, report)
+    identities: Optional[list[dict]] = None
+    rls_audit: Optional[str] = None
     if static["needs_identity"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Relatorios com seguranca por linha (RLS) ainda nao podem ser enviados por e-mail.",
-        )
+        # Com RLS o arquivo sai com a identidade do DESTINATARIO (conta no portal e funcao mapeada), nunca a de quem pede.
+        # Chave geral desligada, destinatario sem conta ou sem funcao: nada sai.
+        recipient_user = rls_output.user_by_email(db, recipient)
+        try:
+            if recipient_user is None:
+                raise rls_output.RlsOutputBlocked("O destinatario precisa ter conta no portal para receber um relatorio com seguranca por linha (RLS).")
+            identity = rls_output.identity_for_user(db, recipient_user, report, who="O destinatario")
+        except rls_output.RlsOutputBlocked as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        identities, rls_audit = [identity.as_export_identity()], rls_output.audit_details([identity])
 
     # Valores simples, copiados agora: depois da resposta a sessao do banco fecha e o objeto
     # `current_user` fica solto, entao a thread nunca pode ler atributos dele.
@@ -126,7 +134,10 @@ def export_and_email(
         html=email_templates.html_for_message(settings_row, site_base_url(settings_row), email_subject, email_body),
         page_display_names=page_display_names,
         on_finish=lambda ok, message: _audit_result(user_id, workspace_id, report_id, data.format, ok, message),
+        identities=identities,
     )
+    if rls_audit:
+        log_action(db, action="rls_output_email", entity="report", user_id=user_id, workspace_id=workspace_id, entity_id=str(report_id), details=f"{data.format}, {rls_audit}")
     log_action(
         db,
         action="export_email_requested",
@@ -184,11 +195,15 @@ def export_for_download(
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     connection = embed_router._get_connection_or_error(db, report)
     static = embed_router.get_report_static_fresh(connection, workspace_id, report)
+    identities: Optional[list[dict]] = None
+    rls_audit: Optional[str] = None
     if static["needs_identity"]:
-        raise HTTPException(
-            status_code=400,
-            detail="Relatorios com seguranca por linha (RLS) ainda nao podem ser exportados.",
-        )
+        # O arquivo e de quem exporta: sai com as funcoes dele (e so com a chave geral ligada)
+        try:
+            identity = rls_output.identity_for_user(db, current_user, report)
+        except rls_output.RlsOutputBlocked as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from None
+        identities, rls_audit = [identity.as_export_identity()], rls_output.audit_details([identity])
 
     user_id = current_user.id
     job = report_delivery.create_job(user_id)
@@ -219,7 +234,10 @@ def export_for_download(
         page_display_names=page_display_names,
         on_finish=lambda ok, message: _audit_download(user_id, workspace_id, report_id, fmt, ok, message),
         bookmark_state=data.bookmark_state or None,
+        identities=identities,
     )
+    if rls_audit:
+        log_action(db, action="rls_output_download", entity="report", user_id=user_id, workspace_id=workspace_id, entity_id=str(report_id), details=f"{fmt}, {rls_audit}")
     log_action(
         db,
         action="export_download_requested",

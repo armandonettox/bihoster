@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { assetUrl, extractErrorMessage } from "../../api/client";
 import {
+  getReportRls,
   listTvReportPages,
   listTvReports,
   uploadTvImage,
+  type ReportRlsInfo,
   type TvItem,
   type TvItemInput,
   type TvPageChoice,
@@ -27,6 +29,8 @@ export interface DraftItem {
   image_url: string | null;
   video_id: string | null;
   sound: boolean;
+  /** Relatorio com RLS: a funcao de seguranca que a TV usa */
+  rls_role?: string | null;
   /** Texto para a pessoa reconhecer o item */
   title: string;
   subtitle: string;
@@ -45,6 +49,7 @@ export function draftsFromItems(items: TvItem[]): DraftItem[] {
     image_url: item.image_url,
     video_id: item.video_id,
     sound: item.sound,
+    rls_role: item.rls_role ?? null,
     title:
       item.kind === "report_page"
         ? item.report_name || "Relatório"
@@ -53,7 +58,7 @@ export function draftsFromItems(items: TvItem[]): DraftItem[] {
           : "Vídeo do YouTube",
     subtitle:
       item.kind === "report_page"
-        ? `${item.collection_name ?? ""}${item.collection_name ? " · " : ""}página ${item.page_name ?? ""}`
+        ? `${item.collection_name ?? ""}${item.collection_name ? " · " : ""}página ${item.page_name ?? ""}${item.rls_role ? ` · função ${item.rls_role}` : ""}`
         : item.kind === "youtube"
           ? `youtube.com/watch?v=${item.video_id}`
           : "",
@@ -69,6 +74,7 @@ export function inputsFromDrafts(drafts: DraftItem[]): TvItemInput[] {
     image_url: d.image_url,
     video_url: d.kind === "youtube" ? `https://youtu.be/${d.video_id}` : null,
     sound: d.sound,
+    rls_role: d.rls_role ?? null,
   }));
 }
 
@@ -247,12 +253,32 @@ function AddReport({ onAdd }: { onAdd: (draft: DraftItem) => void }) {
   const [pageName, setPageName] = useState("");
   const [seconds, setSeconds] = useState(DEFAULT_SECONDS);
   const [error, setError] = useState<string | null>(null);
+  // Relatorio com RLS: a funcao que a TV usa (so as que a pessoa tem) e se a chave geral esta ligada
+  const [rlsInfo, setRlsInfo] = useState<ReportRlsInfo | null>(null);
+  const [role, setRole] = useState("");
 
   useEffect(() => {
     listTvReports()
       .then(setReports)
       .catch((err) => setError(extractErrorMessage(err) || "Nao foi possivel listar os relatorios."));
   }, []);
+
+  useEffect(() => {
+    setRlsInfo(null);
+    setRole("");
+    if (!reportId) return;
+    let cancelled = false;
+    getReportRls(Number(reportId))
+      .then((info) => {
+        if (cancelled) return;
+        setRlsInfo(info);
+        if (info.rls && info.roles.length === 1) setRole(info.roles[0]);
+      })
+      .catch(() => !cancelled && setRlsInfo(null));
+    return () => {
+      cancelled = true;
+    };
+  }, [reportId]);
 
   useEffect(() => {
     setPages(null);
@@ -291,6 +317,10 @@ function AddReport({ onAdd }: { onAdd: (draft: DraftItem) => void }) {
       showToast("Escolha o relatório e a página.", "error");
       return;
     }
+    if (rlsInfo?.rls && !role) {
+      showToast("Escolha a função de segurança que a TV usa.", "error");
+      return;
+    }
     onAdd({
       key: newKey(),
       kind: "report_page",
@@ -300,8 +330,9 @@ function AddReport({ onAdd }: { onAdd: (draft: DraftItem) => void }) {
       image_url: null,
       video_id: null,
       sound: false,
+      rls_role: rlsInfo?.rls ? role : null,
       title: report.name,
-      subtitle: `${report.collection_name} · ${page.title}`,
+      subtitle: `${report.collection_name} · ${page.title}${rlsInfo?.rls ? ` · função ${role}` : ""}`,
     });
   }
 
@@ -336,8 +367,39 @@ function AddReport({ onAdd }: { onAdd: (draft: DraftItem) => void }) {
           </select>
         </label>
       )}
+      {rlsInfo?.rls && (
+        <div className="tv-add-field" role="group" aria-label="Segurança por linha">
+          {!rlsInfo.switch_on ? (
+            <p className="auth-error" role="alert">
+              Este relatório tem segurança por linha (RLS). Peça a um administrador para permitir a saída de relatório com RLS em Administração, aba Geral.
+            </p>
+          ) : rlsInfo.roles.length === 0 ? (
+            <p className="auth-error" role="alert">
+              Este relatório tem segurança por linha (RLS) e você não tem função de segurança nele, então não pode colocá-lo na TV.
+            </p>
+          ) : (
+            <label>
+              Função de segurança da TV
+              <select className="input" value={role} onChange={(e) => setRole(e.target.value)}>
+                <option value="">Escolha a função</option>
+                {rlsInfo.roles.map((name) => (
+                  <option key={name} value={name}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+              <span className="field-hint">A TV mostra só o que essa função enxerga, para quem estiver olhando. Só entram as funções que você tem.</span>
+            </label>
+          )}
+        </div>
+      )}
       <SecondsField value={seconds} onChange={setSeconds} />
-      <button type="button" className="btn btn-primary btn-sm" onClick={add} disabled={!reportId || !pageName}>
+      <button
+        type="button"
+        className="btn btn-primary btn-sm"
+        onClick={add}
+        disabled={!reportId || !pageName || Boolean(rlsInfo?.rls && (!rlsInfo.switch_on || !role))}
+      >
         Adicionar à lista
       </button>
     </div>

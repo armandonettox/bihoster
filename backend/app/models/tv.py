@@ -45,6 +45,10 @@ class TvItem(Base):
     image_url = Column(String, nullable=True)
     video_id = Column(String, nullable=True)
     sound = Column(Boolean, nullable=False, default=False)
+    # Relatorio com RLS na TV (v1.55.0): a funcao de seguranca escolhida por quem montou a lista e quem a escolheu. A pessoa
+    # precisa ter a funcao e e conferida de novo na hora de passar. Nulos = relatorio sem RLS (o caminho de sempre).
+    rls_role = Column(String, nullable=True)
+    rls_role_user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     tv = relationship("Tv", back_populates="items")
 

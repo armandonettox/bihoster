@@ -136,8 +136,10 @@ def run_download(
     page_display_names: Optional[dict[str, str]] = None,
     on_finish: Optional[Callable[[bool, str], None]] = None,
     bookmark_state: Optional[str] = None,
+    identities: Optional[list[dict]] = None,
 ) -> None:
-    """Exporta o relatorio e guarda o arquivo no trabalho, para a tela baixar. Nunca levanta."""
+    """Exporta o relatorio e guarda o arquivo no trabalho, para a tela baixar. Nunca levanta. `identities` (RLS) so vem de
+    core/rls_output.py, com as funcoes de quem exporta."""
     ok = False
     try:
         job.status, job.message = "queued", "Esperando vaga para exportar."
@@ -155,6 +157,7 @@ def run_download(
                 list(page_names) or None,
                 on_progress=progress,
                 bookmark_state=bookmark_state,
+                identities=identities,
             )
         job.file_data, job.file_mimetype, job.file_name = prepare_export_file(
             fmt, data, page_names, page_display_names or {}, report_name
@@ -196,8 +199,10 @@ def run_delivery(
     html: Optional[str] = None,
     page_display_names: Optional[dict[str, str]] = None,
     on_finish: Optional[Callable[[bool, str], None]] = None,
+    identities: Optional[list[dict]] = None,
 ) -> None:
-    """Exporta e envia. Nunca levanta: o resultado vai para o trabalho (e para `on_finish`).
+    """Exporta e envia. Nunca levanta: o resultado vai para o trabalho (e para `on_finish`). `identities` (RLS) so vem de
+    core/rls_output.py e e a do destinatario.
 
     `page_display_names` mapeia nome interno -> nome de exibicao para nomear os arquivos gerados."""
     ok = False
@@ -211,7 +216,8 @@ def run_delivery(
                 job.progress = percent
 
             data = powerbi.export_report(
-                connection, pbi_workspace_id, pbi_report_id, fmt, list(page_names) or None, on_progress=progress
+                connection, pbi_workspace_id, pbi_report_id, fmt, list(page_names) or None, on_progress=progress,
+                identities=identities,
             )
         job.status, job.message = "sending", "Enviando o e-mail..."
         data, mimetype, attachment_name = prepare_export_file(fmt, data, page_names, display, report_name)

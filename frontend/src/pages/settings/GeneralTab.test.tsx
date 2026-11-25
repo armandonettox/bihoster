@@ -335,3 +335,36 @@ describe("GeneralTab - homepage", () => {
     expect(screen.getByText("Habilitado")).toBeTruthy();
   });
 });
+
+describe("GeneralTab - saida de relatorio com RLS", () => {
+  it("vem desligada e a linha mostra o estado", async () => {
+    await abrir();
+
+    expect(within(linha("Saída de relatório com RLS")).getByText("Desligado")).toBeTruthy();
+  });
+
+  it("ligar pede confirmacao e so depois grava", async () => {
+    updateSettings.mockResolvedValue({ ...BASE, rls_output_enabled: true } as AppSettings);
+    await abrir();
+
+    editar("Saída de relatório com RLS");
+    fireEvent.click(screen.getByLabelText(/Permitir saída de relatório com RLS/));
+    fireEvent.click(salvar());
+    expect(updateSettings).not.toHaveBeenCalled();
+    fireEvent.click(await screen.findByRole("button", { name: "Permitir e salvar" }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ rls_output_enabled: true }));
+  });
+
+  it("desligar grava direto, sem confirmacao", async () => {
+    updateSettings.mockResolvedValue({ ...BASE, rls_output_enabled: false } as AppSettings);
+    await abrir({ rls_output_enabled: true });
+
+    editar("Saída de relatório com RLS");
+    fireEvent.click(screen.getByLabelText(/Permitir saída de relatório com RLS/));
+    fireEvent.click(salvar());
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ rls_output_enabled: false }));
+  });
+});
+

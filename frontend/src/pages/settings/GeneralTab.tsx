@@ -8,8 +8,9 @@ import SettingsRowList, { type SettingsRow } from "../../components/SettingsRowL
 import GeneralAppModal from "./general/GeneralAppModal";
 import GeneralHomeModal from "./general/GeneralHomeModal";
 import GeneralHttpsModal from "./general/GeneralHttpsModal";
+import GeneralRlsOutputModal from "./general/GeneralRlsOutputModal";
 
-type Editing = "app" | "https" | "home" | null;
+type Editing = "app" | "https" | "home" | "rls" | null;
 
 export default function GeneralTab() {
   const { settings } = useBranding();
@@ -58,6 +59,15 @@ export default function GeneralTab() {
       onEdit: () => setEditing("home"),
       disabled: settings === null,
     },
+    {
+      key: "rls",
+      label: "Saída de relatório com RLS",
+      description: "Deixa relatórios com segurança por linha saírem por e-mail, arquivo e Modo TV, sempre com a função de quem recebe.",
+      status: settings?.rls_output_enabled ? "Ligado" : "Desligado",
+      highlight: Boolean(settings?.rls_output_enabled),
+      onEdit: () => setEditing("rls"),
+      disabled: settings === null,
+    },
   ];
 
   return (
@@ -70,6 +80,7 @@ export default function GeneralTab() {
 
       {settings && editing === "app" && <GeneralAppModal settings={settings} onClose={close} />}
       {settings && editing === "https" && <GeneralHttpsModal settings={settings} onClose={close} />}
+      {settings && editing === "rls" && <GeneralRlsOutputModal settings={settings} onClose={close} />}
       {settings && editing === "home" && <GeneralHomeModal settings={settings} workspaces={workspaces} onClose={close} />}
 
       <PowerBiConnectionsSection />
