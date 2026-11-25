@@ -46,7 +46,9 @@ function panel(entries: PanelEntry[]): Panel {
 async function abrir(entries: PanelEntry[], onChanged = vi.fn()) {
   mocks.getPanel.mockResolvedValue(panel(entries));
   render(<PermissionsPanel kind="report" itemId={10} itemName="Resultado" onClose={() => {}} onChanged={onChanged} />);
-  await screen.findByRole("combobox", { name: "Adicionar pessoas ou grupos" });
+  // O campo existe antes de o painel carregar (fica desligado): esperar ele ligar evita testar a tela ainda vazia
+  const campo = await screen.findByRole("combobox", { name: "Adicionar pessoas ou grupos" });
+  await waitFor(() => expect((campo as HTMLInputElement).disabled).toBe(false));
   return onChanged;
 }
 
