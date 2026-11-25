@@ -66,9 +66,11 @@ def warm_once(renew_before: timedelta) -> dict:
     atualizacao dos datasets. Falha de um item e registrada e nao interrompe os outros."""
     from sqlalchemy import or_
 
+    from app.core import report_stats
     from app.core.database import SessionLocal
     from app.models.powerbi_connection import PowerBIConnection
     from app.models.report import Report
+    from app.models.settings import AppSettings
     from app.routers import powerbi as embed_router
 
     db = SessionLocal()
@@ -80,6 +82,11 @@ def warm_once(renew_before: timedelta) -> dict:
             .all()
         )
         connections = {c.id: embed_router._connection_snapshot(c) for c in db.query(PowerBIConnection).all()}
+        # Opcional (desligado por padrao): aquece so o que foi aberto nas ultimas horas, em vez de tudo
+        row = db.query(AppSettings).filter(AppSettings.id == 1).first()
+        if row is not None and row.cache_warmup_only_recent:
+            recent = report_stats.recent_report_ids(db, row.cache_warmup_recent_hours or report_stats.DEFAULT_RECENT_HOURS)
+            reports = [r for r in reports if r.id in recent]
     finally:
         db.close()
 

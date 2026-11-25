@@ -93,7 +93,7 @@ describe("Settings - uma aba para cada item", () => {
     ["sistema.autenticacao", "Autenticação", "tab:auth"],
     ["sistema.email", "E-mail", "tab:email"],
     ["sistema.versao", "Atualizações", "tab:updates"],
-    ["sistema.cache", "Cache", "tab:cache"],
+    ["sistema.cache", "Cache e capacidade", "tab:cache"],
   ])("%s mostra so a aba %s", (chave, rotulo, conteudo) => {
     renderAt("/settings", acesso([chave]));
 
@@ -132,7 +132,7 @@ describe("Settings - uma aba para cada item", () => {
   it("com varios itens aparecem so as abas deles, na ordem de sempre, e a primeira abre", () => {
     renderAt("/settings", acesso(["sistema.cache", "sistema.email", "sistema.marca"]));
 
-    expect(rotulos()).toEqual(["Marca", "E-mail", "Cache"]);
+    expect(rotulos()).toEqual(["Marca", "E-mail", "Cache e capacidade"]);
     expect(content()).toBe("tab:brand");
   });
 
@@ -140,7 +140,7 @@ describe("Settings - uma aba para cada item", () => {
     renderAt("/settings?tab=cache", acesso(["sistema.marca", "sistema.email"]));
 
     expect(content()).toBe("tab:brand");
-    expect(rotulos()).not.toContain("Cache");
+    expect(rotulos()).not.toContain("Cache e capacidade");
   });
 });
 

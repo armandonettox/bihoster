@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import * as settingsApi from "../../api/settings";
 import type { AppSettings, CacheStats } from "../../api/settings";
+import * as capacityApi from "../../api/cacheCapacity";
 import CacheTab from "./CacheTab";
 
 const mocks = vi.hoisted(() => ({ showToast: vi.fn() }));
@@ -12,6 +13,13 @@ vi.mock("../../api/settings", () => ({
   getCacheStats: vi.fn(),
   updateSettings: vi.fn(),
   resetCache: vi.fn(),
+}));
+
+vi.mock("../../api/cacheCapacity", () => ({
+  getOpenings: vi.fn(),
+  getCapacity: vi.fn(),
+  saveCapacity: vi.fn(),
+  capacityAction: vi.fn(),
 }));
 
 const getSettings = vi.mocked(settingsApi.getSettings);
@@ -219,5 +227,118 @@ describe("CacheTab - resetar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Resetar cache" }));
 
     await waitFor(() => expect(mocks.showToast).toHaveBeenCalledWith("Nao foi possivel limpar o cache.", "error"));
+  });
+});
+
+describe("CacheTab - cache e capacidade (v1.54.0)", () => {
+  it("tem o novo titulo e as partes novas", async () => {
+    await abrir();
+
+    expect(screen.getByRole("heading", { name: "Cache e capacidade" })).toBeTruthy();
+    expect(within(linha("Pre-carga e aquecimento recente")).getByText(/Pre-carga ligada · aquecimento de todos os relatorios/)).toBeTruthy();
+    expect(within(linha("Capacidade do Power BI")).getByText("Desligado")).toBeTruthy();
+    expect(screen.getByText("Aberturas por hora", { selector: ".email-template-name" })).toBeTruthy();
+    expect(screen.getByText("Cache de consultas do modelo", { selector: ".email-template-name" })).toBeTruthy();
+  });
+
+  it("a pre-carga vem ligada e o aquecimento recente vem desligado; salvar manda os tres campos", async () => {
+    await abrir({ embed_preload_enabled: true, cache_warmup_only_recent: false, cache_warmup_recent_hours: 72 });
+
+    fireEvent.click(botao("Editar Pre-carga e aquecimento recente"));
+    const dialogo = await screen.findByRole("dialog");
+    const [preload, recente] = within(dialogo).getAllByRole("switch") as HTMLInputElement[];
+    expect(preload.checked).toBe(true);
+    expect(recente.checked).toBe(false);
+
+    fireEvent.click(recente);
+    fireEvent.click(within(dialogo).getByRole("button", { name: /^Salvar/ }));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ embed_preload_enabled: true, cache_warmup_only_recent: true, cache_warmup_recent_hours: 72 }));
+  });
+
+  it("as aberturas por hora aparecem numa tabela de contagem", async () => {
+    vi.mocked(capacityApi.getOpenings).mockResolvedValue({
+      hours: 24,
+      reports: [{ report_id: 1, report_name: "Resultado", total: 4, by_hour: { "2026-11-25T14": 1, "2026-11-25T15": 3 } }],
+    });
+    await abrir();
+
+    fireEvent.click(botao("Abrir Aberturas por hora"));
+
+    const tabela = await screen.findByRole("table", { name: "Aberturas por relatorio e por hora" });
+    expect(within(tabela).getByText("Resultado")).toBeTruthy();
+    expect(within(tabela).getByText("15h")).toBeTruthy();
+    expect(screen.getByText(/nao guarda quem abriu/)).toBeTruthy();
+  });
+
+  it("a orientacao do cache de consultas cita a fonte e diz que o sistema nao liga isso", async () => {
+    await abrir();
+
+    fireEvent.click(botao("Ler Cache de consultas do modelo"));
+
+    expect(await screen.findByText(/nao liga isso por voce/)).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Query caching in Power BI Premium/ }).getAttribute("href")).toContain("learn.microsoft.com");
+  });
+
+  it("a capacidade vem desligada: botoes travados e a chave geral grava na hora", async () => {
+    vi.mocked(capacityApi.getCapacity).mockResolvedValue({
+      master_switch: false,
+      connections: [
+        { connection_id: 4, name: "Conta A", azure_subscription_id: null, azure_resource_group: null, azure_capacity_name: null, configured: false, simulated: true, capacity_schedule_enabled: false, schedule: [], state: null, state_at: null },
+      ],
+    });
+    await abrir({ capacity_control_enabled: false });
+
+    fireEvent.click(botao("Editar Capacidade do Power BI"));
+    await screen.findByLabelText("Capacidade da conta Conta A");
+    expect((screen.getByRole("button", { name: "Pausar agora" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "Retomar agora" }) as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.getByText(/Ligue a chave geral/)).toBeTruthy();
+
+    fireEvent.click(screen.getByLabelText("Permitir controle da capacidade"));
+
+    await waitFor(() => expect(updateSettings).toHaveBeenCalledWith({ capacity_control_enabled: true }));
+  });
+
+  it("com tudo preenchido, pausar manda a acao e avisa que foi simulado", async () => {
+    vi.mocked(capacityApi.getCapacity).mockResolvedValue({
+      master_switch: true,
+      connections: [
+        { connection_id: 4, name: "Conta A", azure_subscription_id: "s", azure_resource_group: "g", azure_capacity_name: "c", configured: true, simulated: true, capacity_schedule_enabled: false, schedule: [], state: null, state_at: null },
+      ],
+    });
+    vi.mocked(capacityApi.capacityAction).mockResolvedValue({
+      connection_id: 4, name: "Conta A", azure_subscription_id: "s", azure_resource_group: "g", azure_capacity_name: "c", configured: true, simulated: true, capacity_schedule_enabled: false, schedule: [], state: "paused", state_at: null, mode: "simulated",
+    });
+    await abrir({ capacity_control_enabled: true });
+
+    fireEvent.click(botao("Editar Capacidade do Power BI"));
+    await screen.findByLabelText("Capacidade da conta Conta A");
+    fireEvent.click(screen.getByRole("button", { name: "Pausar agora" }));
+
+    await waitFor(() => expect(capacityApi.capacityAction).toHaveBeenCalledWith(4, "suspend"));
+    expect(mocks.showToast).toHaveBeenCalledWith("Pausa simulada (nada foi enviado ao Azure).");
+  });
+
+  it("o modo real pede confirmacao antes de valer", async () => {
+    vi.mocked(capacityApi.getCapacity).mockResolvedValue({
+      master_switch: true,
+      connections: [
+        { connection_id: 4, name: "Conta A", azure_subscription_id: "s", azure_resource_group: "g", azure_capacity_name: "c", configured: true, simulated: true, capacity_schedule_enabled: false, schedule: [], state: null, state_at: null },
+      ],
+    });
+    vi.mocked(capacityApi.saveCapacity).mockResolvedValue({
+      connection_id: 4, name: "Conta A", azure_subscription_id: "s", azure_resource_group: "g", azure_capacity_name: "c", configured: true, simulated: false, capacity_schedule_enabled: false, schedule: [], state: null, state_at: null,
+    });
+    await abrir({ capacity_control_enabled: true });
+    fireEvent.click(botao("Editar Capacidade do Power BI"));
+    await screen.findByLabelText("Capacidade da conta Conta A");
+
+    fireEvent.click(screen.getByLabelText(/Chamar o Azure de verdade/));
+    expect(screen.getByText(/derruba a capacidade/)).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Sim, usar o Azure" }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar" }));
+
+    await waitFor(() => expect(capacityApi.saveCapacity).toHaveBeenCalledWith(4, expect.objectContaining({ capacity_real_calls: true, capacity_schedule_enabled: false })));
   });
 });

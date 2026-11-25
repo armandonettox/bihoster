@@ -37,6 +37,13 @@ export interface AppSettings {
   google_allowed_domains: string | null;
   cache_warmup_enabled: boolean;
   cache_warmup_interval_seconds: number;
+  /** Pre-carregar os scripts do Power BI no navegador (vem ligado: e o que sempre rodou) */
+  embed_preload_enabled: boolean;
+  /** Aquecer so os relatorios abertos nas ultimas horas (vem desligado) */
+  cache_warmup_only_recent: boolean;
+  cache_warmup_recent_hours: number;
+  /** Chave geral do controle da capacidade do Power BI (vem desligada) */
+  capacity_control_enabled: boolean;
 }
 
 export interface CacheStats {

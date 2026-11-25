@@ -9,6 +9,7 @@ import type { Workspace } from "../api/workspaces";
 import { AccessContext, buildAccess } from "../context/AccessContext";
 import { makeReport, makeWorkspace } from "../test-fixtures";
 import { preloadPowerBi } from "../utils/powerbiService";
+import { BrandingContext, type BrandingContextValue } from "../context/brandingContextObject";
 import CollectionHome from "./CollectionHome";
 
 const mocks = vi.hoisted(() => ({
@@ -198,6 +199,26 @@ describe("CollectionHome - carregar menos coisas ao mesmo tempo", () => {
     await renderLoaded();
 
     await waitFor(() => expect(preloadPowerBi).toHaveBeenCalledTimes(1));
+  });
+
+  it("com a chave de pre-carga desligada em Administracao, nao pre-carrega", async () => {
+    vi.mocked(preloadPowerBi).mockClear();
+    const marca = { settings: { embed_preload_enabled: false }, loaded: true, reload: async () => {} } as unknown as BrandingContextValue;
+    render(<BrandingContext.Provider value={marca}>{montar()}</BrandingContext.Provider>);
+    await screen.findByRole("heading", { name: "Relatorios" });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    expect(preloadPowerBi).not.toHaveBeenCalled();
+  });
+
+  it("espera as configuracoes carregarem antes de decidir a pre-carga", async () => {
+    vi.mocked(preloadPowerBi).mockClear();
+    const marca = { settings: null, loaded: false, reload: async () => {} } as unknown as BrandingContextValue;
+    render(<BrandingContext.Provider value={marca}>{montar()}</BrandingContext.Provider>);
+    await screen.findByRole("heading", { name: "Relatorios" });
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    expect(preloadPowerBi).not.toHaveBeenCalled();
   });
 
   it("no modo lista so o relatorio aberto fica montado; abrir outro desmonta o anterior", async () => {

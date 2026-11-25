@@ -11,18 +11,19 @@ from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from app.core import ai_history_runner, alert_runner, cache_warmup, catalog_sync_runner, changelog, subscription_runner
+from app.core import ai_history_runner, alert_runner, cache_warmup, capacity_runner, catalog_sync_runner, changelog, subscription_runner
 from app.core import powerbi as core_powerbi
 from app.core.config import settings
 from app.core.database import Base, SessionLocal, engine
 from app.core.rate_limit import limiter
 from app.core.schema_migrations import ensure_schema_up_to_date
-from app.models import email_template as email_template_model, access_grant as access_grant_model, access_extension as access_extension_model, access_schedule as access_schedule_model, ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, catalog_sync as catalog_sync_model, favorite, group_permission, invite, password_reset, powerbi_connection, report, report_grant as report_grant_model, report_schedule as report_schedule_model, dataset_grant as dataset_grant_model, connection_grant as connection_grant_model, subscription, tv as tv_model, user, workspace  # noqa: F401
+from app.models import email_template as email_template_model, access_grant as access_grant_model, access_extension as access_extension_model, access_schedule as access_schedule_model, ai_chat_log as ai_chat_log_model, ai_conversation, ai_provider, ai_report_settings as ai_report_settings_model, ai_usage as ai_usage_model, alert, audit_dashboard, audit_log, catalog_sync as catalog_sync_model, favorite, group_permission, invite, password_reset, powerbi_connection, report, report_grant as report_grant_model, report_schedule as report_schedule_model, report_open_stat as report_open_stat_model, dataset_grant as dataset_grant_model, connection_grant as connection_grant_model, subscription, tv as tv_model, user, workspace  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 from app.routers import (  # noqa: F401
     access,
     access_extensions,
     access_schedules,
+    cache_capacity,
     ai_access,
     analytics_access,
     ai_chat,
@@ -113,6 +114,7 @@ async def _lifespan(_: FastAPI):
     alert_runner.start()
     ai_history_runner.start()
     catalog_sync_runner.start()
+    capacity_runner.start()
     try:
         yield
     finally:
@@ -121,6 +123,7 @@ async def _lifespan(_: FastAPI):
         alert_runner.stop()
         ai_history_runner.stop()
         catalog_sync_runner.stop()
+        capacity_runner.stop()
 
 
 app = FastAPI(title="BIHoster Python", lifespan=_lifespan)
@@ -235,6 +238,7 @@ app.include_router(audit_dashboard.router)
 app.include_router(audit_query.router)
 app.include_router(audit.workspace_router)
 app.include_router(settings_router.router)
+app.include_router(cache_capacity.router)
 app.include_router(email_settings.router)
 app.include_router(email_templates.router)
 app.include_router(ai_settings.router)

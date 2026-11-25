@@ -6,7 +6,7 @@ from sqlalchemy.pool import StaticPool
 from app.core.database import Base
 # Precisa importar todos os modelos antes do create_all -- mesmo padrao usado em app/main.py --
 # senao tabelas referenciadas so por FK (sem import direto aqui) nao sao criadas.
-from app.models import access_extension, email_template, access_grant, access_schedule, ai_chat_log, ai_conversation, ai_provider, ai_report_settings, ai_usage, alert, audit_dashboard, audit_log, catalog_sync, favorite, group_permission, invite, password_reset, powerbi_connection, report, report_grant, report_schedule, dataset_grant, connection_grant, subscription, tv, user, workspace  # noqa: F401
+from app.models import access_extension, email_template, access_grant, access_schedule, ai_chat_log, ai_conversation, ai_provider, ai_report_settings, ai_usage, alert, audit_dashboard, audit_log, catalog_sync, favorite, group_permission, invite, password_reset, powerbi_connection, report, report_grant, report_schedule, report_open_stat, dataset_grant, connection_grant, subscription, tv, user, workspace  # noqa: F401
 from app.models import settings as settings_model  # noqa: F401
 
 
@@ -76,6 +76,9 @@ def _limpa_caches_do_powerbi():
     from app.core import ai_pricing, chat_dataset
     from app.routers import powerbi as embed_router
 
+    from app.core import azure_capacity
+
+    azure_capacity._BLOCK_NETWORK = True  # os testes nunca falam com o Azure: so um cliente HTTP simulado passa
     ai_pricing.clear_cache()
     chat_dataset.clear_caches()
     embed_router._embed_cache.clear()

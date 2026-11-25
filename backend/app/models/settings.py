@@ -69,6 +69,14 @@ class AppSettings(Base):
     # Nullable para compatibilidade com instancias existentes; o router usa os defaults abaixo.
     cache_warmup_enabled = Column(Boolean, nullable=True)         # default True
     cache_warmup_interval_seconds = Column(Integer, nullable=True)  # default 240
+    # Fase 5 (v1.54.0), tudo desligado por padrao (nulo = desligado):
+    # pre-carregar os scripts do Power BI no navegador (powerbi.preload; nulo = ligado, e o que sempre rodou, so desliga quem
+    # escolhe), aquecer so os relatorios abertos recentemente (nas ultimas `cache_warmup_recent_hours` horas, padrao 72) e
+    # permitir pausar/retomar a capacidade pelo Azure (nulo = desligado).
+    embed_preload_enabled = Column(Boolean, nullable=True)
+    cache_warmup_only_recent = Column(Boolean, nullable=True)
+    cache_warmup_recent_hours = Column(Integer, nullable=True)
+    capacity_control_enabled = Column(Boolean, nullable=True)
 
     # Chat de IA (ver core/ai_options.py). Nullable: a migracao automatica so adiciona colunas
     # nulaveis; nulo vale o padrao de cada opcao.

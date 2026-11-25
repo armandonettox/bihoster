@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useContext, useEffect, useState, type ReactNode } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import * as homeApi from "../api/home";
 import { useFavorites } from "../context/FavoritesContext";
@@ -28,6 +28,7 @@ import { useAuth } from "../context/AuthContext";
 import SendReportEmailModal from "../components/SendReportEmailModal";
 import ThumbnailPickerModal from "../components/ThumbnailPickerModal";
 import { preloadPowerBi } from "../utils/powerbiService";
+import { BrandingContext } from "../context/brandingContextObject";
 
 const SECTION_TITLES: Record<DisplayType, string> = {
   relatorio: "Relatorios",
@@ -109,10 +110,15 @@ export default function CollectionHome() {
 
   // Esquenta o Power BI em segundo plano logo depois de a pagina aparecer: quem entra numa colecao
   // vai abrir um relatorio, e o primeiro abre mais rapido com os recursos ja no cache do navegador.
+  // A chave "Pre-carregar o Power BI" (Administracao > Cache e capacidade) vem ligada; so nao pre-carrega quem a desligou.
+  const branding = useContext(BrandingContext);
+  const brandingReady = !branding || branding.loaded;
+  const preloadOn = branding?.settings?.embed_preload_enabled !== false;
   useEffect(() => {
+    if (!brandingReady || !preloadOn) return;
     const timer = window.setTimeout(preloadPowerBi, 300);
     return () => window.clearTimeout(timer);
-  }, []);
+  }, [brandingReady, preloadOn]);
 
   if (!currentWorkspace) return null;
 

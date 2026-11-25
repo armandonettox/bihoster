@@ -58,6 +58,10 @@ class SettingsUpdate(BaseModel):
     google_allowed_domains: Optional[str] = None
     cache_warmup_enabled: Optional[bool] = None
     cache_warmup_interval_seconds: Optional[int] = Field(default=None, ge=30, le=3600)
+    embed_preload_enabled: Optional[bool] = None
+    cache_warmup_only_recent: Optional[bool] = None
+    cache_warmup_recent_hours: Optional[int] = Field(default=None, ge=1, le=720)
+    capacity_control_enabled: Optional[bool] = None
 
     @field_validator(
         "not_found_title", "not_found_message", "not_found_button", "error_title", "error_message", "error_button",
@@ -140,6 +144,10 @@ class SettingsOut(BaseModel):
     google_allowed_domains: Optional[str]
     cache_warmup_enabled: bool = True
     cache_warmup_interval_seconds: int = 240
+    embed_preload_enabled: bool = True
+    cache_warmup_only_recent: bool = False
+    cache_warmup_recent_hours: int = 72
+    capacity_control_enabled: bool = False
 
     class Config:
         from_attributes = True

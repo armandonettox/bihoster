@@ -77,6 +77,11 @@ def _to_out(settings_row: AppSettings) -> SettingsOut:
         google_allowed_domains=settings_row.google_allowed_domains,
         cache_warmup_enabled=bool(settings_row.cache_warmup_enabled) if settings_row.cache_warmup_enabled is not None else True,
         cache_warmup_interval_seconds=settings_row.cache_warmup_interval_seconds if settings_row.cache_warmup_interval_seconds is not None else 240,
+        # Nulo = nunca mexeram: vale o comportamento de sempre (a pre-carga ja rodava), entao so desliga quem escolhe
+        embed_preload_enabled=settings_row.embed_preload_enabled is not False,
+        cache_warmup_only_recent=bool(settings_row.cache_warmup_only_recent),
+        cache_warmup_recent_hours=settings_row.cache_warmup_recent_hours or 72,
+        capacity_control_enabled=bool(settings_row.capacity_control_enabled),
     )
 
 
@@ -112,6 +117,10 @@ FIELD_PERMISSIONS: dict[str, tuple[str, ...]] = {
     "google_allowed_domains": ("sistema.autenticacao",),
     "cache_warmup_enabled": ("sistema.cache",),
     "cache_warmup_interval_seconds": ("sistema.cache",),
+    "embed_preload_enabled": ("sistema.cache",),
+    "cache_warmup_only_recent": ("sistema.cache",),
+    "cache_warmup_recent_hours": ("sistema.cache",),
+    "capacity_control_enabled": ("sistema.cache",),
 }
 
 
@@ -168,7 +177,7 @@ def update_settings(
     if default_workspace_id is not None and not db.query(Workspace).filter(Workspace.id == default_workspace_id, Workspace.system_key.is_(None)).first():
         raise HTTPException(status_code=400, detail="A colecao padrao escolhida nao existe")
 
-    cache_fields_changed = {"cache_warmup_enabled", "cache_warmup_interval_seconds"} & changed_fields.keys()
+    cache_fields_changed = {"cache_warmup_enabled", "cache_warmup_interval_seconds", "cache_warmup_only_recent", "cache_warmup_recent_hours"} & changed_fields.keys()
 
     for field, value in changed_fields.items():
         setattr(settings_row, field, value)

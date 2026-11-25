@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core import dataset_security, powerbi
+from app.core import dataset_security, powerbi, report_stats
 from app.core.audit import log_view_once
 from app.core.database import get_db
 from app.core.report_lookup import find_report
@@ -80,9 +80,11 @@ _report_static_cache: dict[tuple[int, int], tuple[datetime, dict]] = {}
 def invalidate_embed_cache(workspace_id: int, report_id: int) -> None:
     """Chamado ao editar/excluir um relatorio -- tira dos caches pra nao servir dado velho. A info
     de atualizacao e do dataset (nao do relatorio) e tem a propria invalidacao."""
-    for key in [k for k in _embed_cache if k[0] == workspace_id and k[1] == report_id]:
+    # As chaves sao do relatorio (nao da pasta do caminho): limpa tudo dele, qualquer que seja a pasta passada
+    for key in [k for k in _embed_cache if k[1] == report_id]:
         _embed_cache.pop(key, None)
-    _report_static_cache.pop((workspace_id, report_id), None)
+    for key in [k for k in _report_static_cache if k[1] == report_id]:
+        _report_static_cache.pop(key, None)
 
 
 def invalidate_refresh_info_for_connection(connection_id: int) -> None:
@@ -112,7 +114,7 @@ def _get_connection_or_error(db: Session, report: Report) -> PowerBIConnection:
 def _get_report_static(connection: PowerBIConnection, workspace_id: int, report: Report) -> dict:
     """URL de embed e exigencia de RLS do relatorio, com cache (ver _REPORT_STATIC_CACHE_TTL)."""
     _prune_expired(_report_static_cache)
-    cache_key = (workspace_id, report.id)
+    cache_key = (report.collection_id, report.id)  # chave do relatorio, nao da pasta do caminho (v1.54.0)
     cached = _report_static_cache.get(cache_key)
     if cached:
         return cached[1]
@@ -130,7 +132,7 @@ def get_report_static_fresh(connection, workspace_id: int, report: Report) -> di
     """Igual a _get_report_static, mas IGNORA o cache e consulta o estado atual no Power BI. E o que se
     usa quando o dado sai por e-mail: pra exibir na tela, ate 30 minutos de atraso na checagem de RLS
     e aceitavel; pra mandar o relatorio pra fora, nao e (se o RLS for ligado, o envio tem que parar)."""
-    _report_static_cache.pop((workspace_id, report.id), None)
+    _report_static_cache.pop((report.collection_id, report.id), None)
     return _get_report_static(connection, workspace_id, report)
 
 
@@ -157,7 +159,7 @@ def _generate_embed_config(
     except powerbi.PowerBIError:
         # O dado guardado pode estar velho (RLS ligado ou desligado no Power BI): na proxima
         # tentativa busca de novo em vez de repetir o mesmo erro ate o TTL vencer.
-        _report_static_cache.pop((workspace_id, report.id), None)
+        _report_static_cache.pop((report.collection_id, report.id), None)
         raise
 
     expires_at = _parse_token_expiration(token_response.get("expiration"))
@@ -222,7 +224,7 @@ def _embed_with_mapped_roles(db: Session, workspace_id: int, report: Report, cur
         )
     if identity is None:  # o mapeamento sumiu entre uma consulta e outra
         return None
-    key = (workspace_id, report.id, identity.cache_part(current_user.id))
+    key = (report.collection_id, report.id, identity.cache_part(current_user.id))
     cached = _embed_cache.get(key)
     if cached:
         return cached[1]
@@ -246,7 +248,7 @@ def get_embed_config(
 
     # Abrir um relatorio entra na auditoria (relatorios mais visitados). Fica antes do cache pra
     # contar tambem quando o token vem pronto; a janela evita contar renovacao de token e TV.
-    log_view_once(
+    opened_now = log_view_once(
         db,
         action="view_report",
         entity="report",
@@ -256,11 +258,14 @@ def get_embed_config(
         details=report.name,
     )
 
+    if opened_now:  # abertura de verdade (renovacao de token e volta de TV nao contam); so a contagem, nunca quem abriu
+        report_stats.record_open(db, report.id)
     _prune_expired(_embed_cache)
     mapped = _embed_with_mapped_roles(db, workspace_id, report, current_user)
     if mapped is not None:
         return mapped
-    cached = _cached_embed_config(workspace_id, report_id, current_user.id)
+    # O token vale para o relatorio, seja qual for a pasta por onde a pessoa chegou: o acesso ja foi conferido acima
+    cached = _cached_embed_config(report.collection_id, report.id, current_user.id)
     if cached:
         return cached
 
@@ -268,7 +273,7 @@ def get_embed_config(
 
     # PowerBIError propaga pro handler global em main.py (converte pra 502 automaticamente).
     config, needs_identity = _generate_embed_config(connection, workspace_id, report, current_user.email)
-    _store_embed_config(workspace_id, report_id, current_user.id, config, needs_identity)
+    _store_embed_config(report.collection_id, report.id, current_user.id, config, needs_identity)
     return config
 
 
@@ -405,7 +410,7 @@ def warm_report(connection, workspace_id: int, report: Report, renew_before: tim
     pra nunca haver um intervalo com o cache vazio. Relatorio com RLS nao tem token compartilhado.
     Devolve True se gerou um token novo."""
     now = datetime.now(timezone.utc)
-    static_key = (workspace_id, report.id)
+    static_key = (report.collection_id, report.id)
     static_entry = _report_static_cache.get(static_key)
     if static_entry and static_entry[0] - now < renew_before:
         _report_static_cache.pop(static_key, None)
@@ -414,12 +419,12 @@ def warm_report(connection, workspace_id: int, report: Report, renew_before: tim
     if static["needs_identity"]:
         return False
 
-    shared = _embed_cache.get((workspace_id, report.id, None))
+    shared = _embed_cache.get((report.collection_id, report.id, None))
     if shared and shared[0] - now >= renew_before:
         return False
 
     config, needs_identity = _generate_embed_config(connection, workspace_id, report, None)
-    _store_embed_config(workspace_id, report.id, 0, config, needs_identity)
+    _store_embed_config(report.collection_id, report.id, 0, config, needs_identity)
     return True
 
 

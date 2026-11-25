@@ -9,7 +9,7 @@ export const ADMIN_TABS: { key: AdminTab; label: string; keys: string[] }[] = [
   { key: "email", label: "E-mail", keys: ["sistema.email"] },
   { key: "ai", label: "IA", keys: ["ia.chaves", "ia.modelos", "ia.bloqueios", "ia.registro", "ia.consumo"] },
   { key: "updates", label: "Atualizações", keys: ["sistema.versao"] },
-  { key: "cache", label: "Cache", keys: ["sistema.cache"] },
+  { key: "cache", label: "Cache e capacidade", keys: ["sistema.cache"] },
 ];
 
 /** Os itens que abrem Gerenciar usuarios (pessoas, grupos e permissoes), que fica fora da Administracao */
