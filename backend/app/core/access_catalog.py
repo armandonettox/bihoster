@@ -23,7 +23,7 @@ Onde cada item será cobrado pelo sistema (etapa de troca da regra):
 - assinatura.todas: GET /subscriptions (visão do portal todo);  alerta.todas: GET /alerts e /alerts/reports (módulo Alertas);  sistema.versao: GET /system/version, /history e /logs
 - membros.*: rotas de /users e dos convites (membros.senha: /users/{id}/reset-link e /send-reset-email; membros.bloquear: /block e /unblock; membros.horario: /access-schedules; membros.liberar-horario: /access-extensions; membros.adicionar: /users/welcome-email)
 - grupos.*: rotas de /groups (grupos.participantes: /groups/{id}/members);  permissoes.editar: PUT de /access/*
-- conexao.*: /powerbi-connections (conexao.sincronizar: /sync, /sync-settings e o histórico da conta);  relatorio.catalogo e modelo.catalogo: /catalog/reports e /catalog/datasets;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
+- conexao.*: /powerbi-connections (conexao.sincronizar: /sync, /sync-settings e o histórico da conta);  relatorio.catalogo e modelo.catalogo: /catalog/reports e /catalog/datasets;  modelo.seguranca: /catalog/datasets/{id}/security;  auditoria.*: /audit, /audit/search e /audit/{id}/revert
 - sistema.*: /settings (geral, marca, cache), autenticação e /email-settings
 Fica só com o administrador da plataforma, sem permissão: atualizar a versão do sistema e conceder administrador (L-314).
 """
@@ -187,6 +187,13 @@ CATALOG: tuple[Permission, ...] = (
         "Ver o catálogo de relatórios",
         "Abrir a lista completa de relatórios importados do Power BI. Não dá acesso ao conteúdo dos relatórios.",
         "Catálogo do Power BI",
+    ),
+    _global(
+        "modelo.seguranca",
+        "Configurar a segurança dos modelos",
+        "Dizer que função de RLS e OLS do Power BI cada grupo e cada pessoa recebe em cada modelo semântico, e testar a função. Quem recebe uma função só vê o que ela deixa ver; sem função, o relatório do modelo não abre.",
+        "Catálogo do Power BI",
+        requires=("modelo.catalogo",),
     ),
     _global(
         "modelo.catalogo",

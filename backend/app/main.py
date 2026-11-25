@@ -35,6 +35,7 @@ from app.routers import (  # noqa: F401
     ai_usage,
     alerts,
     catalog,
+    dataset_security,
     audit,
     audit_dashboard,
     audit_query,
@@ -223,6 +224,7 @@ app.include_router(powerbi_catalog.router)
 app.include_router(powerbi_connections.router)
 app.include_router(catalog.router)
 app.include_router(catalog.catalog_router)
+app.include_router(dataset_security.router)
 app.include_router(report_access.router)
 app.include_router(audit.router)
 app.include_router(audit_dashboard.router)

@@ -12,6 +12,17 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.50.0 - 2026-11-25 - Funções de RLS e OLS por grupo e por pessoa
+- No **Catálogo > Modelos semânticos**, cada modelo ganhou o botão **Segurança** (para quem tem a nova permissão **Configurar a segurança dos modelos**): dá para dizer que **função** do Power BI cada **grupo** e cada **pessoa** recebe naquele modelo. As funções (de RLS e, no Power BI, também de OLS) precisam existir no modelo: o portal **não cria nem altera** funções, só escolhe quem recebe qual.
+- Ao abrir um relatório do modelo, o portal manda no token a **soma das funções** dos grupos da pessoa e das dadas a ela, além do e-mail que já mandava. Quem recebe mais de uma função vê a soma delas, como no Power BI.
+- **Falha fechada:** com ao menos uma função mapeada, o modelo passa a **exigir função**: quem não receber nenhuma **não abre** os relatórios dele (nunca cai para "ver tudo"), **nem administradores**. Para os administradores, crie no modelo uma função **sem filtro** e dê a ela o grupo Administradores.
+- **Sem nenhuma função mapeada, nada muda:** o modelo continua funcionando exatamente como antes. A tela avisa isso e a lista de modelos mostra quantas funções cada um tem.
+- O botão **Testar função** pede ao Power BI um token com aquela função e mostra se ele a aceitou (o token nunca é mostrado nem guardado). Ele confirma que o nome existe, mas **não** o que a função deixa ver: isso se confere abrindo o relatório como a pessoa.
+- Mudou o mapeamento ou saiu do grupo? O token antigo **não é reaproveitado**: as funções fazem parte da chave do cache, e gravar a segurança descarta o que estava guardado. Quem sai do grupo deixa de abrir o relatório na hora, mesmo com token ainda válido no cache.
+- Opção **RLS só por função** (desligada por padrão): para modelos em que nenhuma regra usa o usuário (como `USERNAME()`), pessoas com o mesmo conjunto de funções dividem o mesmo token e gastam menos capacidade. O token compartilhado usa um nome de usuário neutro, então uma regra que dependa do usuário não mostra dado de ninguém. **Em dúvida, deixe desmarcada.**
+- Excluir um grupo ou uma pessoa apaga as funções mapeadas para eles. Cada mudança de segurança entra na auditoria.
+- **Continuam bloqueados** nos relatórios com RLS: assinatura por e-mail, exportação (PowerPoint, PDF e imagem), Modo TV e chat de IA. Liberar essas saídas exige identidade por destinatário e validação com dados reais, e fica para quando houver como testar.
+
 ## 1.49.0 - 2026-11-25 - Pastas dentro de pastas e relatório em várias pastas
 - As coleções agora podem ficar **dentro de outras coleções**, em até **5 níveis**. Ao criar ou editar uma coleção há o campo **Dentro de**; mover uma pasta leva junto tudo o que está dentro dela. Não dá para pôr uma pasta dentro dela mesma nem de uma pasta que ela contém.
 - **As pastas de dentro herdam o acesso da pasta de cima.** Quem vê "Financeiro" vê também "Financeiro > Faturamento" e os relatórios delas, e uma subpasta pode ter uma permissão extra, só dela. A herança **só soma**: por isso não existe jeito de esconder uma subpasta de quem vê a pasta de cima. Para ter uma pasta restrita, crie-a no topo ou dentro de uma pasta que essa pessoa não vê.

@@ -18,7 +18,7 @@ from app.core.access_deps import require_global_permission
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.rate_limit import limiter
-from app.models.catalog_sync import CatalogSync, PbiDataset
+from app.models.catalog_sync import CatalogSync, DatasetRoleGrant, PbiDataset
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
 from app.models.user import User
@@ -217,6 +217,8 @@ class CatalogDatasetOut(BaseModel):
     pbi_dataset_id: str
     requires_identity: Optional[bool] = None
     reports_count: int
+    # Quantas funcoes de RLS/OLS estao mapeadas neste modelo (0 = sem mapeamento, funciona como antes)
+    role_grants: int = 0
     synced_at: Optional[datetime] = None
     sync_missing_at: Optional[datetime] = None
 
@@ -333,6 +335,15 @@ def list_catalog_datasets(
             .group_by(Report.powerbi_connection_id, Report.pbi_dataset_id)
             .all()
         }
+    role_counts = {}
+    if rows:
+        role_counts = {
+            did: n
+            for did, n in db.query(DatasetRoleGrant.dataset_id, func.count(DatasetRoleGrant.id))
+            .filter(DatasetRoleGrant.dataset_id.in_([dataset.id for dataset, _ in rows]))
+            .group_by(DatasetRoleGrant.dataset_id)
+            .all()
+        }
     items = [
         CatalogDatasetOut(
             id=dataset.id,
@@ -344,6 +355,7 @@ def list_catalog_datasets(
             pbi_dataset_id=dataset.pbi_dataset_id,
             requires_identity=dataset.is_effective_identity_required,
             reports_count=counts.get((dataset.connection_id, dataset.pbi_dataset_id), 0),
+            role_grants=role_counts.get(dataset.id, 0),
             synced_at=dataset.synced_at,
             sync_missing_at=dataset.sync_missing_at,
         )

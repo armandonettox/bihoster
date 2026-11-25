@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("react-router-dom", () => ({ Navigate: ({ to }: { to: string }) => <div data-testid="navegou">{to}</div> }));
 vi.mock("../api/catalog", () => mocks);
+// A janela de seguranca tem teste proprio (DatasetSecurityModal.test.tsx)
+vi.mock("../components/DatasetSecurityModal", () => ({ default: () => null }));
 
 function renderCatalog(globais: string[]) {
   const me: MyAccess = { is_admin: false, global_permissions: globais, workspace_permissions: {} };
@@ -111,6 +113,24 @@ describe("Catalog", () => {
     expect(screen.getByText("Exige identidade (RLS)")).toBeTruthy();
     expect(mocks.listCatalogReports).not.toHaveBeenCalled();
     expect(mocks.listCatalogOrigins).not.toHaveBeenCalled();
+  });
+
+  it("a coluna de funcoes diz quantas estao mapeadas, e so quem tem a permissao ve o botao Seguranca", async () => {
+    mocks.listCatalogDatasets.mockResolvedValue({
+      items: [
+        { id: 1, name: "Modelo financeiro", connection_id: 1, connection_name: "Conta", pbi_workspace_id: "ws-a", pbi_workspace_name: "Financeiro", pbi_dataset_id: "ds-1", requires_identity: true, reports_count: 2, role_grants: 3, synced_at: null, sync_missing_at: null },
+      ],
+      total: 1,
+      page: 1,
+      page_size: 25,
+    });
+    const { unmount } = renderCatalog(["modelo.catalogo"]);
+    expect(await screen.findByText(/3 mapeadas \(exige função\)/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: "Segurança" })).toBeNull();
+    unmount();
+
+    renderCatalog(["modelo.catalogo", "modelo.seguranca"]);
+    expect(await screen.findByRole("button", { name: "Segurança" })).toBeTruthy();
   });
 
   it("lista vazia explica como importar", async () => {

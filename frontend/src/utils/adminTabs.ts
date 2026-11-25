@@ -25,7 +25,7 @@ export const SUBSCRIPTIONS_AREA_KEYS: string[] = ["assinatura.todas"];
 export const ALERTS_AREA_KEYS: string[] = ["alerta.todas"];
 
 /** Os itens que abrem a pagina do Catalogo (lista de relatorios e de modelos importados do Power BI), fora da Administracao */
-export const CATALOG_AREA_KEYS: string[] = ["relatorio.catalogo", "modelo.catalogo"];
+export const CATALOG_AREA_KEYS: string[] = ["relatorio.catalogo", "modelo.catalogo", "modelo.seguranca"];
 
 /** Os itens que abrem a pagina de Acessos aos relatorios (quem pode o que em cada relatorio), fora da Administracao */
 export const REPORT_ACCESS_AREA_KEYS: string[] = ["permissoes.editar", "membros.ver", "grupos.ver"];

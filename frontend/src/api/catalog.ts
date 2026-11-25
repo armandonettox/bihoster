@@ -28,6 +28,8 @@ export interface CatalogDataset {
   pbi_dataset_id: string;
   requires_identity: boolean | null;
   reports_count: number;
+  /** Quantas funcoes de RLS/OLS estao mapeadas neste modelo (0 = funciona como antes) */
+  role_grants?: number;
   synced_at: string | null;
   sync_missing_at: string | null;
 }

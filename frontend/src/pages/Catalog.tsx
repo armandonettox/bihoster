@@ -4,6 +4,7 @@ import * as catalogApi from "../api/catalog";
 import type { CatalogDataset, CatalogReport, CatalogState, CatalogWhere, Page } from "../api/catalog";
 import { extractErrorMessage } from "../api/client";
 import PageLoading from "../components/PageLoading";
+import DatasetSecurityModal from "../components/DatasetSecurityModal";
 import { SkeletonList } from "../components/Skeleton";
 import { useAccess } from "../context/AccessContext";
 import { CATALOG_AREA_KEYS } from "../utils/adminTabs";
@@ -196,7 +197,11 @@ function ReportsList({ origins }: { origins: string[] }) {
   );
 }
 
-function DatasetsList({ origins }: { origins: string[] }) {
+function DatasetsList({ origins, canSecurity }: { origins: string[]; canSecurity: boolean }) {
+  const access = useAccess();
+  const canConfigure = canSecurity || access.can("modelo.seguranca");
+  const [securityOf, setSecurityOf] = useState<CatalogDataset | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const [search, setSearch] = useState("");
   const [workspace, setWorkspace] = useState("");
   const [state, setState] = useState<CatalogState>("all");
@@ -220,7 +225,7 @@ function DatasetsList({ origins }: { origins: string[] }) {
     return () => {
       cancelled = true;
     };
-  }, [debouncedSearch, workspace, state, page]);
+  }, [debouncedSearch, workspace, state, page, reloadKey]);
 
   function change<T>(setter: (v: T) => void) {
     return (value: T) => {
@@ -255,6 +260,7 @@ function DatasetsList({ origins }: { origins: string[] }) {
                   <th scope="col">Workspace de origem</th>
                   <th scope="col">Relatórios que usam</th>
                   <th scope="col">Segurança por linha</th>
+                  <th scope="col">Funções (RLS/OLS)</th>
                   <th scope="col">Estado</th>
                 </tr>
               </thead>
@@ -266,6 +272,14 @@ function DatasetsList({ origins }: { origins: string[] }) {
                     <td>{dataset.reports_count}</td>
                     <td>{dataset.requires_identity === null ? "Não informado" : dataset.requires_identity ? "Exige identidade (RLS)" : "Não"}</td>
                     <td>
+                      {dataset.role_grants ? `${dataset.role_grants} mapeadas (exige função)` : "nenhuma (como antes)"}
+                      {canConfigure && (
+                        <button type="button" className="btn btn-ghost btn-sm" style={{ marginLeft: 8 }} onClick={() => setSecurityOf(dataset)}>
+                          Segurança
+                        </button>
+                      )}
+                    </td>
+                    <td>
                       <StateBadge missingAt={dataset.sync_missing_at} />
                     </td>
                   </tr>
@@ -276,6 +290,14 @@ function DatasetsList({ origins }: { origins: string[] }) {
           <Pager page={data.page} total={data.total} onPage={setPage} />
         </>
       ) : null}
+      {securityOf && (
+        <DatasetSecurityModal
+          datasetId={securityOf.id}
+          datasetName={securityOf.name}
+          onClose={() => setSecurityOf(null)}
+          onSaved={() => setReloadKey((n) => n + 1)}
+        />
+      )}
     </>
   );
 }
@@ -315,7 +337,7 @@ export default function Catalog() {
           </button>
         </div>
       )}
-      {activeTab === "reports" ? <ReportsList origins={origins} /> : <DatasetsList origins={origins} />}
+      {activeTab === "reports" ? <ReportsList origins={origins} /> : <DatasetsList origins={origins} canSecurity={false} />}
     </div>
   );
 }

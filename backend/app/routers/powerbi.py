@@ -7,7 +7,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core import powerbi
+from app.core import dataset_security, powerbi
 from app.core.audit import log_view_once
 from app.core.database import get_db
 from app.core.report_lookup import find_report
@@ -33,7 +33,10 @@ _prune_expired = powerbi.prune_expired
 _EMBED_CACHE_MARGIN = timedelta(minutes=5)
 # Validade assumida quando o Power BI nao informa `expiration` (o embed token dura ~1h)
 _EMBED_DEFAULT_LIFETIME = timedelta(minutes=60)
-_embed_cache: dict[tuple[int, int, Optional[int]], tuple[datetime, EmbedConfig]] = {}
+# Terceiro item da chave: None (token compartilhado, sem RLS), id da pessoa (RLS por pessoa) ou uma tupla ("m", pessoa ou 0,
+# funcoes) quando o modelo tem funcoes mapeadas: as funcoes fazem parte da chave, entao mudar grupo ou mapeamento nunca
+# reaproveita um token com as funcoes antigas.
+_embed_cache: dict[tuple, tuple[datetime, EmbedConfig]] = {}
 
 
 def _parse_token_expiration(raw: Optional[str]) -> datetime:
@@ -132,10 +135,14 @@ def get_report_static_fresh(connection, workspace_id: int, report: Report) -> di
 
 
 def _generate_embed_config(
-    connection: PowerBIConnection, workspace_id: int, report: Report, username: Optional[str]
+    connection: PowerBIConnection,
+    workspace_id: int,
+    report: Report,
+    username: Optional[str],
+    roles: Optional[list[str]] = None,
 ) -> tuple[EmbedConfig, bool]:
     """Gera o embed token e monta a configuracao. Devolve (config, relatorio_exige_identidade).
-    `username` so entra no token quando o dataset tem RLS."""
+    `username` e `roles` so entram no token quando o dataset tem RLS."""
     static = _get_report_static(connection, workspace_id, report)
     needs_identity = static["needs_identity"]
     try:
@@ -145,6 +152,7 @@ def _generate_embed_config(
             report_id=report.pbi_report_id,
             dataset_id=report.pbi_dataset_id if needs_identity else None,
             username=username if needs_identity else None,
+            roles=roles if needs_identity else None,
         )
     except powerbi.PowerBIError:
         # O dado guardado pode estar velho (RLS ligado ou desligado no Power BI): na proxima
@@ -188,6 +196,43 @@ def _cached_embed_config(workspace_id: int, report_id: int, user_id: int) -> Opt
     return None
 
 
+def invalidate_embed_cache_for_reports(report_ids: set[int]) -> None:
+    """Tira do cache o token de embed de cada relatorio dado, em qualquer caminho de pasta (a chave tem o id da pasta do
+    caminho). Chamado quando o mapeamento de funcoes de um modelo muda."""
+    for key in [k for k in _embed_cache if k[1] in report_ids]:
+        _embed_cache.pop(key, None)
+
+
+def _embed_with_mapped_roles(db: Session, workspace_id: int, report: Report, current_user: User) -> Optional[EmbedConfig]:
+    """Caminho do RLS com funcoes mapeadas por grupo e por pessoa (ver core/dataset_security.py). Devolve None quando nao se
+    aplica (o modelo nao tem funcoes mapeadas ou nao tem RLS): ai vale o caminho de sempre, que fica exatamente como era.
+    Falha fechada: com funcoes mapeadas e nenhuma para a pessoa, responde 403 e nao gera token nenhum."""
+    if not dataset_security.has_mapping(db, report):
+        return None
+    connection = _get_connection_or_error(db, report)
+    static = _get_report_static(connection, workspace_id, report)
+    if not static["needs_identity"]:
+        return None
+    try:
+        identity = dataset_security.resolve_identity(db, current_user, report)
+    except dataset_security.RlsRoleRequired:
+        raise HTTPException(
+            status_code=403,
+            detail="Voce nao tem uma funcao de seguranca para este relatorio. Peca a quem cuida dos acessos para liberar.",
+        )
+    if identity is None:  # o mapeamento sumiu entre uma consulta e outra
+        return None
+    key = (workspace_id, report.id, identity.cache_part(current_user.id))
+    cached = _embed_cache.get(key)
+    if cached:
+        return cached[1]
+    config, _ = _generate_embed_config(connection, workspace_id, report, identity.username, list(identity.roles))
+    cache_until = config.expires_at - _EMBED_CACHE_MARGIN
+    if cache_until > datetime.now(timezone.utc):
+        _embed_cache[key] = (cache_until, config)
+    return config
+
+
 @router.get("/reports/{report_id}/embed", response_model=EmbedConfig)
 def get_embed_config(
     workspace_id: int,
@@ -212,6 +257,9 @@ def get_embed_config(
     )
 
     _prune_expired(_embed_cache)
+    mapped = _embed_with_mapped_roles(db, workspace_id, report, current_user)
+    if mapped is not None:
+        return mapped
     cached = _cached_embed_config(workspace_id, report_id, current_user.id)
     if cached:
         return cached
