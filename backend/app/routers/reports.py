@@ -16,6 +16,7 @@ from app.core.root_collection import ensure_root_collection, stop_sends_of_unpub
 from app.core.workspace_deps import require_workspace_member
 from app.core.report_lookup import report_in_workspace
 from app.models.report_grant import ReportCollection, ReportGrant, ReportInviteGrant
+from app.models.report_schedule import ReportScheduleRange
 from app.models.favorite import Favorite
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
@@ -407,6 +408,7 @@ def delete_report(
     db.query(ReportGrant).filter(ReportGrant.report_id == report_id).delete(synchronize_session=False)
     db.query(ReportCollection).filter(ReportCollection.report_id == report_id).delete(synchronize_session=False)
     db.query(ReportInviteGrant).filter(ReportInviteGrant.report_id == report_id).delete(synchronize_session=False)
+    db.query(ReportScheduleRange).filter(ReportScheduleRange.report_id == report_id).delete(synchronize_session=False)
     delete_subscriptions_of_reports(db, [report_id])
     delete_settings_of_reports(db, [report_id])
     db.delete(report)

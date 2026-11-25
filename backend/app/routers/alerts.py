@@ -6,14 +6,15 @@ from sqlalchemy.orm import Session
 from app.core import powerbi
 from app.core.audit import log_action
 from app.core.database import get_db
-from app.core.access_deps import require_global_permission, require_workspace_permission
+from app.core.access_deps import DENIED_WORKSPACE, require_global_permission, require_report_permission
 from app.core.access_engine import can_in_workspace
-from app.core.access_ownership import can_act, require_can_act
+from app.core.access_ownership import can_act, can_in_report, require_can_act
 from app.models.alert import ALERT_CONDITIONS, ReportAlert
 from app.models.report import Report
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.routers import powerbi as embed_router
+from app.routers.auth import get_current_user
 from app.schemas.alert import AlertCreate, AlertOut, AlertUpdate, MeasureOut
 
 router = APIRouter(prefix="/workspaces/{workspace_id}", tags=["alerts"])
@@ -38,8 +39,8 @@ def _out(db: Session, alert: ReportAlert, viewer: User | None = None) -> AlertOu
     flags = {}
     if viewer is not None and report is not None:
         flags = {
-            "can_edit": can_act(db, viewer, report.collection_id, alert.created_by_id, "alerta.editar"),
-            "can_delete": can_act(db, viewer, report.collection_id, alert.created_by_id, "alerta.excluir"),
+            "can_edit": can_act(db, viewer, report.collection_id, alert.created_by_id, "alerta.editar", report),
+            "can_delete": can_act(db, viewer, report.collection_id, alert.created_by_id, "alerta.excluir", report),
         }
     return AlertOut(
         **flags,
@@ -70,9 +71,14 @@ def _out(db: Session, alert: ReportAlert, viewer: User | None = None) -> AlertOu
     )
 
 
-def _get_alert(db: Session, workspace_id: int, alert_id: int) -> ReportAlert:
+def _get_alert(db: Session, workspace_id: int, alert_id: int, user: User | None = None, key: str | None = None) -> ReportAlert:
+    """Com `user` e `key`, confere antes que a pessoa tem o item NESSE relatorio (direto, da pasta ou herdado)."""
     alert = db.get(ReportAlert, alert_id)
     report = db.get(Report, alert.report_id) if alert else None
+    if user is not None and key is not None:
+        allowed = can_in_workspace(db, user.id, key, workspace_id) or (report is not None and can_in_report(db, user, report, key))
+        if not allowed:
+            raise HTTPException(status_code=403, detail=DENIED_WORKSPACE)
     if alert is None or report is None or report.collection_id != workspace_id:
         raise HTTPException(status_code=404, detail="Alerta nao encontrado")
     return alert
@@ -80,19 +86,19 @@ def _get_alert(db: Session, workspace_id: int, alert_id: int) -> ReportAlert:
 
 @router.get("/reports/{report_id}/alerts", response_model=list[AlertOut])
 def list_report_alerts(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("alerta.ver"))
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_report_permission("alerta.ver"))
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     alerts = db.query(ReportAlert).filter(ReportAlert.report_id == report.id).order_by(ReportAlert.id).all()
-    # Sem a permissao de ver os de outras pessoas, so os que a propria pessoa criou
-    if not can_in_workspace(db, current_user.id, "alerta.ver-outras", workspace_id):
+    # Sem a permissao de ver os de outras pessoas NESTE relatorio, so os que a propria pessoa criou
+    if not can_in_report(db, current_user, report, "alerta.ver-outras"):
         alerts = [a for a in alerts if a.created_by_id == current_user.id]
     return [_out(db, a, current_user) for a in alerts]
 
 
 @router.get("/reports/{report_id}/measures", response_model=list[MeasureOut])
 def list_report_measures(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_workspace_permission("alerta.ver"))
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), _: User = Depends(require_report_permission("alerta.ver"))
 ):
     """Lista as medidas disponiveis no dataset do relatorio (via INFO.MEASURES() do Power BI)."""
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
@@ -118,7 +124,7 @@ def create_alert(
     report_id: int,
     data: AlertCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("alerta.criar")),
+    current_user: User = Depends(require_report_permission("alerta.criar")),
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     if db.query(ReportAlert).filter(ReportAlert.report_id == report.id).count() >= MAX_PER_REPORT:
@@ -154,10 +160,10 @@ def update_alert(
     alert_id: int,
     data: AlertUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("alerta.editar")),
+    current_user: User = Depends(get_current_user),
 ):
-    alert = _get_alert(db, workspace_id, alert_id)
-    require_can_act(db, current_user, workspace_id, alert.created_by_id, "alerta.editar", "Voce so edita os alertas que voce criou.")
+    alert = _get_alert(db, workspace_id, alert_id, current_user, "alerta.editar")
+    require_can_act(db, current_user, workspace_id, alert.created_by_id, "alerta.editar", "Voce so edita os alertas que voce criou.", db.get(Report, alert.report_id))
     changes = data.model_dump(exclude_unset=True)
     if "recipients" in changes:
         alert.recipients = changes.pop("recipients")
@@ -173,10 +179,10 @@ def update_alert(
 
 @router.delete("/alerts/{alert_id}", status_code=204)
 def delete_alert(
-    workspace_id: int, alert_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("alerta.excluir"))
+    workspace_id: int, alert_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    alert = _get_alert(db, workspace_id, alert_id)
-    require_can_act(db, current_user, workspace_id, alert.created_by_id, "alerta.excluir", "Voce so exclui os alertas que voce criou.")
+    alert = _get_alert(db, workspace_id, alert_id, current_user, "alerta.excluir")
+    require_can_act(db, current_user, workspace_id, alert.created_by_id, "alerta.excluir", "Voce so exclui os alertas que voce criou.", db.get(Report, alert.report_id))
     db.delete(alert)
     db.commit()
     log_action(db, action="alert_deleted", entity="alert", user_id=current_user.id,
@@ -208,12 +214,10 @@ def list_reports_for_new_alert(
         .order_by(Workspace.name, Report.name)
         .all()
     )
-    allowed: dict[int, bool] = {}
     result = []
     for report, workspace in rows:
-        if workspace.id not in allowed:
-            allowed[workspace.id] = can_in_workspace(db, current_user.id, "alerta.criar", workspace.id)
-        if allowed[workspace.id]:
+        # Vale o que a pessoa tem NESTE relatorio: dado direto nele, vindo da pasta ou herdado
+        if can_in_report(db, current_user, report, "alerta.criar"):
             result.append(
                 {
                     "report_id": report.id,

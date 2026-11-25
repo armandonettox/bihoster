@@ -5,6 +5,7 @@ import { extractErrorMessage } from "../../api/client";
 import { useToast } from "../../context/ToastContext";
 import { useEscapeKey } from "../../hooks/useEscapeKey";
 import { Avatar } from "./Avatar";
+import ReportScheduleSection from "./ReportScheduleSection";
 
 const EMAIL = /^\S+@\S+\.\S+$/;
 const CUSTOM = "__custom";
@@ -312,6 +313,8 @@ export default function PermissionsPanel({
               ))}
             </div>
           )}
+
+          {panel && kind === "report" && <ReportScheduleSection reportId={itemId} />}
         </div>
       </aside>
     </>

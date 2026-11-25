@@ -128,3 +128,20 @@ describe("ScheduleEditor - excecao da pessoa", () => {
     expect((screen.getByLabelText("Início da faixa 1") as HTMLInputElement).value).toBe("08:00");
   });
 });
+
+describe("ScheduleEditor - relatorio", () => {
+  it("explica que vale para abrir e exportar o relatorio, sem limite por padrao, e salva pelo relatorio", async () => {
+    carregar([]);
+    render(<ScheduleEditor kind="report" id={9} />);
+
+    expect(await screen.findByText(/este relatório pode ser aberto ou exportado/)).toBeTruthy();
+    expect(screen.getByText("Nenhuma faixa: sem limite de horário.")).toBeTruthy();
+    expect(getSchedule).toHaveBeenCalledWith("report", 9);
+
+    fireEvent.click(screen.getByRole("button", { name: /Adicionar faixa/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Salvar horário" }));
+
+    await waitFor(() => expect(setSchedule).toHaveBeenCalledWith("report", 9, expect.any(Array)));
+  });
+});
+

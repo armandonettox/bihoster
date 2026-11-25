@@ -6141,3 +6141,9 @@ table.table tr:last-child td {
   .rpt-search { max-width: none; }
   .rpt-bulk { left: 8px; right: 8px; transform: none; flex-wrap: wrap; justify-content: center; }
 }
+
+/* Horario de acesso do relatorio, no fim do painel de permissoes */
+.rpt-schedule { margin-top: 20px; border-top: 1px solid var(--color-border); padding-top: 12px; }
+.rpt-schedule > summary { cursor: pointer; font-weight: 600; font-size: 14px; }
+.rpt-schedule[open] > summary { margin-bottom: 10px; }
+

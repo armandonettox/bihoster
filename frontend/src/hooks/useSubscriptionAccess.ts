@@ -15,16 +15,18 @@ export interface SubscriptionAccess {
   allowedDomains: string[];
 }
 
-/** O que a pessoa pode fazer com assinaturas (envio recorrente por e-mail) e alertas de um relatorio, na colecao dele.
+/** O que a pessoa pode fazer com assinaturas (envio recorrente por e-mail) e alertas de um relatorio, na colecao dele ou
+ * so nele (permissao por relatorio, v1.53.0).
  *
  * Cada acao tem a sua permissao na colecao (assinatura.ver, criar, editar, excluir, executar; alerta.ver, criar, editar,
  * excluir). Criar assinatura tambem exige haver lista de dominios permitidos, a nao ser que a pessoa tenha a permissao
  * de enviar para qualquer dominio (o servidor tambem exige isso). O servidor de e-mail so e consultado por quem pode ver
  * assinaturas ou alertas. Em caso de falha na consulta, os botoes simplesmente nao aparecem. */
-export function useSubscriptionAccess(workspaceId: number | null | undefined): SubscriptionAccess {
+export function useSubscriptionAccess(workspaceId: number | null | undefined, reportId?: number | null): SubscriptionAccess {
   const { user } = useAuth();
   const access = useAccess();
-  const can = (key: string) => access.canIn(key, workspaceId);
+  // Com o relatorio, vale o que a pessoa tem NELE (dado direto no relatorio, ou herdado da colecao/pasta)
+  const can = (key: string) => (reportId != null ? access.canInReport(key, reportId, workspaceId) : access.canIn(key, workspaceId));
   const mightUse = can("assinatura.ver") || can("alerta.ver");
   const [status, setStatus] = useState<emailApi.EmailStatus | null>(null);
 

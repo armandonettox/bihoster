@@ -10,15 +10,16 @@ from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.email_sender import allowed_domains, disallowed_recipients, load_smtp_config
 from app.core.rate_limit import limiter
-from app.core.access_deps import require_global_permission, require_workspace_permission
+from app.core.access_deps import DENIED_WORKSPACE, require_global_permission, require_report_permission, require_workspace_permission
 from app.core.access_engine import can_in_workspace
-from app.core.access_ownership import can_act, require_can_act
+from app.core.access_ownership import can_act, can_in_report, require_can_act
 from app.models.report import Report
 from app.models.settings import AppSettings
 from app.models.subscription import ReportSubscription, SubscriptionRun
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.routers import powerbi as embed_router
+from app.routers.auth import get_current_user
 from app.schemas.subscription import (
     RunNowOut,
     SubscriptionCreate,
@@ -52,9 +53,9 @@ def _out(db: Session, sub: ReportSubscription, viewer: Optional[User] = None) ->
     if viewer is not None and report is not None:
         ws = report.collection_id
         flags = {
-            "can_edit": can_act(db, viewer, ws, sub.created_by_id, "assinatura.editar"),
-            "can_delete": can_act(db, viewer, ws, sub.created_by_id, "assinatura.excluir"),
-            "can_run": can_act(db, viewer, ws, sub.created_by_id, "assinatura.executar"),
+            "can_edit": can_act(db, viewer, ws, sub.created_by_id, "assinatura.editar", report),
+            "can_delete": can_act(db, viewer, ws, sub.created_by_id, "assinatura.excluir", report),
+            "can_run": can_act(db, viewer, ws, sub.created_by_id, "assinatura.executar", report),
         }
     return SubscriptionOut(
         **flags,
@@ -87,18 +88,26 @@ def _out(db: Session, sub: ReportSubscription, viewer: Optional[User] = None) ->
     )
 
 
-def _get_subscription(db: Session, workspace_id: int, subscription_id: int) -> ReportSubscription:
+def _get_subscription(db: Session, workspace_id: int, subscription_id: int, user: Optional[User] = None, key: Optional[str] = None) -> ReportSubscription:
     """A assinatura precisa ser de um relatorio DESTA colecao: senao quem edita uma colecao poderia
-    mexer na de outra so trocando o numero no endereco."""
+    mexer na de outra so trocando o numero no endereco. Com `user` e `key`, confere tambem que a pessoa tem o item NESSE
+    relatorio (dado nele, na pasta ou herdado); quem nao tem recebe 403, igual a quem nao tem em nenhum lugar."""
     sub = db.get(ReportSubscription, subscription_id)
     report = db.get(Report, sub.report_id) if sub else None
+    if user is not None and key is not None:
+        allowed = can_in_workspace(db, user.id, key, workspace_id) or (report is not None and can_in_report(db, user, report, key))
+        if not allowed:
+            raise HTTPException(status_code=403, detail=DENIED_WORKSPACE)
     if sub is None or report is None or report.collection_id != workspace_id:
         raise HTTPException(status_code=404, detail="Assinatura nao encontrada")
     return sub
 
 
-def _check_recipients(db: Session, user: User, workspace_id: int, recipients: list[str], row: Optional[AppSettings]) -> None:
-    if not can_in_workspace(db, user.id, "assinatura.qualquer-dominio", workspace_id) and not allowed_domains(row):
+def _check_recipients(
+    db: Session, user: User, workspace_id: int, recipients: list[str], row: Optional[AppSettings], report: Optional[Report] = None
+) -> None:
+    any_domain = can_in_report(db, user, report, "assinatura.qualquer-dominio") if report is not None else can_in_workspace(db, user.id, "assinatura.qualquer-dominio", workspace_id)
+    if not any_domain and not allowed_domains(row):
         raise HTTPException(
             status_code=403,
             detail=(
@@ -134,14 +143,21 @@ def _apply_schedule(sub: ReportSubscription) -> None:
 
 
 def _visible(db: Session, user: User, workspace_id: int, subs: list[ReportSubscription]) -> list[ReportSubscription]:
-    """Sem a permissao de ver as de outras pessoas, so as que a propria pessoa criou."""
-    if can_in_workspace(db, user.id, "assinatura.ver-outras", workspace_id):
-        return subs
-    return [s for s in subs if s.created_by_id == user.id]
+    """Sem a permissao de ver as de outras pessoas NAQUELE relatorio, so as que a propria pessoa criou."""
+    reports: dict[int, Optional[Report]] = {}
+    result = []
+    for sub in subs:
+        if sub.report_id not in reports:
+            reports[sub.report_id] = db.get(Report, sub.report_id)
+        report = reports[sub.report_id]
+        if sub.created_by_id == user.id or (report is not None and can_in_report(db, user, report, "assinatura.ver-outras")):
+            result.append(sub)
+    return result
 
 
 @router.get("/subscriptions", response_model=list[SubscriptionOut])
 def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))):
+    # Lista da colecao inteira: continua exigindo a colecao (quem so recebeu um relatorio nao enxerga os outros)
     subs = (
         db.query(ReportSubscription)
         .join(Report, Report.id == ReportSubscription.report_id)
@@ -154,7 +170,7 @@ def list_workspace_subscriptions(workspace_id: int, db: Session = Depends(get_db
 
 @router.get("/reports/{report_id}/subscriptions", response_model=list[SubscriptionOut])
 def list_report_subscriptions(
-    workspace_id: int, report_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))
+    workspace_id: int, report_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_report_permission("assinatura.ver"))
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     subs = db.query(ReportSubscription).filter(ReportSubscription.report_id == report.id).order_by(ReportSubscription.id).all()
@@ -167,11 +183,11 @@ def create_subscription(
     report_id: int,
     data: SubscriptionCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("assinatura.criar")),
+    current_user: User = Depends(require_report_permission("assinatura.criar")),
 ):
     report = embed_router._get_report_or_404(db, workspace_id, report_id)
     row = _settings(db)
-    _check_recipients(db, current_user, workspace_id, data.recipients, row)
+    _check_recipients(db, current_user, workspace_id, data.recipients, row, report)
     _check_report_ready(db, workspace_id, report, row)
     if db.query(ReportSubscription).filter(ReportSubscription.report_id == report.id).count() >= MAX_PER_REPORT:
         raise HTTPException(status_code=400, detail=f"Cada relatorio pode ter no maximo {MAX_PER_REPORT} assinaturas.")
@@ -206,9 +222,9 @@ def create_subscription(
 
 
 @router.get("/subscriptions/{subscription_id}", response_model=SubscriptionOut)
-def get_subscription(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))):
-    sub = _get_subscription(db, workspace_id, subscription_id)
-    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.ver", "Voce so ve as assinaturas que voce criou.")
+def get_subscription(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    sub = _get_subscription(db, workspace_id, subscription_id, current_user, "assinatura.ver")
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.ver", "Voce so ve as assinaturas que voce criou.", db.get(Report, sub.report_id))
     return _out(db, sub, current_user)
 
 
@@ -218,15 +234,16 @@ def update_subscription(
     subscription_id: int,
     data: SubscriptionUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("assinatura.editar")),
+    current_user: User = Depends(get_current_user),
 ):
-    sub = _get_subscription(db, workspace_id, subscription_id)
-    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.editar", "Voce so edita as assinaturas que voce criou.")
+    sub = _get_subscription(db, workspace_id, subscription_id, current_user, "assinatura.editar")
+    report = db.get(Report, sub.report_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.editar", "Voce so edita as assinaturas que voce criou.", report)
     changes = data.model_dump(exclude_unset=True)
     row = _settings(db)
 
     # Editor so mexe se a lista de dominios existir, mesmo sem trocar os destinatarios
-    _check_recipients(db, current_user, workspace_id, changes.get("recipients", sub.recipients), row)
+    _check_recipients(db, current_user, workspace_id, changes.get("recipients", sub.recipients), row, report)
 
     was_enabled = bool(sub.enabled)
     if "recipients" in changes:
@@ -263,10 +280,10 @@ def update_subscription(
 
 @router.delete("/subscriptions/{subscription_id}", status_code=204)
 def delete_subscription(
-    workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.excluir"))
+    workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)
 ):
-    sub = _get_subscription(db, workspace_id, subscription_id)
-    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.excluir", "Voce so exclui as assinaturas que voce criou.")
+    sub = _get_subscription(db, workspace_id, subscription_id, current_user, "assinatura.excluir")
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.excluir", "Voce so exclui as assinaturas que voce criou.", db.get(Report, sub.report_id))
     sub_id = sub.id
     db.query(SubscriptionRun).filter(SubscriptionRun.subscription_id == sub_id).delete(synchronize_session=False)
     db.delete(sub)
@@ -285,13 +302,14 @@ def run_subscription_now(
     workspace_id: int,
     subscription_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_workspace_permission("assinatura.executar")),
+    current_user: User = Depends(get_current_user),
 ):
     """Envia agora, fora da agenda (o proximo horario agendado nao muda). O andamento sai em
     /powerbi/export-jobs/{job_id}, o mesmo acompanhamento do envio avulso."""
-    sub = _get_subscription(db, workspace_id, subscription_id)
-    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.executar", "Voce so envia agora as assinaturas que voce criou.")
-    _check_recipients(db, current_user, workspace_id, sub.recipients, _settings(db))
+    sub = _get_subscription(db, workspace_id, subscription_id, current_user, "assinatura.executar")
+    report = db.get(Report, sub.report_id)
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.executar", "Voce so envia agora as assinaturas que voce criou.", report)
+    _check_recipients(db, current_user, workspace_id, sub.recipients, _settings(db), report)
     if subscription_runner.is_running(sub.id):
         raise HTTPException(status_code=409, detail="Essa assinatura ja esta sendo enviada. Aguarde terminar.")
 
@@ -306,9 +324,9 @@ def run_subscription_now(
 
 
 @router.get("/subscriptions/{subscription_id}/runs", response_model=list[SubscriptionRunOut])
-def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(require_workspace_permission("assinatura.ver"))):
-    sub = _get_subscription(db, workspace_id, subscription_id)
-    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.ver", "Voce so ve as assinaturas que voce criou.")
+def list_runs(workspace_id: int, subscription_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    sub = _get_subscription(db, workspace_id, subscription_id, current_user, "assinatura.ver")
+    require_can_act(db, current_user, workspace_id, sub.created_by_id, "assinatura.ver", "Voce so ve as assinaturas que voce criou.", db.get(Report, sub.report_id))
     return (
         db.query(SubscriptionRun)
         .filter(SubscriptionRun.subscription_id == sub.id)
@@ -345,12 +363,10 @@ def list_reports_for_new_subscription(
         .order_by(Workspace.name, Report.name)
         .all()
     )
-    allowed: dict[int, bool] = {}
     result = []
     for report, workspace in rows:
-        if workspace.id not in allowed:
-            allowed[workspace.id] = can_in_workspace(db, current_user.id, "assinatura.criar", workspace.id)
-        if allowed[workspace.id]:
+        # Vale o que a pessoa tem NESTE relatorio: dado direto nele, vindo da pasta ou herdado
+        if can_in_report(db, current_user, report, "assinatura.criar"):
             result.append(
                 {
                     "report_id": report.id,

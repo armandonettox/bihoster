@@ -40,7 +40,7 @@ export default function ReportFullscreen() {
   const [zoom, setZoom] = useState(1.0);
   const [showZoomHint, setShowZoomHint] = useState(true);
   const [headerVisible, setHeaderVisible] = useState(false);
-  const { canSubscribe, canAlert, subscriptions, alerts, allowedDomains } = useSubscriptionAccess(wsId);
+  const { canSubscribe, canAlert, subscriptions, alerts, allowedDomains } = useSubscriptionAccess(wsId, repId);
   // PDF e imagem saem do sistema, entao pedem a permissao de exportar na colecao (o servidor confere de novo)
   const canExportFile = useAccess().canInReport("relatorio.exportar", repId, wsId);
 

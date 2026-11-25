@@ -20,6 +20,8 @@ export function extractErrorMessage(err: any): string | null {
   if (!detail) return null;
   if (typeof detail === "string") return detail;
   if (Array.isArray(detail)) return detail.map((d) => d.msg).join(" ");
+  // Erros com codigo (ex.: relatorio fora do horario) trazem um objeto com a mensagem pronta para mostrar
+  if (typeof detail === "object" && typeof detail.message === "string") return detail.message;
   return null;
 }
 

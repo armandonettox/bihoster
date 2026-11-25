@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.core import access_catalog
 from app.core.access_engine import can_global, can_in_workspace, effective_access, folders_of_report
 from app.core.report_lookup import report_in_workspace
+from app.core.report_schedule import GATED_KEYS, ensure_report_open
 from app.core.database import get_db
 from app.models.report import Report
 from app.models.user import User
@@ -76,6 +77,9 @@ def require_report_permission(key: str):
             allowed = access.has_in_report(key, report.id, report.collection_id, folders_of_report(db, report.id))
         if not allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_WORKSPACE)
+        # Horario de acesso do relatorio: so abrir e exportar dependem dele (import aqui: evita circular)
+        if report is not None and key in GATED_KEYS:
+            ensure_report_open(db, current_user, report.id)
         return current_user
 
     return dependency

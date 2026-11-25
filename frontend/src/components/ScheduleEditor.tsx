@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import * as schedulesApi from "../api/schedules";
-import type { ScheduleRange } from "../api/schedules";
-import type { SubjectKind } from "../api/access";
+import type { ScheduleKind, ScheduleRange } from "../api/schedules";
 import { extractErrorMessage } from "../api/client";
 import { useToast } from "../context/ToastContext";
 
@@ -30,7 +29,7 @@ function modeOf(ranges: ScheduleRange[]): UserMode {
 }
 
 interface Props {
-  kind: SubjectKind;
+  kind: ScheduleKind;
   id: number;
   /** Quem só pode ver o horário (sem a permissão de definir): mostra tudo travado, sem Salvar */
   readOnly?: boolean;
@@ -102,13 +101,15 @@ export default function ScheduleEditor({ kind, id, readOnly = false }: Props) {
   if (loading) return <p className="access-intro">Carregando o horário de acesso...</p>;
   if (loadError) return <p className="auth-error">Não foi possível carregar o horário de acesso.</p>;
 
-  const showRanges = kind === "group" || mode === "ranges";
+  const showRanges = kind !== "user" || mode === "ranges";
 
   return (
     <section className="schedule-editor" aria-label="Horário de acesso">
       <h3 style={{ margin: 0, fontSize: 15 }}>Horário de acesso</h3>
       <p className="access-intro">
-        {kind === "group"
+        {kind === "report"
+          ? "Dias e horas em que este relatório pode ser aberto ou exportado. Sem nenhuma faixa, não há limite. Vale para todas as pessoas, menos para administradores, e soma-se ao horário de acesso de cada pessoa."
+          : kind === "group"
           ? "Dias e horas em que as pessoas deste grupo podem usar o sistema. Sem nenhuma faixa, não há limite. Quem está em mais de um grupo com faixas entra quando qualquer um permitir. Administradores nunca são limitados."
           : "Por padrão a pessoa segue o horário dos grupos dela. Uma exceção aqui substitui o horário dos grupos, para mais ou para menos."}
       </p>

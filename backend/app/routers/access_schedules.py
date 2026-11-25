@@ -19,6 +19,8 @@ from app.core.audit_filters import system_tz
 from app.core.database import get_db
 from app.core.workspace_deps import is_platform_admin
 from app.models.access_schedule import AccessScheduleRange
+from app.models.report import Report
+from app.models.report_schedule import ReportScheduleRange
 from app.models.user import User
 from app.models.workspace import Group, GroupMember
 
@@ -147,3 +149,43 @@ def set_user_schedule(
     _replace(db, rows, user_id=user_id)
     log_action(db, action="set_user_schedule", entity="user", user_id=current_user.id, entity_id=user_id, details=f"{user.email}: {_summary(rows)}")
     return _out(db, db.query(AccessScheduleRange).filter(AccessScheduleRange.user_id == user_id).order_by(AccessScheduleRange.id).all())
+
+
+def _report_rows(db: Session, report_id: int):
+    return db.query(ReportScheduleRange).filter(ReportScheduleRange.report_id == report_id).order_by(ReportScheduleRange.id).all()
+
+
+@router.get("/reports/{report_id}", response_model=ScheduleOut)
+def get_report_schedule(
+    report_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_global_permission("membros.horario")),
+):
+    """O horario em que UM relatorio pode ser aberto. Sem faixas, o relatorio nao tem limite."""
+    if not db.query(Report.id).filter(Report.id == report_id).first():
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    return _out(db, _report_rows(db, report_id))
+
+
+@router.put("/reports/{report_id}", response_model=ScheduleOut)
+def set_report_schedule(
+    report_id: int,
+    data: ScheduleIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_global_permission("membros.horario")),
+):
+    """Troca as faixas do relatorio (lista vazia = sem limite). So vale para quem nao e administrador da plataforma."""
+    report = db.query(Report).get(report_id)
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    rows = _validated(data)
+    db.query(ReportScheduleRange).filter(ReportScheduleRange.report_id == report_id).delete(synchronize_session=False)
+    for days, start, end in rows:
+        db.add(ReportScheduleRange(report_id=report_id, days=days, start_minute=start, end_minute=end))
+    db.commit()
+    log_action(
+        db, action="set_report_schedule", entity="report", user_id=current_user.id, entity_id=report_id,
+        details=f"{report.name}: {_summary(rows)}",
+    )
+    return _out(db, _report_rows(db, report_id))
+

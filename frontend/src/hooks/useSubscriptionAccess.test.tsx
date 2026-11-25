@@ -157,3 +157,38 @@ describe("useSubscriptionAccess", () => {
     expect(getEmailStatus).not.toHaveBeenCalled();
   });
 });
+
+describe("useSubscriptionAccess: permissao por relatorio", () => {
+  const REL = 31;
+  const porRelatorio = (...chaves: string[]): MyAccess => ({
+    is_admin: false,
+    global_permissions: [],
+    workspace_permissions: {},
+    report_permissions: { [String(REL)]: chaves },
+  });
+  const usarNoRelatorio = (relatorio = REL) => renderHook(() => useSubscriptionAccess(WS, relatorio), { wrapper });
+
+  it("o que foi dado so num relatorio vale nele", async () => {
+    mocks.me = porRelatorio("assinatura.ver", "assinatura.criar", "assinatura.qualquer-dominio", "alerta.ver");
+    const { result } = usarNoRelatorio();
+
+    await waitFor(() => expect(result.current.canSubscribe).toBe(true));
+    expect(result.current.subscriptions.create).toBe(true);
+    expect(result.current.subscriptions.delete).toBe(false);
+    expect(result.current.canAlert).toBe(true);
+    expect(result.current.alerts.create).toBe(false);
+  });
+
+  it("nao vale no outro relatorio da mesma colecao", async () => {
+    mocks.me = porRelatorio("assinatura.ver", "alerta.ver");
+    const { result } = usarNoRelatorio(32);
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(result.current.canSubscribe).toBe(false);
+    expect(result.current.canAlert).toBe(false);
+    expect(getEmailStatus).not.toHaveBeenCalled();
+  });
+});
+
