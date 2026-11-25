@@ -5,9 +5,11 @@ import * as powerbiApi from "../api/powerbi";
 import type { PowerBIWorkspace, PowerBIReportSummary, PowerBIPage } from "../api/powerbi";
 import * as powerbiConnectionsApi from "../api/powerbiConnections";
 import type { PowerBIConnection } from "../api/powerbiConnections";
+import { useAccess } from "../context/AccessContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { extractErrorMessage } from "../api/client";
 import Modal from "./Modal";
+import MultiSelect from "./MultiSelect";
 import MultiSelectDropdown from "./MultiSelectDropdown";
 
 const DISPLAY_TYPE_OPTIONS: { key: DisplayType; label: string; hint: string }[] = [
@@ -25,7 +27,12 @@ export default function NewReportForm({
   onCreated: () => void;
   onClose: () => void;
 }) {
-  const { currentWorkspace } = useWorkspace();
+  const { currentWorkspace, workspaces } = useWorkspace();
+  const access = useAccess();
+  // Pastas em que o relatorio aparece (so na edicao, e so para quem pode publicar relatorios em alguma pasta)
+  const canChooseFolders = !!editingReport && access.canInAny("relatorio.publicar");
+  const [folderIds, setFolderIds] = useState<string[]>([]);
+  const [initialFolderIds, setInitialFolderIds] = useState<string[]>([]);
   const [name, setName] = useState(editingReport?.name || "");
   const [connections, setConnections] = useState<PowerBIConnection[]>([]);
   const [connectionId, setConnectionId] = useState<number | "">(editingReport?.powerbi_connection_id || "");
@@ -140,6 +147,26 @@ export default function NewReportForm({
     if (!name) setName(report?.name || "");
   }
 
+  useEffect(() => {
+    if (!canChooseFolders || !currentWorkspace || !editingReport) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const folders = await reportsApi.getReportFolders(currentWorkspace.id, editingReport.id);
+        const ids = folders.collection_ids.map(String);
+        if (!cancelled) {
+          setFolderIds(ids);
+          setInitialFolderIds(ids);
+        }
+      } catch {
+        // Sem as pastas o formulario continua servindo para o resto; o campo so nao aparece preenchido
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [canChooseFolders, currentWorkspace, editingReport]);
+
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
     if (!currentWorkspace || !connectionId) return;
@@ -160,6 +187,10 @@ export default function NewReportForm({
       };
       if (editingReport) {
         await reportsApi.updateReport(currentWorkspace.id, editingReport.id, input);
+        const foldersChanged = folderIds.length !== initialFolderIds.length || folderIds.some((id) => !initialFolderIds.includes(id));
+        if (canChooseFolders && foldersChanged) {
+          await reportsApi.setReportFolders(currentWorkspace.id, editingReport.id, folderIds.map(Number));
+        }
       } else {
         await reportsApi.createReport(currentWorkspace.id, input);
       }
@@ -293,6 +324,25 @@ export default function NewReportForm({
             {DISPLAY_TYPE_OPTIONS.find((opt) => opt.key === displayType)?.hint}
           </span>
         </label>
+
+        {canChooseFolders && (
+          <div className="field" style={{ gap: 6 }}>
+            Aparece em
+            <MultiSelect
+              label="Pastas do relatório"
+              options={workspaces
+                .filter((w) => access.canIn("relatorio.publicar", w.id) || folderIds.includes(String(w.id)))
+                .map((w) => ({ value: String(w.id), label: w.name }))}
+              selected={folderIds}
+              onChange={setFolderIds}
+              emptyLabel="Nenhuma pasta (volta para a Raiz)"
+            />
+            <span style={{ fontWeight: 400, fontSize: 12 }}>
+              O mesmo relatório pode aparecer em várias pastas sem ser cadastrado de novo. Tirar de todas as pastas o devolve para a
+              Raiz; ele não é apagado.
+            </span>
+          </div>
+        )}
 
         <div className="field" style={{ gap: 6 }}>
           Opcoes do iframe

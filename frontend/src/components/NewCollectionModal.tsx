@@ -6,12 +6,13 @@ import { useWorkspace } from "../context/WorkspaceContext";
 import { useToast } from "../context/ToastContext";
 import CollectionIconPicker from "./CollectionIconPicker";
 import Modal from "./Modal";
+import ParentFolderSelect from "./ParentFolderSelect";
 
 // Modal de criar colecao. Guarda o proprio formulario: ao fechar, o componente sai da tela e o
 // estado some junto, entao o proximo "Nova colecao" abre sempre limpo.
 export default function NewCollectionModal({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate();
-  const { reloadAndSelect } = useWorkspace();
+  const { reloadAndSelect, workspaces } = useWorkspace();
   const { showToast } = useToast();
 
   const [name, setName] = useState("");
@@ -20,6 +21,8 @@ export default function NewCollectionModal({ onClose }: { onClose: () => void })
   const [color, setColor] = useState<string | null>(null);
   // Por padrao toda colecao nova pode ser vista por todas as pessoas; desligado, ela nasce privada
   const [everyoneCanView, setEveryoneCanView] = useState(true);
+  // Pasta onde a colecao fica (nenhuma = pasta de topo)
+  const [parentId, setParentId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -35,6 +38,7 @@ export default function NewCollectionModal({ onClose }: { onClose: () => void })
         icon,
         color,
         everyone_can_view: everyoneCanView,
+        ...(parentId != null ? { parent_id: parentId } : {}),
       });
 
       await reloadAndSelect(workspace.id);
@@ -69,6 +73,7 @@ export default function NewCollectionModal({ onClose }: { onClose: () => void })
           style={{ marginBottom: 10, resize: "vertical" }}
         />
         <CollectionIconPicker name={name} icon={icon} color={color} onChangeIcon={setIcon} onChangeColor={setColor} />
+        <ParentFolderSelect workspaces={workspaces} value={parentId} onChange={setParentId} />
         <label className="field-checkbox" style={{ display: "flex", gap: 8, alignItems: "center", margin: "12px 0 4px" }}>
           <input type="checkbox" checked={everyoneCanView} onChange={(e) => setEveryoneCanView(e.target.checked)} />
           Todas as pessoas podem ver esta coleção

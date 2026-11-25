@@ -1,8 +1,14 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.access_deps import require_global_permission, require_workspace_permission
+from app.core.access_engine import can_global, can_in_workspace
+from app.core.folder_tree import load_parent_map, validate_parent, visible_with_path
+from app.core.root_collection import ensure_root_collection, stop_sends_of_unpublished_reports
 from app.core.access_roles import give_user_role
 from app.core.audit import log_action
 from app.core.audit_revert import WORKSPACE_UPDATE, changed_fields
@@ -20,7 +26,7 @@ from app.models.access_grant import AccessGrant, AccessInviteGrant
 from app.models.audit_log import AuditLog
 from app.models.favorite import Favorite
 from app.models.report import Report
-from app.models.report_grant import ReportGrant, ReportInviteGrant
+from app.models.report_grant import ReportCollection, ReportGrant, ReportInviteGrant
 from app.models.settings import AppSettings
 from app.core.ai_report_settings import delete_settings_of_reports
 from app.models.subscription import delete_subscriptions_of_reports
@@ -51,6 +57,7 @@ def _to_out(workspace: Workspace, role: UserRole) -> WorkspaceOut:
         icon=workspace.icon,
         color=workspace.color,
         tv_interval_seconds=workspace.tv_interval_seconds,
+        parent_id=workspace.parent_id,
         role=role,
     )
 
@@ -75,12 +82,64 @@ def list_all_workspaces(db: Session = Depends(get_db), current_user: User = Depe
     return [_to_out(w, UserRole.admin) for w in workspaces]
 
 
+class TreeNode(BaseModel):
+    id: int
+    name: str
+    slug: str
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    parent_id: Optional[int] = None
+    # False = so aparece como caminho ate uma subpasta que a pessoa acessa: sem o conteudo e sem poder abrir
+    accessible: bool
+
+
+@router.get("/tree", response_model=list[TreeNode])
+def workspace_tree(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    """A arvore de pastas que a pessoa enxerga: as que ela acessa e as de cima delas, estas so como caminho de navegacao
+    (so o nome, sem o que ha dentro). Pasta que ela nao acessa nem leva a uma que acessa nao aparece."""
+    accessible = set(get_effective_roles_map(db, current_user.id))
+    parents = load_parent_map(db)
+    shown = visible_with_path(accessible, parents)
+    rows = db.query(Workspace).filter(Workspace.id.in_(list(shown) or [-1]), Workspace.system_key.is_(None)).order_by(Workspace.name).all()
+    return [
+        TreeNode(
+            id=w.id,
+            name=w.name,
+            slug=w.slug,
+            icon=w.icon if shown[w.id] else None,
+            color=w.color if shown[w.id] else None,
+            parent_id=w.parent_id,
+            accessible=shown[w.id],
+        )
+        for w in rows
+    ]
+
+
+def _check_parent(db: Session, actor: User, workspace_id: int | None, parent_id: int | None) -> None:
+    """Mexer na pasta onde uma colecao fica: o destino precisa existir, nao pode fechar um ciclo nem passar da
+    profundidade maxima, e quem faz precisa poder criar subpastas la (ou, para pasta de topo, poder criar colecoes)."""
+    reason = validate_parent(load_parent_map(db), workspace_id, parent_id)
+    if reason is not None:
+        raise HTTPException(status_code=400, detail=reason)
+    parent = db.query(Workspace).get(parent_id) if parent_id is not None else None
+    if parent is not None and parent.system_key is not None:
+        raise HTTPException(status_code=400, detail="Nao da para criar pastas dentro da Raiz")
+    if parent_id is None:
+        allowed = can_global(db, actor.id, "colecao.criar")
+    else:
+        allowed = can_in_workspace(db, actor.id, "colecao.criar-subpasta", parent_id)
+    if not allowed:
+        raise HTTPException(status_code=403, detail="Voce nao tem permissao para criar pastas aqui" if parent_id is not None else "Voce nao tem permissao para essa acao")
+
+
 @router.post("/", response_model=WorkspaceOut, status_code=status.HTTP_201_CREATED)
 def create_workspace(
     data: WorkspaceCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_global_permission("colecao.criar")),
+    current_user: User = Depends(get_current_user),
 ):
+    # Sem pasta pai vale o item geral de criar colecoes; dentro de uma pasta, o de criar subpastas nela
+    _check_parent(db, current_user, None, data.parent_id)
     # Retry em cima de IntegrityError (nao so a checagem previa) -- duas criacoes concorrentes
     # com o mesmo nome podem passar pelo _unique_slug antes de qualquer commit e colidir no
     # commit; sem o retry, a segunda simplesmente falharia com um 500 em vez de tentar de novo.
@@ -91,6 +150,7 @@ def create_workspace(
             description=data.description,
             icon=data.icon,
             color=data.color,
+            parent_id=data.parent_id,
         )
         db.add(workspace)
         try:
@@ -141,6 +201,8 @@ def update_workspace(
         raise HTTPException(status_code=400, detail="A Raiz e uma colecao interna e nao pode ser alterada")
 
     updates = data.model_dump(exclude_unset=True)
+    if "parent_id" in updates and updates["parent_id"] != workspace.parent_id:
+        _check_parent(db, current_user, workspace_id, updates["parent_id"])
     before = {field: getattr(workspace, field) for field in updates}
     for field, value in updates.items():
         setattr(workspace, field, value)
@@ -172,13 +234,31 @@ def delete_workspace(
     if is_system_workspace(workspace):
         raise HTTPException(status_code=400, detail="A Raiz e uma colecao interna e nao pode ser excluida")
 
-    report_ids = [r.id for r in db.query(Report.id).filter(Report.collection_id == workspace_id).all()]
-    if report_ids:
-        db.query(Favorite).filter(Favorite.report_id.in_(report_ids)).delete(synchronize_session=False)
-        db.query(ReportGrant).filter(ReportGrant.report_id.in_(report_ids)).delete(synchronize_session=False)
-        db.query(ReportInviteGrant).filter(ReportInviteGrant.report_id.in_(report_ids)).delete(synchronize_session=False)
-        delete_subscriptions_of_reports(db, report_ids)
-        delete_settings_of_reports(db, report_ids)
+    parents = load_parent_map(db)
+    if any(parent == workspace_id for parent in parents.values()):
+        raise HTTPException(status_code=409, detail="Mova ou exclua primeiro as pastas que estao dentro desta")
+
+    # Excluir uma pasta nunca apaga relatorio: o que era dela passa para a outra pasta em que ja aparecia ou, sem outra,
+    # volta para a Raiz (o catalogo), com as permissoes dadas direto nele
+    root = ensure_root_collection(db)
+    unpublished: list[int] = []
+    for report in db.query(Report).filter(Report.collection_id == workspace_id).all():
+        other = (
+            db.query(ReportCollection)
+            .filter(ReportCollection.report_id == report.id, ReportCollection.collection_id != workspace_id)
+            .order_by(ReportCollection.position.is_(None), ReportCollection.position, ReportCollection.id)
+            .first()
+        )
+        if other is not None:
+            report.collection_id = other.collection_id
+            db.delete(other)
+        else:
+            report.collection_id = root.id
+            report.position = None
+            unpublished.append(report.id)
+    stop_sends_of_unpublished_reports(db, unpublished)
+    db.flush()
+    db.query(ReportCollection).filter(ReportCollection.collection_id == workspace_id).delete(synchronize_session=False)
 
     db.query(AuditLog).filter(AuditLog.workspace_id == workspace_id).update(
         {"workspace_id": None}, synchronize_session=False

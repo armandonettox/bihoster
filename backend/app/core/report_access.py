@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core import access_catalog
 from app.core.access_catalog import REPORT_CAPABLE, REPORT_SHARE, REPORT_VIEW, report_requires, with_implied_report
-from app.core.access_engine import EffectiveAccess, effective_access
+from app.core.access_engine import EffectiveAccess, effective_access, folders_of_report
 from app.models.report import Report
 from app.models.report_grant import ReportGrant, ReportInviteGrant
 from app.models.user import User
@@ -41,24 +41,24 @@ def with_dependents(keys: set[str]) -> set[str]:
     return result
 
 
-def can_manage(access: EffectiveAccess, report: Report) -> bool:
+def can_manage(access: EffectiveAccess, report: Report, also_in: list[int] | tuple[int, ...] = ()) -> bool:
     """Quem pode mexer nos acessos de um relatorio: o administrador, quem tem a permissao geral de dar permissoes ou
     quem recebeu o item "compartilhar" nesse relatorio. Em todos os casos so se da o que se tem (check_can_change)."""
-    return access.is_admin or access.has_global("permissoes.editar") or access.has_in_report(REPORT_SHARE, report.id, report.collection_id)
+    return access.is_admin or access.has_global("permissoes.editar") or access.has_in_report(REPORT_SHARE, report.id, report.collection_id, also_in)
 
 
 def require_can_manage(db: Session, actor: User, report: Report) -> EffectiveAccess:
     access = effective_access(db, actor.id)
-    if not can_manage(access, report):
+    if not can_manage(access, report, folders_of_report(db, report.id)):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Voce nao pode mudar os acessos deste relatorio")
     return access
 
 
-def check_can_change(access: EffectiveAccess, report: Report, changed: set[str]) -> None:
+def check_can_change(access: EffectiveAccess, report: Report, changed: set[str], also_in: list[int] | tuple[int, ...] = ()) -> None:
     """Tudo o que entra ou sai precisa ser algo que quem faz a mudanca tem neste relatorio."""
     if access.is_admin:
         return
-    missing = sorted(key for key in changed if not access.has_in_report(key, report.id, report.collection_id))
+    missing = sorted(key for key in changed if not access.has_in_report(key, report.id, report.collection_id, also_in))
     if missing:
         labels = ", ".join(dict.fromkeys(access_catalog.get(key).label if access_catalog.get(key) else key for key in missing))
         raise HTTPException(

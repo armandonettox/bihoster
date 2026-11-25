@@ -5,6 +5,7 @@ pedido. So soma, nunca nega. Quem e do grupo Administradores tem todas, sem prec
 Permissao nenhuma faz alguem virar administrador da plataforma: isso so vem de estar no grupo
 Administradores (ver L-314)."""
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 
 from sqlalchemy import or_
@@ -22,6 +23,7 @@ from app.core.access_catalog import (
     with_implied,
     with_implied_report,
 )
+from app.core.folder_tree import inherit_keys, load_parent_map
 from app.core.workspace_deps import is_platform_admin
 from app.models.access_grant import AccessGrant
 from app.models.report_grant import ReportGrant
@@ -48,19 +50,22 @@ class EffectiveAccess:
     def workspace_ids_with(self, key: str) -> set[int]:
         return {wid for wid, keys in self.by_workspace.items() if key in keys}
 
-    def report_keys(self, report_id: int, collection_id: int | None) -> set[str]:
-        """Tudo o que a pessoa pode num relatorio: o que foi dado direto nele somado ao que a colecao em que ele esta
-        da para os relatorios (ver a colecao vale ver o relatorio; exportar, assinar... da colecao valem em cada
-        relatorio dela). So soma. O administrador tem tudo."""
+    def report_keys(self, report_id: int, collection_id: int | None, also_in: Iterable[int] = ()) -> set[str]:
+        """Tudo o que a pessoa pode num relatorio: o que foi dado direto nele somado ao que cada pasta em que ele
+        aparece da para os relatorios (ver a pasta vale ver o relatorio; exportar, assinar... da pasta valem em cada
+        relatorio dela). A colecao do relatorio e as pastas em que ele tambem aparece (`also_in`) valem igual, e as
+        permissoes ja chegam com a heranca das pastas de cima. So soma. O administrador tem tudo."""
         keys = set(self.by_report.get(report_id, ()))
-        from_collection = self.by_workspace.get(collection_id, set()) if collection_id is not None else set()
-        keys |= {key for key in from_collection if key in REPORT_CAPABLE}
-        if COLLECTION_VIEW in from_collection:
-            keys.add(REPORT_VIEW)
+        folders = ([collection_id] if collection_id is not None else []) + list(also_in)
+        for folder in folders:
+            from_folder = self.by_workspace.get(folder, set())
+            keys |= {key for key in from_folder if key in REPORT_CAPABLE}
+            if COLLECTION_VIEW in from_folder:
+                keys.add(REPORT_VIEW)
         return keys
 
-    def has_in_report(self, key: str, report_id: int, collection_id: int | None) -> bool:
-        return self.is_admin or key in self.report_keys(report_id, collection_id)
+    def has_in_report(self, key: str, report_id: int, collection_id: int | None, also_in: Iterable[int] = ()) -> bool:
+        return self.is_admin or key in self.report_keys(report_id, collection_id, also_in)
 
     def reports_with(self, key: str) -> set[int]:
         """Relatorios em que a pessoa tem o item por concessao direta (nao inclui o que vem da colecao)."""
@@ -103,6 +108,8 @@ def effective_access(db: Session, user_id: int) -> EffectiveAccess:
 
     result.global_keys = set(with_implied(raw_global))
     result.by_workspace = {wid: set(with_implied(keys)) for wid, keys in raw_workspace.items()}
+    # Uma pasta passa o que tem para as de dentro dela (so soma)
+    result.by_workspace = inherit_keys(result.by_workspace, load_parent_map(db) if result.by_workspace else {})
 
     # Concessoes dadas direto a relatorios (uma consulta so: da pessoa ou de qualquer grupo dela)
     my_groups = db.query(GroupMember.group_id).filter(GroupMember.user_id == user_id)
@@ -126,9 +133,16 @@ def can_global(db: Session, user_id: int, key: str) -> bool:
     return effective_access(db, user_id).has_global(key)
 
 
+def folders_of_report(db: Session, report_id: int) -> list[int]:
+    """As pastas em que o relatorio TAMBEM aparece (alem da colecao dele)."""
+    from app.models.report_grant import ReportCollection
+
+    return [row[0] for row in db.query(ReportCollection.collection_id).filter(ReportCollection.report_id == report_id).all()]
+
+
 def can_in_report(db: Session, user_id: int, key: str, report) -> bool:
     """`report` e a linha de Report (precisa de id e collection_id)."""
-    return effective_access(db, user_id).has_in_report(key, report.id, report.collection_id)
+    return effective_access(db, user_id).has_in_report(key, report.id, report.collection_id, folders_of_report(db, report.id))
 
 
 def can_see_workspace(db: Session, user_id: int, workspace_id: int) -> bool:

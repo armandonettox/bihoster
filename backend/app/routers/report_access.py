@@ -14,7 +14,8 @@ from sqlalchemy.orm import Session
 from app.core import access_catalog
 from app.core.access_catalog import COLLECTION_VIEW, REPORT_CAPABLE, REPORT_VIEW
 from app.core.access_deps import require_any_global_permission
-from app.core.access_engine import effective_access
+from app.core.access_engine import effective_access, folders_of_report
+from app.core.folder_tree import ancestors, descendants, load_parent_map
 from app.core.audit import log_action
 from app.core.database import get_db
 from app.core.report_access import (
@@ -33,7 +34,7 @@ from app.core.workspace_deps import is_platform_admin
 from app.models.access_grant import AccessGrant
 from app.models.invite import GroupInvite
 from app.models.report import Report
-from app.models.report_grant import ReportGrant, ReportInviteGrant
+from app.models.report_grant import ReportCollection, ReportGrant, ReportInviteGrant
 from app.models.user import User
 from app.models.workspace import Group, GroupMember, Workspace
 from app.routers.auth import get_current_user
@@ -149,12 +150,35 @@ def _audit(db: Session, actor: User, report: Report, details: str) -> None:
     )
 
 
-def _collection_keys_of_group(db: Session, group_id: int, collection_id: int) -> set[str]:
-    keys = {row[0] for row in db.query(AccessGrant.permission_key).filter(AccessGrant.group_id == group_id, AccessGrant.workspace_id == collection_id).all()}
-    inherited = {key for key in keys if key in REPORT_CAPABLE}
-    if COLLECTION_VIEW in keys:
-        inherited.add(REPORT_VIEW)
+def _links_of(db: Session, report_ids: list[int]) -> dict[int, list[int]]:
+    """As pastas em que cada relatorio tambem aparece (alem da colecao dele)."""
+    result: dict[int, list[int]] = {}
+    if not report_ids:
+        return result
+    for report_id, folder_id in db.query(ReportCollection.report_id, ReportCollection.collection_id).filter(ReportCollection.report_id.in_(report_ids)):
+        result.setdefault(report_id, []).append(folder_id)
+    return result
+
+
+def _folder_inherited(keys_by_folder: dict[int, set[str]], folders: list[int], parents: dict) -> set[str]:
+    """O que um grupo recebe num relatorio pelas pastas dele: o dado a cada pasta e a cada pasta de cima dela (a heranca),
+    so os itens que valem num relatorio, e "ver a pasta" vira "ver o relatorio"."""
+    inherited: set[str] = set()
+    for folder in folders:
+        keys: set[str] = set()
+        for source in [folder, *ancestors(parents, folder)]:
+            keys |= keys_by_folder.get(source, set())
+        inherited |= {key for key in keys if key in REPORT_CAPABLE}
+        if COLLECTION_VIEW in keys:
+            inherited.add(REPORT_VIEW)
     return inherited
+
+
+def _collection_keys_of_group(db: Session, group_id: int, collection_id: int, also_in: list[int] | None = None) -> set[str]:
+    keys_by_folder: dict[int, set[str]] = {}
+    for workspace_id, key in db.query(AccessGrant.workspace_id, AccessGrant.permission_key).filter(AccessGrant.group_id == group_id, AccessGrant.workspace_id.isnot(None)):
+        keys_by_folder.setdefault(workspace_id, set()).add(key)
+    return _folder_inherited(keys_by_folder, [collection_id, *(also_in or [])], load_parent_map(db))
 
 
 def _diff_text(before: set[str], after: set[str]) -> str:
@@ -211,10 +235,11 @@ def shared_with_me(db: Session = Depends(get_db), current_user: User = Depends(g
         .order_by(Report.name, Report.id)
         .all()
     )
+    links = _links_of(db, [report.id for report, _ in rows])
     result = []
     for report, collection in rows:
-        if COLLECTION_VIEW in access.by_workspace.get(collection.id, set()):
-            continue  # ja aparece na colecao
+        if any(COLLECTION_VIEW in access.by_workspace.get(folder, set()) for folder in [collection.id, *links.get(report.id, [])]):
+            continue  # ja aparece em uma pasta que a pessoa ve
         result.append(
             SharedReportOut(
                 id=report.id,
@@ -240,7 +265,11 @@ def collection_impact(workspace_id: int, db: Session = Depends(get_db), _: User 
     workspace = db.query(Workspace).get(workspace_id)
     if workspace is None:
         raise HTTPException(status_code=404, detail="Colecao nao encontrada")
-    return ImpactOut(reports=db.query(Report).filter(Report.collection_id == workspace_id).count(), in_root=workspace.system_key is not None)
+    # A permissao de uma pasta vale tambem nas de dentro dela (heranca) e nos relatorios que aparecem nelas por vinculo
+    folders = {workspace_id} | descendants(load_parent_map(db), workspace_id)
+    own = {row[0] for row in db.query(Report.id).filter(Report.collection_id.in_(folders))}
+    linked = {row[0] for row in db.query(ReportCollection.report_id).filter(ReportCollection.collection_id.in_(folders))}
+    return ImpactOut(reports=len(own | linked), in_root=workspace.system_key is not None)
 
 
 class MatrixCell(BaseModel):
@@ -298,21 +327,27 @@ def matrix(
             ReportGrant.report_id.in_(report_ids), ReportGrant.group_id.in_(group_ids)
         ):
             direct.setdefault((report_id, group_id), set()).add(key)
-    from_collection: dict[tuple[int, int], set[str]] = {}
-    if collection_ids and group_ids:
-        for group_id, collection_id, key in db.query(AccessGrant.group_id, AccessGrant.workspace_id, AccessGrant.permission_key).filter(
-            AccessGrant.workspace_id.in_(collection_ids), AccessGrant.group_id.in_(group_ids)
+    parents = load_parent_map(db)
+    links = _links_of(db, report_ids)
+    # Pastas que contam para cada relatorio: a colecao dele, as outras em que aparece e as de cima de todas elas
+    relevant = set(collection_ids)
+    for folders in links.values():
+        relevant.update(folders)
+    for folder in list(relevant):
+        relevant.update(ancestors(parents, folder))
+    by_group_folder: dict[int, dict[int, set[str]]] = {}
+    if relevant and group_ids:
+        for group_id, folder_id, key in db.query(AccessGrant.group_id, AccessGrant.workspace_id, AccessGrant.permission_key).filter(
+            AccessGrant.workspace_id.in_(relevant), AccessGrant.group_id.in_(group_ids)
         ):
-            from_collection.setdefault((group_id, collection_id), set()).add(key)
+            by_group_folder.setdefault(group_id, {}).setdefault(folder_id, set()).add(key)
 
     rows = []
     for report, collection in page_rows:
         cells = {}
+        folders = [collection.id, *links.get(report.id, [])]
         for group in groups:
-            coll_keys = from_collection.get((group.id, collection.id), set())
-            inherited = {key for key in coll_keys if key in REPORT_CAPABLE}
-            if COLLECTION_VIEW in coll_keys:
-                inherited.add(REPORT_VIEW)
+            inherited = _folder_inherited(by_group_folder.get(group.id, {}), folders, parents)
             cells[group.id] = MatrixCell(direct=sorted(direct.get((report.id, group.id), set())), inherited=sorted(inherited))
         rows.append(MatrixRow(report=_ref(report, collection), cells=cells))
     return MatrixOut(groups=[MatrixGroup(id=g.id, name=g.name) for g in groups], rows=rows, total=total, page=page, page_size=page_size)
@@ -351,18 +386,23 @@ def person(user_id: int, db: Session = Depends(get_db), _: User = Depends(_can_l
 
     visible_collections = {cid for cid, keys in access.by_workspace.items() if COLLECTION_VIEW in keys}
     report_ids = set(sources)
+    linked_ids = {row[0] for row in db.query(ReportCollection.report_id).filter(ReportCollection.collection_id.in_(visible_collections or [-1]))}
     query = db.query(Report, Workspace).join(Workspace, Workspace.id == Report.collection_id)
-    query = query.filter(or_(Report.id.in_(report_ids or [-1]), Report.collection_id.in_(visible_collections or [-1])))
+    query = query.filter(or_(Report.id.in_((report_ids | linked_ids) or [-1]), Report.collection_id.in_(visible_collections or [-1])))
     found = query.order_by(Report.name, Report.id).limit(PERSON_LIMIT + 1).all()
     truncated = len(found) > PERSON_LIMIT
+    links = _links_of(db, [report.id for report, _ in found[:PERSON_LIMIT]])
+    folder_names = {w.id: w.name for w in db.query(Workspace.id, Workspace.name).all()}
     rows = []
     for report, collection in found[:PERSON_LIMIT]:
-        keys = access.report_keys(report.id, report.collection_id)
+        folders = [collection.id, *links.get(report.id, [])]
+        keys = access.report_keys(report.id, report.collection_id, links.get(report.id, []))
         if REPORT_VIEW not in keys:
             continue
         origin = set(sources.get(report.id, set()))
-        if collection.id in access.by_workspace:
-            origin.add(f"Coleção {collection.name}")
+        for folder in folders:
+            if folder in access.by_workspace:
+                origin.add(f"Coleção {folder_names.get(folder, folder)}")
         rows.append(PersonRow(report=_ref(report, collection), permissions=sorted(keys), sources=sorted(origin)))
     return PersonOut(user_id=user_id, name=target.name, is_admin=False, rows=rows, truncated=truncated)
 
@@ -389,7 +429,7 @@ def bulk(data: BulkIn, db: Session = Depends(get_db), current_user: User = Depen
     plan = []
     for report in reports:
         access = require_can_manage(db, current_user, report)
-        check_can_change(access, report, keys)
+        check_can_change(access, report, keys, folders_of_report(db, report.id))
         for subject, subject_id in [(GROUP, g.id) for g in groups] + [(USER, u.id) for u in users]:
             before = subject_keys(db, report.id, subject, subject_id)
             after = (before | keys) if data.mode == "add" else (before - keys)
@@ -420,7 +460,7 @@ def grant_by_email(data: ByEmailIn, db: Session = Depends(get_db), current_user:
     if len(reports) != len(set(data.report_ids)):
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
     for report in reports:
-        check_can_change(require_can_manage(db, current_user, report), report, keys)
+        check_can_change(require_can_manage(db, current_user, report), report, keys, folders_of_report(db, report.id))
 
     user = db.query(User).filter(User.email == data.email).first()
     if user is not None:
@@ -467,12 +507,12 @@ def get_report_access(report_id: int, db: Session = Depends(get_db), current_use
                 id=g.id,
                 name=g.name,
                 permissions=sorted(group_rows.get(g.id, set())),
-                from_collection=sorted(_collection_keys_of_group(db, g.id, report.collection_id)),
+                from_collection=sorted(_collection_keys_of_group(db, g.id, report.collection_id, folders_of_report(db, report.id))),
             )
             for g in groups
         ],
         users=[SubjectOut(id=uid, name=users[uid].name, email=users[uid].email, permissions=sorted(keys)) for uid, keys in sorted(user_rows.items()) if uid in users],
-        can_manage=can_manage(access, report),
+        can_manage=can_manage(access, report, folders_of_report(db, report.id)),
     )
 
 
@@ -480,7 +520,7 @@ def _put_subject(db: Session, actor: User, report: Report, subject: str, subject
     access = require_can_manage(db, actor, report)
     after = set(validate_keys(keys_in)) if keys_in else set()
     before = subject_keys(db, report.id, subject, subject_id)
-    check_can_change(access, report, before ^ after)
+    check_can_change(access, report, before ^ after, folders_of_report(db, report.id))
     set_subject_keys(db, report.id, subject, subject_id, after)
     db.commit()
     return before, after

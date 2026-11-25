@@ -88,8 +88,9 @@ _SYSTEM = ("sistema", "Configurações do sistema", "As abas de configuração d
 CATALOG: tuple[Permission, ...] = (
     _workspace(COLLECTION_VIEW, "Ver a coleção", "Entrar na coleção e abrir os relatórios.", "Coleção"),
     _workspace("colecao.editar", "Editar a coleção", "Mudar nome, descrição, ícone e cor.", "Coleção"),
-    _workspace("colecao.excluir", "Excluir a coleção", "Apagar a coleção e tudo que tem dentro.", "Coleção"),
+    _workspace("colecao.excluir", "Excluir a coleção", "Apagar a coleção. Os relatórios dela não são apagados: ficam na Raiz, ou na outra pasta em que já apareciam.", "Coleção"),
     _workspace("colecao.auditoria", "Ver a auditoria da coleção", "Ler o registro de ações feitas nesta coleção.", "Coleção"),
+    _workspace("colecao.criar-subpasta", "Criar subpastas", "Criar pastas dentro desta coleção e mover pastas para dentro dela. Vale também nas subpastas.", "Coleção"),
     _workspace("relatorio.publicar", "Publicar relatório", "Adicionar um relatório novo na coleção.", "Relatórios"),
     _workspace("relatorio.editar", "Editar os dados do relatório", "Mudar nome, descrição, página e configurações.", "Relatórios", feature=_REPORT_EDIT),
     _workspace("relatorio.reordenar", "Reordenar os relatórios", "Mudar a ordem dos relatórios na coleção.", "Relatórios", feature=_REPORT_EDIT),

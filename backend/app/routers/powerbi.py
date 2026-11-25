@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.core import powerbi
 from app.core.audit import log_view_once
 from app.core.database import get_db
-from app.core.db_helpers import get_or_404
+from app.core.report_lookup import find_report
 from app.core.access_deps import require_report_permission, require_workspace_permission
 from app.core.workspace_deps import require_workspace_member
 from app.models.powerbi_connection import PowerBIConnection
@@ -89,7 +89,10 @@ def invalidate_refresh_info_for_connection(connection_id: int) -> None:
 
 
 def _get_report_or_404(db: Session, workspace_id: int, report_id: int) -> Report:
-    return get_or_404(db, Report, "Relatorio nao encontrado", id=report_id, collection_id=workspace_id)
+    report = find_report(db, workspace_id, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    return report
 
 
 def _get_connection_or_error(db: Session, report: Report) -> PowerBIConnection:

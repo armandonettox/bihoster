@@ -12,6 +12,16 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.49.0 - 2026-11-25 - Pastas dentro de pastas e relatório em várias pastas
+- As coleções agora podem ficar **dentro de outras coleções**, em até **5 níveis**. Ao criar ou editar uma coleção há o campo **Dentro de**; mover uma pasta leva junto tudo o que está dentro dela. Não dá para pôr uma pasta dentro dela mesma nem de uma pasta que ela contém.
+- **As pastas de dentro herdam o acesso da pasta de cima.** Quem vê "Financeiro" vê também "Financeiro > Faturamento" e os relatórios delas, e uma subpasta pode ter uma permissão extra, só dela. A herança **só soma**: por isso não existe jeito de esconder uma subpasta de quem vê a pasta de cima. Para ter uma pasta restrita, crie-a no topo ou dentro de uma pasta que essa pessoa não vê.
+- Quem só tem acesso a uma subpasta vê as pastas de cima **apenas como caminho de navegação** (só o nome, sem o conteúdo e sem poder abrir). Dentro de uma coleção aparecem o **caminho** (Financeiro / Faturamento) e as **subpastas** que a pessoa acessa; na tela inicial ficam só as pastas de topo.
+- Novo item de permissão **Criar subpastas**, dado numa pasta (vale também nas de dentro): é ele que permite criar pastas lá dentro e mover pastas para lá. Criar uma pasta de topo continua sendo **Criar coleções**.
+- **O mesmo relatório pode aparecer em várias pastas, sem ser cadastrado de novo.** Ao editar um relatório, o campo **Aparece em** escolhe as pastas (precisa de "Publicar relatório" em cada pasta que ganha ou perde o relatório). O acesso vale por qualquer uma das pastas: quem vê uma ou outra abre o relatório, e não ganha acesso aos outros relatórios dela. Dar uma pasta a um relatório da **Raiz** o **publica** nela; tirar de todas as pastas o devolve para a Raiz.
+- **Excluir uma pasta nunca apaga relatório.** Os relatórios dela passam para a outra pasta em que já apareciam ou, sem outra, voltam para a **Raiz**, com as permissões dadas direto neles. Uma pasta com subpastas só é excluída depois de mover ou excluir as de dentro. Excluir um relatório pelo caminho de uma pasta onde ele só aparece tira apenas daquela pasta.
+- A busca encontra os relatórios pela pasta em que a pessoa os vê, e o aviso de quanto uma permissão de coleção libera agora conta as subpastas e os relatórios vinculados. "Redirecionar quando há uma coleção só" passa a contar as pastas de topo.
+- Tudo é inerte até alguém usar: nenhuma pasta fica dentro de outra e nenhum relatório aparece em mais de uma pasta por conta própria.
+
 ## 1.48.0 - 2026-11-25 - Acesso por relatório
 - Agora dá para dar acesso a **um relatório só**, a grupos e a pessoas, sem abrir a coleção inteira. Quem recebe um relatório abre esse relatório e **nenhum outro** da mesma coleção: a coleção não aparece para ela e a lista dela continua escondida.
 - O acesso a um relatório é a **soma** do que foi dado nele com o que a coleção dele já dá. Tudo o que foi dado por coleção até hoje **continua valendo, sem nenhuma ação sua**.

@@ -132,3 +132,21 @@ export async function moveReport(
   const { data } = await api.post(`/workspaces/${workspaceId}/reports/${reportId}/move`, { direction });
   return data;
 }
+
+export interface ReportFolders {
+  /** A colecao do relatorio primeiro, depois as outras pastas em que ele aparece */
+  collection_ids: number[];
+  /** Ainda na Raiz (nao publicado em nenhuma pasta) */
+  in_root: boolean;
+}
+
+export async function getReportFolders(workspaceId: number, reportId: number): Promise<ReportFolders> {
+  const { data } = await api.get(`/workspaces/${workspaceId}/reports/${reportId}/folders`);
+  return data;
+}
+
+/** Define em quais pastas o relatorio aparece, sem cadastra-lo de novo. Lista vazia devolve o relatorio para a Raiz. */
+export async function setReportFolders(workspaceId: number, reportId: number, collectionIds: number[]): Promise<ReportFolders> {
+  const { data } = await api.put(`/workspaces/${workspaceId}/reports/${reportId}/folders`, { collection_ids: collectionIds });
+  return data;
+}

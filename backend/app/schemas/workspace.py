@@ -16,6 +16,8 @@ class WorkspaceCreate(BaseModel):
     color: Optional[str] = None
     # Toda colecao nova da leitura ao grupo "Todos os usuarios"; desligado, so quem tem acesso por outro caminho a enxerga
     everyone_can_view: bool = True
+    # Pasta onde criar a colecao (vazio = pasta de topo)
+    parent_id: Optional[int] = None
 
     @field_validator("name")
     @classmethod
@@ -32,6 +34,8 @@ class WorkspaceUpdate(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     tv_interval_seconds: Optional[int] = None
+    # Mudar a pasta: enviar o id da pasta de destino, ou null para virar pasta de topo (so conta se vier no corpo)
+    parent_id: Optional[int] = None
 
     @field_validator("name")
     @classmethod
@@ -65,6 +69,7 @@ class WorkspaceOut(BaseModel):
     icon: Optional[str] = None
     color: Optional[str] = None
     tv_interval_seconds: int = 15
+    parent_id: Optional[int] = None
     role: UserRole
 
     class Config:

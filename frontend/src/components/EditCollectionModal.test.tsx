@@ -8,6 +8,9 @@ const mocks = vi.hoisted(() => ({ showToast: vi.fn() }));
 
 vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
 vi.mock("./CollectionIconPicker", () => ({ default: () => null }));
+// O campo "Dentro de" tem teste proprio (ParentFolderSelect.test.tsx)
+vi.mock("./ParentFolderSelect", () => ({ default: () => null }));
+vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ workspaces: [] }) }));
 vi.mock("../api/workspaces", () => ({ updateWorkspace: vi.fn() }));
 
 const updateWorkspace = vi.mocked(workspacesApi.updateWorkspace);

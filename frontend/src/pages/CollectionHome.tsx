@@ -5,6 +5,7 @@ import { useFavorites } from "../context/FavoritesContext";
 import type { DisplayType, Report } from "../api/reports";
 import { useWorkspace } from "../context/WorkspaceContext";
 import NewReportForm from "../components/NewReportForm";
+import FolderNav from "../components/FolderNav";
 import FullscreenReportView from "../components/FullscreenReportView";
 import EditCollectionModal from "../components/EditCollectionModal";
 import RefreshDetailsModal from "../components/RefreshDetailsModal";
@@ -246,6 +247,10 @@ export default function CollectionHome() {
             </>
           )}
         </KebabMenu>
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <FolderNav />
       </div>
 
       {loading ? (

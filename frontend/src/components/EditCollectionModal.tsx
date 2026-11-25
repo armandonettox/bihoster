@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useWorkspace } from "../context/WorkspaceContext";
+import { descendantIds } from "../utils/folders";
+import ParentFolderSelect from "./ParentFolderSelect";
 import * as workspacesApi from "../api/workspaces";
 import type { Workspace } from "../api/workspaces";
 import CollectionIconPicker from "./CollectionIconPicker";
@@ -21,6 +24,8 @@ export default function EditCollectionModal({
   const [description, setDescription] = useState(workspace.description || "");
   const [icon, setIcon] = useState<string | null>(workspace.icon);
   const [color, setColor] = useState<string | null>(workspace.color);
+  const { workspaces } = useWorkspace();
+  const [parentId, setParentId] = useState<number | null>(workspace.parent_id ?? null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const { showToast } = useToast();
@@ -29,7 +34,14 @@ export default function EditCollectionModal({
     setSaveError(null);
     setSaving(true);
     try {
-      await workspacesApi.updateWorkspace(workspace.id, { name, description: description || null, icon, color });
+      const moved = parentId !== (workspace.parent_id ?? null);
+      await workspacesApi.updateWorkspace(workspace.id, {
+        name,
+        description: description || null,
+        icon,
+        color,
+        ...(moved ? { parent_id: parentId } : {}),
+      });
       onSaved();
       onClose();
       showToast("Coleção atualizada.");
@@ -59,6 +71,12 @@ export default function EditCollectionModal({
         style={{ marginBottom: 10, resize: "vertical" }}
       />
       <CollectionIconPicker name={name} icon={icon} color={color} onChangeIcon={setIcon} onChangeColor={setColor} />
+      <ParentFolderSelect
+        workspaces={workspaces}
+        value={parentId}
+        onChange={setParentId}
+        excludeIds={[workspace.id, ...descendantIds(workspaces, workspace.id)]}
+      />
 
       <p className="chat-hint">
         Para escolher quem pode ver e fazer o quê nesta coleção, use <strong>Gerenciar usuários</strong>, no menu de módulos

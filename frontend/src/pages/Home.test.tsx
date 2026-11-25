@@ -123,6 +123,24 @@ describe("Home - toggle ligado", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/collection", { replace: true });
   });
 
+  it("uma pasta de topo com subpastas conta como uma colecao so e abre a de topo", () => {
+    mocks.workspaces = [
+      { id: 5, name: "Financeiro" },
+      { id: 6, name: "Faturamento", parent_id: 5 },
+      { id: 7, name: "Custos", parent_id: 5 },
+    ] as never;
+    mocks.currentWorkspaceId = undefined;
+    renderHome();
+    expect(mocks.selectWorkspace).toHaveBeenCalledWith(5);
+    expect(mockNavigate).toHaveBeenCalledWith("/collection", { replace: true });
+  });
+
+  it("duas pastas de topo nao redirecionam, mesmo com subpastas", () => {
+    mocks.workspaces = [{ id: 5, name: "Financeiro" }, { id: 8, name: "Comercial" }, { id: 6, name: "Faturamento", parent_id: 5 }] as never;
+    renderHome();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
   it("seleciona a colecao antes de navegar quando nao e a atual", () => {
     mocks.workspaces = [{ id: 5, name: "Vendas" }];
     mocks.currentWorkspaceId = undefined;

@@ -8,6 +8,7 @@ from app.core.database import get_db
 from app.core.search_ranking import match_tier, sort_key
 from app.core.workspace_deps import get_effective_roles_map
 from app.models.report import Report
+from app.models.report_grant import ReportCollection
 from app.models.user import User
 from app.models.workspace import Workspace
 from app.routers.auth import get_current_user
@@ -49,6 +50,20 @@ def search_reports(q: str, db: Session = Depends(get_db), current_user: User = D
     workspaces = db.query(Workspace).filter(Workspace.id.in_(accessible_workspace_ids)).all()
     workspaces_by_id = {w.id: w for w in workspaces}
     reports = db.query(Report).filter(Report.collection_id.in_(accessible_workspace_ids)).all()
+    # Relatorios que aparecem numa pasta acessivel por vinculo (a colecao deles pode ser outra, ate a Raiz): entram com
+    # a pasta onde a pessoa os enxerga, que e o caminho que abre o relatorio
+    shown_in: dict[int, int] = {report.id: report.collection_id for report in reports}
+    seen_ids = set(shown_in)
+    for report, folder_id in (
+        db.query(Report, ReportCollection.collection_id)
+        .join(ReportCollection, ReportCollection.report_id == Report.id)
+        .filter(ReportCollection.collection_id.in_(accessible_workspace_ids))
+        .all()
+    ):
+        if report.id not in seen_ids:
+            seen_ids.add(report.id)
+            shown_in[report.id] = folder_id
+            reports.append(report)
 
     ranked: list[tuple[tuple, SearchResultEntry]] = []
 
@@ -67,7 +82,7 @@ def search_reports(q: str, db: Session = Depends(get_db), current_user: User = D
         ranked.append((sort_key(tier, _KIND_ORDER["colecao"], workspace.name, workspace.id), entry))
 
     for report in reports:
-        workspace = workspaces_by_id.get(report.collection_id)
+        workspace = workspaces_by_id.get(shown_in.get(report.id, report.collection_id))
         if not workspace:
             continue
         tier = match_tier(report.name, q)

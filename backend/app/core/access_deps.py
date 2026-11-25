@@ -14,7 +14,8 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import access_catalog
-from app.core.access_engine import can_global, can_in_workspace, effective_access
+from app.core.access_engine import can_global, can_in_workspace, effective_access, folders_of_report
+from app.core.report_lookup import report_in_workspace
 from app.core.database import get_db
 from app.models.report import Report
 from app.models.user import User
@@ -68,11 +69,11 @@ def require_report_permission(key: str):
         current_user: User = Depends(get_current_user),
     ) -> User:
         access = effective_access(db, current_user.id)
-        report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+        report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
         if report is None:
             allowed = access.has_in_workspace(workspace_key, workspace_id)
         else:
-            allowed = access.has_in_report(key, report.id, report.collection_id)
+            allowed = access.has_in_report(key, report.id, report.collection_id, folders_of_report(db, report.id))
         if not allowed:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=DENIED_WORKSPACE)
         return current_user

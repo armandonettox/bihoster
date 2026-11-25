@@ -7,7 +7,9 @@ import NewCollectionModal from "./NewCollectionModal";
 const mocks = vi.hoisted(() => ({ showToast: vi.fn(), reloadAndSelect: vi.fn() }));
 
 vi.mock("../context/ToastContext", () => ({ useToast: () => ({ showToast: mocks.showToast }) }));
-vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ reloadAndSelect: mocks.reloadAndSelect }) }));
+vi.mock("../context/WorkspaceContext", () => ({ useWorkspace: () => ({ reloadAndSelect: mocks.reloadAndSelect, workspaces: [] }) }));
+// O campo "Dentro de" tem teste proprio (ParentFolderSelect.test.tsx)
+vi.mock("./ParentFolderSelect", () => ({ default: () => null }));
 vi.mock("./CollectionIconPicker", () => ({ default: () => null }));
 vi.mock("../api/workspaces", () => ({ createWorkspace: vi.fn() }));
 

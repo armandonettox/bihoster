@@ -18,6 +18,7 @@ import { useFavorites } from "../context/FavoritesContext";
 import { useUrlTab } from "../hooks/useUrlTab";
 import ListFilter from "../components/ListFilter";
 import { filterByName } from "../utils/filterByName";
+import { topLevel } from "../utils/folders";
 import { safeStorage } from "../utils/safeStorage";
 
 type Tab = "collections" | "recommended" | "recent" | "favorites" | "shared";
@@ -54,7 +55,8 @@ export default function HomeDashboard() {
   const [collectionFilter, setCollectionFilter] = useState("");
   const [creating, setCreating] = useState(false);
   const canCreateCollection = useAccess().can("colecao.criar");
-  const visibleWorkspaces = filterByName(workspaces, collectionFilter, (w) => w.name);
+  // As subpastas aparecem dentro da pasta delas; aqui ficam as de topo. Buscando pelo nome, a busca olha todas
+  const visibleWorkspaces = filterByName(collectionFilter.trim() ? workspaces : topLevel(workspaces), collectionFilter, (w) => w.name);
   const { showToast } = useToast();
 
   function changeViewMode(mode: ViewMode) {

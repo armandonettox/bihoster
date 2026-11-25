@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { useBranding } from "../context/BrandingContext";
 import { useWorkspace } from "../context/WorkspaceContext";
 import { useAuth } from "../context/AuthContext";
+import { topLevel } from "../utils/folders";
 import HomeDashboard from "./HomeDashboard";
 
 function firstName(name?: string): string {
@@ -32,9 +33,11 @@ export default function Home() {
       }
     }
 
-    // Redireciona para a unica colecao quando o toggle esta ativo
-    if (settings?.single_collection_redirect && workspaces.length === 1) {
-      const targetId = workspaces[0].id;
+    // Redireciona para a unica colecao quando o toggle esta ativo. Com pastas dentro de pastas, "uma colecao" e uma pasta de
+    // topo que a pessoa ve: as subpastas ficam dentro dela e nao contam
+    const tops = topLevel(workspaces);
+    if (settings?.single_collection_redirect && tops.length === 1) {
+      const targetId = tops[0].id;
       if (currentWorkspace?.id !== targetId) selectWorkspace(targetId);
       navigate("/collection", { replace: true });
     }

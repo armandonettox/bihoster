@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.core import powerbi, report_delivery
@@ -11,11 +11,15 @@ from app.core.audit_revert import PAGE_NAMES_FIELD, REPORT_UPDATE
 from app.core.audit_revert import changed_fields as audit_changed_fields
 from app.core.database import get_db
 from app.core.access_deps import require_report_permission, require_workspace_permission
+from app.core.access_engine import can_in_workspace
+from app.core.root_collection import ensure_root_collection, stop_sends_of_unpublished_reports
 from app.core.workspace_deps import require_workspace_member
-from app.models.report_grant import ReportGrant, ReportInviteGrant
+from app.core.report_lookup import report_in_workspace
+from app.models.report_grant import ReportCollection, ReportGrant, ReportInviteGrant
 from app.models.favorite import Favorite
 from app.models.powerbi_connection import PowerBIConnection
 from app.models.report import Report
+from app.models.workspace import Workspace
 from app.core.ai_report_settings import delete_settings_of_reports, mark_review_pending
 from app.models.subscription import delete_subscriptions_of_reports
 from app.models.user import User, UserRole
@@ -40,12 +44,21 @@ def _ordered_reports(db: Session, workspace_id: int) -> list[Report]:
     """Relatorios da colecao na ordem de exibicao: com posicao primeiro (menor antes), depois os
     sem posicao, e a criacao (id) desempata. Sem ORDER BY o SQLite devolve numa ordem nao
     garantida, e a ordem define a sequencia do Modo TV e da Apresentacao."""
-    return (
+    own = (
         db.query(Report)
         .filter(Report.collection_id == workspace_id)
         .order_by(Report.position.is_(None), Report.position, Report.id)
         .all()
     )
+    # Os que aparecem aqui por vinculo (a colecao deles e outra) vem depois, na ordem do vinculo
+    linked = (
+        db.query(Report)
+        .join(ReportCollection, ReportCollection.report_id == Report.id)
+        .filter(ReportCollection.collection_id == workspace_id)
+        .order_by(ReportCollection.position.is_(None), ReportCollection.position, Report.id)
+        .all()
+    )
+    return own + [report for report in linked if report.collection_id != workspace_id]
 
 
 @router.get("/", response_model=list[ReportOut])
@@ -60,10 +73,99 @@ def get_report(
     db: Session = Depends(get_db),
     _=Depends(require_report_permission("relatorio.ver")),
 ):
-    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
     return report
+
+
+class ReportFoldersIn(BaseModel):
+    # Todas as pastas em que o relatorio deve aparecer. Vazio = fora de qualquer pasta (volta para a Raiz)
+    collection_ids: list[int] = Field(default_factory=list, max_length=50)
+
+
+class ReportFoldersOut(BaseModel):
+    # A colecao do relatorio primeiro (e por ela que ele tambem e endereçado), depois as outras pastas
+    collection_ids: list[int]
+    in_root: bool
+
+
+def _folders_out(db: Session, report: Report) -> ReportFoldersOut:
+    links = [row.collection_id for row in db.query(ReportCollection).filter(ReportCollection.report_id == report.id).order_by(ReportCollection.id)]
+    root = ensure_root_collection(db)
+    in_root = report.collection_id == root.id
+    return ReportFoldersOut(collection_ids=([] if in_root else [report.collection_id]) + links, in_root=in_root)
+
+
+@router.get("/{report_id}/folders", response_model=ReportFoldersOut)
+def get_report_folders(
+    workspace_id: int,
+    report_id: int,
+    db: Session = Depends(get_db),
+    _=Depends(require_report_permission("relatorio.ver")),
+):
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    return _folders_out(db, report)
+
+
+@router.put("/{report_id}/folders", response_model=ReportFoldersOut)
+def set_report_folders(
+    workspace_id: int,
+    report_id: int,
+    data: ReportFoldersIn,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_report_permission("relatorio.editar")),
+):
+    """Define em quais pastas o relatorio aparece, sem cadastra-lo de novo. Quem muda precisa poder editar o relatorio e
+    ter "publicar relatorio" em cada pasta que ganha ou perde ele. Tirar o relatorio de todas as pastas o devolve para a
+    Raiz; dar uma pasta a um relatorio da Raiz o publica nela."""
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    wanted = list(dict.fromkeys(data.collection_ids))
+    found = {row.id: row for row in db.query(Workspace).filter(Workspace.id.in_(wanted or [-1])).all()}
+    if len(found) != len(wanted) or any(folder.system_key is not None for folder in found.values()):
+        raise HTTPException(status_code=400, detail="Escolha pastas que existem; a Raiz nao e uma pasta")
+
+    root = ensure_root_collection(db)
+    current = _folders_out(db, report).collection_ids
+    changed = set(wanted) ^ set(current)
+    for folder_id in changed:
+        if not can_in_workspace(db, current_user.id, "relatorio.publicar", folder_id):
+            raise HTTPException(status_code=403, detail="Voce nao pode publicar nem tirar relatorios dessa pasta")
+
+    old_primary = report.collection_id
+    if not wanted:
+        new_primary = root.id
+    elif old_primary in wanted:
+        new_primary = old_primary
+    else:
+        new_primary = wanted[0]
+    if new_primary != old_primary:
+        report.collection_id = new_primary
+        report.position = None
+    if new_primary == root.id and old_primary != root.id:
+        stop_sends_of_unpublished_reports(db, [report.id])  # deixou de estar publicado
+    db.query(ReportCollection).filter(ReportCollection.report_id == report.id).delete(synchronize_session=False)
+    db.flush()
+    for folder_id in wanted:
+        if folder_id != new_primary:
+            db.add(ReportCollection(report_id=report.id, collection_id=folder_id))
+    db.commit()
+    invalidate_embed_cache(old_primary, report.id)
+    invalidate_embed_cache(new_primary, report.id)
+    log_action(
+        db,
+        action="update",
+        entity="report",
+        user_id=current_user.id,
+        workspace_id=None if new_primary == root.id else new_primary,
+        entity_id=report.id,
+        details=f"{report.name}: em {len(wanted)} pastas",
+    )
+    return _folders_out(db, report)
 
 
 @router.post("/", response_model=ReportOut, status_code=status.HTTP_201_CREATED)
@@ -97,7 +199,7 @@ def update_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_report_permission("relatorio.editar")),
 ):
-    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
 
@@ -196,7 +298,7 @@ def list_report_pages(
     _=Depends(require_report_permission("relatorio.ver")),
 ):
     """Paginas (abas) publicadas no relatorio -- usado para escolher de qual pagina gerar o thumbnail."""
-    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
     conn = _get_connection(db, report)
@@ -226,7 +328,7 @@ def refresh_thumbnail(
     current_user: User = Depends(require_report_permission("relatorio.miniatura")),
 ):
     """Inicia a geracao do thumbnail em background via ExportTo PNG do Power BI. Devolve o job_id."""
-    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
     conn = _get_connection(db, report)
@@ -273,7 +375,7 @@ def clear_thumbnail(
     _: User = Depends(require_report_permission("relatorio.miniatura")),
 ):
     """Remove o thumbnail estatico do relatorio (volta a mostrar o embed ao vivo)."""
-    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
     _delete_thumbnail_file(report.thumbnail_url)
@@ -290,13 +392,20 @@ def delete_report(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_report_permission("relatorio.excluir")),
 ):
-    report = db.query(Report).filter(Report.id == report_id, Report.collection_id == workspace_id).first()
+    report = db.query(Report).filter(Report.id == report_id, report_in_workspace(workspace_id)).first()
     if not report:
         raise HTTPException(status_code=404, detail="Relatorio nao encontrado")
+    if report.collection_id != workspace_id:
+        # O relatorio so aparece nesta pasta (a colecao dele e outra): excluir aqui tira so desta pasta
+        db.query(ReportCollection).filter(ReportCollection.report_id == report_id, ReportCollection.collection_id == workspace_id).delete(synchronize_session=False)
+        db.commit()
+        log_action(db, action="update", entity="report", user_id=current_user.id, workspace_id=workspace_id, entity_id=report_id, details=f"{report.name}: tirado desta pasta")
+        return
 
     report_name = report.name
     db.query(Favorite).filter(Favorite.report_id == report_id).delete(synchronize_session=False)
     db.query(ReportGrant).filter(ReportGrant.report_id == report_id).delete(synchronize_session=False)
+    db.query(ReportCollection).filter(ReportCollection.report_id == report_id).delete(synchronize_session=False)
     db.query(ReportInviteGrant).filter(ReportInviteGrant.report_id == report_id).delete(synchronize_session=False)
     delete_subscriptions_of_reports(db, [report_id])
     delete_settings_of_reports(db, [report_id])

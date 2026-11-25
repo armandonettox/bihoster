@@ -54,6 +54,8 @@ vi.mock("../components/ReportThumbnail", () => ({ default: () => null }));
 vi.mock("../utils/powerbiService", () => ({ preloadPowerBi: vi.fn() }));
 vi.mock("../components/LazyMount", () => ({ default: ({ children }: { children: ReactNode }) => <>{children}</> }));
 vi.mock("../components/NewReportForm", () => ({ default: () => null }));
+// O caminho e as subpastas tem teste proprio (FolderNav.test.tsx)
+vi.mock("../components/FolderNav", () => ({ default: () => null }));
 vi.mock("../components/EditCollectionModal", () => ({ default: () => null }));
 vi.mock("../components/FullscreenReportView", () => ({
   default: ({ reports, onExit }: { reports: Report[]; onExit: () => void }) => (

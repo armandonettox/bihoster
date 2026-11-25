@@ -40,5 +40,18 @@ def get_root_collection(db: Session) -> Workspace:
     return ensure_root_collection(db)
 
 
+def stop_sends_of_unpublished_reports(db: Session, report_ids: list[int]) -> None:
+    """Um relatorio que volta para a Raiz deixou de estar publicado: ninguem mais o ve nem gerencia, entao as assinaturas
+    por e-mail e os alertas dele sao encerrados (nao ficam mandando dado de um relatorio escondido). O relatorio em si e
+    as permissoes dadas direto nele ficam. Quem chama faz o commit."""
+    if not report_ids:
+        return
+    from app.models.alert import ReportAlert
+    from app.models.subscription import delete_subscriptions_of_reports
+
+    delete_subscriptions_of_reports(db, report_ids)
+    db.query(ReportAlert).filter(ReportAlert.report_id.in_(report_ids)).delete(synchronize_session=False)
+
+
 def is_system_workspace(workspace: Workspace | None) -> bool:
     return workspace is not None and workspace.system_key is not None

@@ -294,13 +294,17 @@ class TestConfiguracoes:
         assert resp.status_code == 204
         assert db_session.query(AIReportSettings).count() == 0
 
-    def test_apagar_a_colecao_apaga_as_configuracoes_dos_relatorios(self, client, admin, relatorio, db_session):
+    def test_apagar_a_colecao_nao_apaga_o_relatorio_nem_as_configuracoes_dele(self, client, admin, relatorio, db_session):
+        """Excluir uma pasta nunca apaga relatorio: ele volta para a Raiz, com as configuracoes da IA."""
+        from app.models.report import Report
+
         self._put(client, admin, relatorio.id, notes="a")
 
         resp = client.delete(f"/workspaces/{relatorio.collection_id}", headers=admin)
 
         assert resp.status_code == 204
-        assert db_session.query(AIReportSettings).count() == 0
+        assert db_session.query(AIReportSettings).count() == 1
+        assert db_session.query(Report).filter_by(id=relatorio.id).count() == 1
 
 
 class TestAquecerImagem:

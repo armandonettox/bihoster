@@ -41,3 +41,19 @@ class ReportInviteGrant(Base):
     email = Column(String, nullable=False, index=True)
     report_id = Column(Integer, ForeignKey("reports.id", ondelete="CASCADE"), nullable=False, index=True)
     permission_key = Column(String, nullable=False)
+
+
+class ReportCollection(Base):
+    """Uma pasta (colecao) em que um relatorio TAMBEM aparece, alem da colecao dele (reports.collection_id).
+
+    Regra: o relatorio aparece numa pasta se a colecao dele e essa pasta ou se existe um vinculo aqui. Nunca guarda a
+    propria colecao do relatorio (ela ja e reports.collection_id), para nao haver duas fontes da mesma informacao.
+    `position` ordena o relatorio dentro desta pasta. E tabela nova, entao o create_all() cria sozinho."""
+
+    __tablename__ = "report_collections"
+    __table_args__ = (UniqueConstraint("report_id", "collection_id", name="uq_report_collection"),)
+
+    id = Column(Integer, primary_key=True, index=True)
+    report_id = Column(Integer, ForeignKey("reports.id", ondelete="CASCADE"), nullable=False, index=True)
+    collection_id = Column(Integer, ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False, index=True)
+    position = Column(Integer, nullable=True)

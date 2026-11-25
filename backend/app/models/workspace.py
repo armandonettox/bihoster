@@ -20,6 +20,9 @@ class Workspace(Base):
     # relatorios importados do Power BI, nao aparece como pasta e nao recebe acesso padrao.
     # Nulavel de proposito (a migracao automatica do boot so adiciona colunas nulaveis).
     system_key = Column(String, nullable=True)
+    # Pasta onde esta colecao fica (vazio = pasta de topo). Nulavel de proposito (a migracao do boot so adiciona colunas
+    # nulaveis); o codigo impede ciclo e profundidade acima de MAX_DEPTH (core/folder_tree.py).
+    parent_id = Column(Integer, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     reports = relationship("Report", cascade="all, delete-orphan", passive_deletes=False)

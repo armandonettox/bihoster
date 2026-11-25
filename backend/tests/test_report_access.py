@@ -337,13 +337,15 @@ class TestLimpeza:
         assert resposta.status_code == 204
         assert db_session.query(ReportGrant).count() == 0 and db_session.query(ReportInviteGrant).count() == 0
 
-    def test_excluir_a_colecao_apaga_o_que_foi_dado_nos_relatorios_dela(self, client, db_session, cena):
+    def test_excluir_a_colecao_nao_apaga_o_relatorio_e_o_acesso_dado_direto_nele_continua(self, client, db_session, cena):
         _dar(client, cena, cena["a"], "ana", ["relatorio.ver"])
         _dar(client, cena, cena["c"], "ana", ["relatorio.ver"])
 
         client.delete(f"/workspaces/{cena['financeiro'].id}", headers=cena["admin"])
 
-        assert [g.report_id for g in db_session.query(ReportGrant).all()] == [cena["c"].id]
+        assert sorted(g.report_id for g in db_session.query(ReportGrant).all()) == sorted([cena["a"].id, cena["c"].id])
+        db_session.refresh(cena["a"])
+        assert cena["a"].collection_id == cena["raiz"].id  # voltou para a Raiz
 
     def test_excluir_a_pessoa_ou_o_grupo_apaga_o_que_eles_tinham(self, client, db_session, cena):
         _dar(client, cena, cena["a"], "ana", ["relatorio.ver"])
