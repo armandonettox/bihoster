@@ -12,6 +12,10 @@ Aceita .png, .jpg e .gif (o GIF anima sozinho). Mantenha cada arquivo abaixo de 
 Toda tag nova precisa de uma seção aqui antes de ser criada.
 -->
 
+## 1.55.1 - 2026-11-28 - Título repetido no horário do relatório
+- Na seção de **horário de acesso do relatório** (painel de permissões), o título aparecia duas vezes. Agora aparece só uma.
+- Ajuste só de aparência (frontend): sem mudança de banco, de permissões ou de comportamento.
+
 ## 1.55.0 - 2026-11-25 - Saída de relatório com RLS (desligada por padrão)
 - Nova chave em **Administração > Geral: Permitir saída de relatório com RLS**. Ela vem **desligada** e, desligada, tudo continua como antes: relatório com segurança por linha (RLS) não sai por e-mail, arquivo nem TV.
 - Ligada, a identidade de cada saída é a de **quem recebe**, nunca a de quem criou: **assinaturas e envio por e-mail** geram **um arquivo por destinatário**, com as funções de cada um, e só recebe quem tem conta no portal e função mapeada no modelo; a **exportação** (PowerPoint, PDF e imagem) usa as funções de **quem exporta**; no **Modo TV** quem monta a lista escolhe uma **função de segurança** entre as que ele mesmo tem, e a TV confere de novo, na hora de passar, se essa pessoa ainda a tem.
